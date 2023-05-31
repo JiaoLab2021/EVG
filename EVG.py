@@ -1190,7 +1190,7 @@ def main():
         time.sleep(0.05)
 
     # Get multithreaded return value
-    stdout, stderr, log_out, convert_out_map = pool_convert_out.get()  # vcf和reference的返回�?
+    stdout, stderr, log_out, convert_out_map = pool_convert_out.get()  # the return of vcf and reference
     # Report an error if there is a problem with the exit code
     if log_out:
         logger.error(log_out.strip())
