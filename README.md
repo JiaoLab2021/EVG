@@ -33,7 +33,7 @@ The simplest means of obtaining `EVG` is by downloading the static binary execut
 
 **Building on Linux**
 
-If you cannot or do not want to use a pre-built release of EVG, building the software from source code is a feasible option.
+If you cannot or do not want to use a pre-built release of `EVG`, building the software from source code is a feasible option.
 
 1. First, obtain the source code.
 
@@ -60,3 +60,5 @@ EVG -h
 graphvcf -h
 fastAQ -h
 ```
+
+## Usage
