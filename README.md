@@ -62,3 +62,33 @@ fastAQ -h
 ```
 
 ## Usage
+
+**Input Files**
+
+* Reference Genome
+* VCF File of Population Variants
+* Sample File:
+
+```shell
+# Sample File
+sample1 path_to_sample1_read1 path_to_sample1_read2
+sample2 path_to_sample2_read1 path_to_sample2_read2
+...
+sampleN path_to_sampleN_read1 path_to_sampleN_read2
+```
+
+Please note that the Sample file must be formatted exactly as shown above, where each sample is listed with its corresponding read files.
+
+**Running**
+
+For convenience, let's assume the following file names for the input:
+
+* `refgenome.fa`
+* `input.vcf.gz`
+* `sample.txt`
+
+`EVG` automatically selects suitable software based on the genome, mutation and sequencing data. If desired, users can also use the `"--software"` command to specify their preferred software. The default running command is as follows:
+
+```shell
+EVG -r refgenome.fa -v input.vcf.gz -s sample.txt
+```
