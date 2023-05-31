@@ -105,4 +105,5 @@ The results are stored in the `genotype/` folder, and each file is named after t
 ## Citation
 
 Please cite:
+
 [article][article_url]
