@@ -147,7 +147,7 @@ def fastq_count(
     fastq_base = 0
     read_num = 0
     read_len = 0
-    for i in stdout.decode().split("\n"):
+    for i in stdout.split("\n"):
         if "readBase" in i:
             fastq_base = int(i.strip().split(":")[1])
         if "readNum" in i:
@@ -186,7 +186,7 @@ def fasta_count(
     stdout, stderr, log_out = run_cmd.run(cmd, "fasta_count", env_path)
 
     fasta_base = 0
-    for i in stdout.decode().split("\n"):
+    for i in stdout.split("\n"):
         if "readBase" in i:
             fasta_base = int(i.strip().split(":")[1])
 
