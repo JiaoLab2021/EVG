@@ -59,6 +59,9 @@ source ~/.bashrc
 EVG -h
 graphvcf -h
 fastAQ -h
+# test
+cd test
+EVG -r test.fa -v test.vcf.gz -s sample.txt --software VG-MAP VG-Giraffe GraphAligner Paragraph BayesTyper GraphTyper2 PanGenie &>log.txt &
 ```
 
 ## Usage
