@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import os
 import run_cmd
@@ -16,13 +16,13 @@ def vg_index(
     restart: bool
 ):
     """
-    :param reference_file: 参考基因组
-    :param vcf_file: vcf文件
-    :param threads: 线程数
-    :param index_dir: 索引路径
-    :param env_path: 环境变量
+    :param reference_file: reference genome
+    :param vcf_file: vcf file
+    :param threads: Threads
+    :param index_dir: Threads
+    :param env_path: environment variable
     :param restart:
-    :return: 是否检查文件是否存在，并跳过该步骤
+    :return: Whether to check if the file exists and skip this step
     """
 
     # log
@@ -30,24 +30,24 @@ def vg_index(
     stderr = ""
     log_out = ""
 
-    # 更改工作路径
+    # change working path
     os.chdir(index_dir)
 
-    # 文件前缀
+    # file prefix
     cmd = "vg construct -t {} -r {} -v {} 1>out.vg && " \
           "mkdir temp && vg index -t {} -b temp/ -x out.xg out.vg && rm -rf temp && " \
           "vg snarls -t {} out.xg 1>out.snarls".format(threads, reference_file, vcf_file, threads, threads)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 如果小于等于0
+        # <= 0
         if getsize("out.snarls") <= 0 or \
                 getsize("out.vg") <= 0 or \
                 getsize("out.xg") <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.index", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.index", env_path)
 
     return stdout, stderr, log_out
@@ -63,12 +63,12 @@ def graphaligner(
     restart: bool
 ):
     """
-    :param sample_name: 样品名
-    :param fastq_file: 测序文件
-    :param threads: 线程数
-    :param index_dir: 索引的路径
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param sample_name: sample name
+    :param fastq_file: sequencing read
+    :param threads: Threads
+    :param index_dir: index path
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return:
     """
 
@@ -77,7 +77,7 @@ def graphaligner(
     stderr = ""
     log_out = ""
 
-    # 输出文件路径
+    # output file path
     vg_file = os.path.join(index_dir, "out.vg")
     gam_file = os.path.abspath("{}.gam".format(sample_name))
 
@@ -89,18 +89,18 @@ def graphaligner(
           '-f {} ' \
           '-a {}'.format(threads, vg_file, fastq_file, gam_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             gam_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.graphaligner", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.graphaligner", env_path)
 
     return stdout, stderr, log_out
@@ -116,12 +116,12 @@ def vg_call(
     restart: bool
 ):
     """
-    :param sample_name: 样本名
-    :param threads: 线程数
-    :param depth: 深度
-    :param index_dir: 索引的路径
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param sample_name: sample name
+    :param threads: Threads
+    :param depth: depth
+    :param index_dir: index path
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return:
     """
 
@@ -130,7 +130,7 @@ def vg_call(
     stderr = ""
     log_out = ""
 
-    # 输出文件路径
+    # output file path
     xg_file = os.path.join(index_dir, "out.xg")
     snarls_file = os.path.join(index_dir, "out.snarls")
     gam_file = os.path.abspath("{}.gam".format(sample_name))
@@ -138,7 +138,7 @@ def vg_call(
     vcf_file = os.path.abspath(sample_name + ".vcf")
 
     # vg pack
-    filter_depth = min(0, int(depth/2))  # 按比对深度大于0来过滤
+    filter_depth = min(0, int(depth/2))  # Filter by comparison depth greater than 0
     cmd = 'vg pack ' \
           '-t {} ' \
           '-Q {} ' \
@@ -146,21 +146,21 @@ def vg_call(
           '-g {} ' \
           '-o {}'.format(threads, filter_depth, xg_file, gam_file, pack_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             pack_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.pack", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.pack", env_path)
 
-    # 检查log是否正常，不正常提前退出
+    # Check whether the log is normal, and exit early if it is not normal
     if log_out:
         return stdout, stderr, log_out, vcf_file
 
@@ -173,18 +173,18 @@ def vg_call(
           '-r {} ' \
           '1>{}'.format(threads, sample_name, xg_file, pack_file, snarls_file, vcf_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             vcf_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.call", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.call", env_path)
 
     return stdout, stderr, log_out, vcf_file
@@ -200,13 +200,13 @@ def main(
     restart: bool
 ):
     """
-    :param sample_name: 样本名
-    :param fastq_file: 测序文件
-    :param threads: 线程数
-    :param depth: 深度
-    :param index_dir: 索引的路径
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param sample_name: sample name
+    :param fastq_file: sequencing read
+    :param threads: Threads
+    :param depth: depth
+    :param index_dir: index path
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return:
     """
 
@@ -218,7 +218,7 @@ def main(
         env_path, 
         restart
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, ""
 

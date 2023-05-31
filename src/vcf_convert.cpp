@@ -216,7 +216,7 @@ void CONVERT::build_reference_index(string inputFileName, refIndexStruct & refIn
  * @param readLen         读长
  * @param MAF            次等位基因频率
  * @param MISSRATE       缺失率
- * @param refIndexS       参考基因组长度和序列信息
+ * @param refIndexS       reference genome长度和序列信息
  * @param outFilename     输出文件名
  * 
  * @return 0
@@ -230,7 +230,7 @@ void CONVERT::vcf_convert(
     const string & outFilename
 )
 {
-    // 检查文件是否排序
+    // check file是否排序
     check_vcf_sort(vcfFilename);
 
     // 基因组上的序列信息
@@ -288,7 +288,7 @@ void CONVERT::vcf_convert(
         }
 
         // 非注释行
-        if (INFOSTRUCTTMP.INFOVec.size() < 9) // 先检查文件对不对，不对则跳出代码
+        if (INFOSTRUCTTMP.INFOVec.size() < 9) // 先check file对不对，不对则跳出代码
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Error '"
@@ -386,7 +386,7 @@ void CONVERT::vcf_convert(
         }
         
         string trueRefSeq = seqMap[INFOSTRUCTTMP.CHROM].substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
-        if (trueRefSeq != INFOSTRUCTTMP.REF) // 如果和参考基因组上的序列不一样，则替换成参考基因组的序列
+        if (trueRefSeq != INFOSTRUCTTMP.REF) // 如果和reference genome上的序列不一样，则替换成reference genome的序列
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: sequence difference between refgenome and vcf, replace by refgenome sequence -> "

@@ -288,12 +288,12 @@ string RECALL::gramtools_convert(
     string outInformationsTitle;
     string outInformations;
 
-    // 检查文件是否排序
+    // check file是否排序
     check_vcf_sort(
         evaluateFilename
     );
 
-    // 保存结果
+    // save result
     // 输出文件流
     vector<string> prefixVec = split(evaluateFilename, "/");
     string outFileName = "convert." + prefixVec[prefixVec.size()-1];
@@ -522,7 +522,7 @@ int RECALL::evulate_gt(
         exit(1);
     }
 
-    // 检查文件是否排序
+    // check file是否排序
     check_vcf_sort(evaluateFilename);
     
     // 保存分型正确的结果
@@ -900,7 +900,7 @@ int RECALL::evulate_gt(
                 informations.clear();
                 string().swap(informations);
 
-                // 保存结果
+                // save result
                 if (true_txt.size() > 10000000 || 
                     genotypeMisTxt.size() > 10000000 || 
                     misCallTxt.size() > 10000000) // 每10Mb写入一次
@@ -923,7 +923,7 @@ int RECALL::evulate_gt(
     // 释放内存，关闭文件
     gzclose(gzfp);
 
-    // 保存结果
+    // save result
     gzwrite(trueFile, true_txt.c_str(), true_txt.length()); // 分型正确
 
     gzwrite(genotypeMisFile, genotypeMisTxt.c_str(), genotypeMisTxt.length()); // 分型错误
@@ -960,7 +960,7 @@ int RECALL::evulate_gt(
     int sv_mis_call = miscall_length_list.size();
     int sv_all = all_length_list.size();
 
-    // 保存结果
+    // save result
     ofstream outFile;
     outFile.open("vcf_evulate.out", ios::app);
 
@@ -1594,7 +1594,7 @@ int RECALL::evulate_recall(
                 informations.clear();
                 string().swap(informations);
 
-                // 保存结果
+                // save result
                 if (true_txt.size() > 10000000 || 
                     true_Gt_txt.size() > 10000000 || 
                     genotypeMisTxt.size() > 10000000 || 
@@ -1621,7 +1621,7 @@ int RECALL::evulate_recall(
     // 释放内存，关闭文件
     gzclose(gzfp);
 
-    // 保存结果
+    // save result
     gzwrite(trueFile, true_txt.c_str(), true_txt.length());
 
     gzwrite(trueGtFile, true_Gt_txt.c_str(), true_Gt_txt.length());
@@ -1648,7 +1648,7 @@ int RECALL::evulate_recall(
 
     int genotype_recall_number = genotype_length_list.size();
 
-    // 保存结果
+    // save result
     ofstream outFile;
     outFile.open("vcf_evulate.out", ios::app);
 
@@ -2025,7 +2025,7 @@ int RECALL::saveFailCall(
         {
             failCallTxt += get<2>(it2.second) + "\n";
 
-            // 保存结果
+            // save result
             if (failCallTxt.size() > 10000000) // 每10Mb写入一次
             {
                 gzwrite(gzfp, failCallTxt.c_str(), failCallTxt.length());
@@ -2036,7 +2036,7 @@ int RECALL::saveFailCall(
             }
         }
     }
-    // 保存结果
+    // save result
     gzwrite(gzfp, failCallTxt.c_str(), failCallTxt.length());
 
     // 释放内存，关闭文件
@@ -2062,7 +2062,7 @@ void RECALL::roc_calculate(
     const vector<int> & all_length_list
 )
 {
-    // 保存结果
+    // save result
     ofstream allFile;
     allFile.open("weight.all.table", ios::out);
     ofstream snpFile;

@@ -276,7 +276,7 @@ int DELLY2VCF::vcf_convert(string * dellyFilename, map<string,string> seq_dict, 
         }
     }
 
-    // ±£´æ½á¹û
+    // save result
     ofstream outFile;
 
     outFile.open(* outputFilename, ios::app);

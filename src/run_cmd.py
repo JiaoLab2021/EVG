@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import subprocess
 import tempfile
@@ -10,30 +10,30 @@ import logging
 # log
 logger = logging.getLogger('SynDiv')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
-handler = logging.StreamHandler()  # 输出到控制台
+handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
 # run
 def run(command, subcommands, envPath):
-    # 创建输出文件
+    # Create output file
     stdout_file = tempfile.NamedTemporaryFile(delete=False)
     stderr_file = tempfile.NamedTemporaryFile(delete=False)
 
-    # 提交任务
+    # submit task
     proc = subprocess.Popen(command, shell=True, stdout=stdout_file, stderr=stderr_file, env=envPath)
 
     log = f'[EVG.{subcommands}] CMD: {command}\n'
     logger.error(log)
 
-    # 重置log用于判断是否正常退出
+    # Reset log is used to judge whether to exit normally
     log = ""
 
-    # 等待命令执行完成
+    # Wait for the command to complete
     proc.wait()
 
-    # 读取输出文件并关闭文件句柄
+    # Read the output file and close the file handle
     with open(stdout_file.name, 'rb') as f:
         stdout_data = f.read()
     os.unlink(stdout_file.name)
@@ -46,7 +46,7 @@ def run(command, subcommands, envPath):
     stdout = stdout_data.strip().decode('utf-8')
     stderr = stderr_data.strip().decode('utf-8')
 
-    # 标准输出和错误输出
+    # standard output and error output
     if exit_state != 0 or "FileNotFoundError" in stderr or \
             "command not found" in stderr or \
             "error" in stderr or \

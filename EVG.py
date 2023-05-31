@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 __data__ = "2023/05/30"
 __version__ = "1.0.1"
@@ -15,16 +15,16 @@ import concurrent.futures
 import time
 import logging
 
-# 代码路径
+# code path
 code_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(code_dir, "src/"))
 import convert, select_software, merge, bwa, GraphTyper2, \
     GraphAligner, BayesTyper, Paragraph, VG_MAP_Giraffe, PanGenie
 
-# 环境变量
+# environment variable
 env_path = {'PATH': os.environ.get('PATH')}
 
-# 全局参数
+# global parameters
 force = False
 restart = False
 threads = 10
@@ -37,17 +37,17 @@ merge_mode = "specific"
 # log
 logger = logging.getLogger('SynDiv')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
-handler = logging.StreamHandler()  # 输出到控制台
+handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-# 打印merge的结果
+# Print the result of merge
 def print_merge(
     vcf_merge_files_map: dict
 ):
     """
-    :param vcf_merge_files_map: 合并后的vcf文件 map<sample_name, vcf_file>
+    :param vcf_merge_files_map: Merged vcf file, map<sample_name, vcf_file>
     :return:
     """
     for key, value in vcf_merge_files_map.items():
@@ -57,20 +57,20 @@ def print_merge(
     return 0
 
 
-# 创建目录
+# Create a directory
 def makedir(
-        path_dir: str,
-        force_tmp: bool,
-        restart_tmp: bool
+    path_dir: str,
+    force_tmp: bool,
+    restart_tmp: bool
 ):
     """
-    :param path_dir: 需要创建的文件夹路径
-    :param force_tmp: 是否强制删除已经存在的目录
-    :param restart_tmp 是否根据生成文件的状态继续程序。如果指定该参数，且force没被指定，软件会跳过已经存在的目录，不再报错
+    :param path_dir:     The folder path to be created
+    :param force_tmp:    Whether to forcibly delete existing directories
+    :param restart_tmp   Whether to continue the program based on the status of the generated files. If this parameter is specified and force is not specified, the software will skip the existing directory and no error will be reported
     :return: 0
     """
     if os.path.isdir(path_dir):
-        if force_tmp:  # 如果强制删除，则清空目录后重新创建一个
+        if force_tmp:  # If forced to delete, empty the directory and create a new one
             shutil.rmtree(path_dir)
             os.makedirs(path_dir)
             log = '[EVG.makedir] \'{}\' already exists, clear and recreate.'.format(path_dir)
@@ -79,7 +79,7 @@ def makedir(
             log = '[EVG.makedir] \'{}\' already exists, restart is used, ' \
                   'skipping emptying folders.\n'.format(path_dir)
             logger.error(log)
-        else:  # 如果不强制删除，打印警告并退出代码
+        else:  # Print a warning and exit code if not forced to delete
             log = '[EVG.makedir] \'{}\' already exists. used --force to overwrite or --restart to restart workflow.\n'.format(path_dir)
             logger.error(log)
             raise SystemExit(1)
@@ -87,19 +87,19 @@ def makedir(
         os.makedirs(path_dir)
 
 
-# 解析samples文件
+# Parse the samples file
 def get_samples_path(
         samples_file: str
 ):
     """
-    :param samples_file: 包含测序数据的样品名称的文件 'name\tread1_path\tread2_path'
+    :param samples_file: file containing sample names for sequencing data, 'name\tread1_path\tread2_path'
     :return samples_map  map<sample_name, list<fastq_path>>
     """
     samples_map = {}
     with open(samples_file, 'r') as f:
         samples_list = f.readlines()
 
-    # 判断samples_list长度
+    # Judge the length of samples_list
     if len(samples_list) == 0:
         log = '[EVG.get_parser] Error: empty file -> {}.\n'.format(samples_file)
         logger.error(log)
@@ -114,10 +114,10 @@ def get_samples_path(
         if len(sample_list) > 1:
             name = sample_list[0]
             read1_path = sample_list[1]
-            if len(sample_list) > 2:  # 双端测序
+            if len(sample_list) > 2:  # paired-end sequencing
                 read2_path = sample_list[2]
                 samples_map[name] = [os.path.abspath(read1_path), os.path.abspath(read2_path)]
-            else:  # 单端测序
+            else:  # single-end sequencing
                 samples_map[name] = [os.path.abspath(read1_path), ""]
     return samples_map
 
@@ -142,14 +142,14 @@ def get_parser():
     logger.error(f"author: {__author__}")
     logger.error(f"\nIf you encounter any issues related to the code, please don't hesitate to contact us via email at {__email__}.\n")
 
-    # 参数
+    # parameter
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     input_option = parser.add_argument_group(title="required input")
     input_option.add_argument("-r", dest="reference", help="input FASTA reference",
                               type=argparse.FileType('r'), required=True)
     input_option.add_argument("-v", dest="vcf", help="input the merged vcf file",
                               type=argparse.FileType('r'), required=True)
-    # 解析samples文件
+    # Parse the samples file
     input_option.add_argument("-s", dest="samples", help="samples file (name read1_path read2_path)",
                               type=argparse.FileType('r'), required=True)
 
@@ -157,12 +157,12 @@ def get_parser():
     optional_option.add_argument("-V", dest="VCF", help="input line-specific vcf file [-v]",
                                  type=argparse.FileType('r'))
 
-    # 设置取多少×的数据来分型
+    # Set how many x data to take to type
     depth_option = parser.add_argument_group(title="depth")
     depth_option.add_argument("--depth", dest="depth", help="read depth for genotyping [15]",
                               type=float, default=15)
 
-    # 用户自定义软件
+    # user-defined software
     algorithm_option = parser.add_argument_group(
         title="algorithm"
     )
@@ -171,25 +171,25 @@ def get_parser():
         choices=['VG-MAP', 'VG-Giraffe', 'GraphAligner', 'Paragraph', 'BayesTyper', 'GraphTyper2', 'PanGenie'],
         default="auto"
     )
-    # 进程
+    # process
     algorithm_option.add_argument(
         "--mode", dest="mode", help="software mode [precise]", type=str, choices=['precise', 'fast'], default="precise"
     )
 
-    # 并行参数
+    # parallel parameter
     parallel_option = parser.add_argument_group(
         title="parallel"
     )
-    # 线程
+    # thread
     parallel_option.add_argument(
         "--threads", dest="threads", help="number of threads [10]", type=int, default=10
     )
-    # 进程数
+    # number of processes
     parallel_option.add_argument(
         "--jobs", dest="jobs", help="run n jobs in parallel [3]", type=int, default=3
     )
 
-    # 处理已经存在的目录和文件的方式
+    # How to deal with existing directories and files
     resume_option = parser.add_argument_group(
         title="resume"
     )
@@ -203,7 +203,7 @@ def get_parser():
 
     args = parser.parse_args()
 
-    # 解析参数
+    # parsing parameters
     reference_file = args.reference.name
     vcf_file = args.vcf.name
     try:
@@ -211,13 +211,13 @@ def get_parser():
     except AttributeError:
         line_vcf_file = vcf_file
 
-    # 测序数据文件
+    # Sequencing data files
     samples_file = args.samples.name
 
     vcf_out_name = "convert." + os.path.basename(vcf_file.replace(".gz", ""))
     software_list = args.software
 
-    # 修改全局变量
+    # Modify global variables
     global force, restart, threads, jobs_num, mode, need_depth, merge_mode
     force = args.force
     restart = args.restart
@@ -225,19 +225,19 @@ def get_parser():
     jobs_num = args.jobs
     mode = args.mode
     need_depth = args.depth
-    if line_vcf_file == vcf_file:  # 合并过程算法，如果一样，用all算法
+    if line_vcf_file == vcf_file:  # Merge process algorithm, if the same, use all algorithm
         merge_mode = "all"
 
-    # 将路径补全
+    # Complete the path
     reference_file = os.path.abspath(reference_file)
     vcf_file = os.path.abspath(vcf_file)
     line_vcf_file = os.path.abspath(line_vcf_file)
     samples_file = os.path.abspath(samples_file)
 
-    # 当前路径
+    # current path
     path = os.getcwd()
 
-    # 输出参数字典
+    # dictionary of output parameters
     parser_map = {
         "reference_file": reference_file,
         "vcf_file": vcf_file,
@@ -253,22 +253,22 @@ def get_parser():
 
 # bwa
 def run_bwa(
-        reference_file: str,
-        sample_name: str,
-        fastq_file1: str,
-        fastq_file2: str,
-        real_depth: int,
-        read_len: float,
-        work_path: str
+    reference_file: str,
+    sample_name: str,
+    fastq_file1: str,
+    fastq_file2: str,
+    real_depth: int,
+    read_len: float,
+    work_path: str
 ):
     """
-    :param reference_file: 转换后的参考基因组
-    :param sample_name: 样本名字
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param real_depth: 测序数据的深度
-    :param read_len: 数据读长
-    :param work_path: 工作路径
+    :param reference_file:   Transformed reference genome
+    :param sample_name:      sample name
+    :param fastq_file1:      read1
+    :param fastq_file2:      read2
+    :param real_depth:       sequencing dapth
+    :param read_len:         read length
+    :param work_path:        work path
     :return: stdout, stderr, log_out, bam_info_map = {
             "sample_name": sample_name,
             "fastq_file1": fastq_file1,
@@ -290,11 +290,11 @@ def run_bwa(
         fastq_file2
     )
 
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, {}
 
-    # fastq路径、测序深度、读长
+    # fastq path, sequencing depth, read length
     bam_info_map = {
         "sample_name": sample_name,
         "fastq_file1": fastq_file1,
@@ -309,22 +309,22 @@ def run_bwa(
 
 # GraphTyper2
 def run_graphtyper(
-        reference_file: str,
-        vcf_file: str,
-        region_file: str,
-        bam2graphtyper_file: str,
-        work_path: str
+    reference_file: str,
+    vcf_file: str,
+    region_file: str,
+    bam2graphtyper_file: str,
+    work_path: str
 ):
     """
-    :param reference_file: 参考基因组
-    :param vcf_file: 变异文件
-    :param region_file: 配置文件
-    :param bam2graphtyper_file: bam配置文件路径
-    :param work_path: genotype工作路径
+    :param reference_file:        reference genome
+    :param vcf_file:              vcf
+    :param region_file:           configuration file of region
+    :param bam2graphtyper_file:   configuration file of BAM
+    :param work_path:             work path
     :return: "GraphTyper2", sample_name, graphtyper_vcf_file
     """
 
-    # 创建文件夹并切换路径
+    # Create folder and switch paths
     os.chdir(work_path)
     graphtyper_path = os.path.join(work_path, "GraphTyper2")
     makedir(
@@ -356,14 +356,14 @@ def run_paragraph(
         work_path: str
 ):
     """
-    :param reference_file: 参考基因组
-    :param vcf_file: 编译文件
-    :param bam2paragraph_file: bam配置文件路径
-    :param work_path: genotype工作路径
+    :param reference_file:      reference genome
+    :param vcf_file:            vcf file
+    :param bam2paragraph_file:  configuration file of BAM
+    :param work_path:           work path
     :return: "Paragraph", sample_name, paragraph_vcf_file
     """
 
-    # 创建文件夹并切换路径
+    # Create folder and switch paths
     os.chdir(work_path)
     paragraph_path = os.path.join(work_path, "Paragraph")
     makedir(
@@ -395,15 +395,15 @@ def run_bayestyper(
         bam_infos_map: str
 ):
     """
-    :param reference_file: 参考基因组
-    :param vcf_file: 变异文件
-    :param bam2bayestyper_file: 配置文件路径
-    :param work_path: genotype工作路径
-    :param bam_infos_map: bam所有信息
+    :param reference_file:        reference genome
+    :param vcf_file:              vcf file
+    :param bam2bayestyper_file:   configuration file
+    :param work_path:             work path
+    :param bam_infos_map:         the informations of BAM
     :return:
     """
 
-    # 创建文件夹并切换路径
+    # Create folder and switch paths
     os.chdir(work_path)
     bayestyper_path = os.path.join(work_path, "BayesTyper")
     makedir(
@@ -429,26 +429,26 @@ def run_bayestyper(
 
 # vg_map_giraffe
 def run_vg_map_giraffe(
-        sample_name: str,
-        fastq_file1: str,
-        fastq_file2: str,
-        real_depth: int,
-        software: str,
-        software_work_path: str,
-        index_dir: str
+    sample_name: str,
+    fastq_file1: str,
+    fastq_file2: str,
+    real_depth: int,
+    software: str,
+    software_work_path: str,
+    index_dir: str
 ):
     """
-    :param sample_name: 品种名称
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param real_depth: 测序深度
-    :param software: 软件
-    :param software_work_path: 软件工作路径
-    :param index_dir: 索引路径
+    :param sample_name:          sample name
+    :param fastq_file1:          read1
+    :param fastq_file2:          read2
+    :param real_depth:           read depth
+    :param software:             software
+    :param software_work_path:   work path
+    :param index_dir:            the path of index
     :return: software, sample_name, map_vcf_file
     """
 
-    # 创建文件夹并切换路径
+    # Create folder and switch paths
     os.chdir(software_work_path)
     map_path = os.path.join(software_work_path, sample_name)
     makedir(
@@ -476,18 +476,18 @@ def run_vg_map_giraffe(
 
 # GraphAligner
 def run_graphaligner(
-        sample_name: str,
-        fastq_file1: str,
-        real_depth: int,
-        software_work_path: str,
-        index_dir: str
+    sample_name: str,
+    fastq_file1: str,
+    real_depth: int,
+    software_work_path: str,
+    index_dir: str
 ):
     """
-    :param sample_name: 品种名称
-    :param fastq_file1: 测序文件1
-    :param real_depth: 测序深度
-    :param software_work_path: 软件工作路径
-    :param index_dir: 索引路径
+    :param sample_name:          sample name
+    :param fastq_file1:          read
+    :param real_depth:           read depth
+    :param software_work_path:   work path
+    :param index_dir:            the path of index
     :return: "GraphAligner", sample_name, graphaligner_vcf_file
     """
 
@@ -525,16 +525,16 @@ def run_pangenie(
 ):
     """
 
-    :param sample_name: 品种名
-    :param reference_file: 参考基因组
-    :param vcf_file: 变异文件
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param software_work_path: 软件工作路径
+    :param sample_name:        sample name
+    :param reference_file:     reference genome
+    :param vcf_file:           vcf file
+    :param fastq_file1:        read1
+    :param fastq_file2:        read2
+    :param software_work_path: work path
     :return: "PanGenie", sample_name, pangenie_vcf_file
     """
 
-    # 创建文件夹并切换路径
+    # Create folder and switch paths
     os.chdir(software_work_path)
     pangenie_path = os.path.join(software_work_path, sample_name)
     makedir(
@@ -559,14 +559,14 @@ def run_pangenie(
     return stdout, stderr, log_out, "PanGenie", sample_name, pangenie_vcf_file
 
 
-# 对参考基因组和vcf文件转换
+# Conversion of reference genome and vcf files
 def ref_vcf_convert(
         parser_map,
         work_path
 ):
     """
-    :param parser_map: get_parser()返回的参数字典
-    :param work_path: 工作路径
+    :param parser_map: get_parser(), Returned parameter dictionary
+    :param work_path:  work path
     :return: stdout, stderr, log_out, convert_out_map = {
                 "reference_file": reference_file,
                 "vcf_out_name": vcf_out_name,
@@ -577,35 +577,35 @@ def ref_vcf_convert(
                 "giraffe_index_dir": giraffe_index_dir
             }
     """
-    # 更改工作路径
+    # switch paths
     os.chdir(work_path)
 
-    # ################################### reference进行转换 ###################################
+    # ################################### reference to convert ###################################
     stdout, stderr, log_out, reference_file = convert.convert_reference(
         parser_map["reference_file"],
         env_path, 
         restart
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, {}
-    # 对fasta文件进行评估
+    # Evaluate the fasta file
     stdout, stderr, log_out, fasta_base = convert.fasta_count(code_dir, env_path, reference_file)
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, {}
 
-    # ################################### 对reference构建索引 ###################################
+    # ################################### Build an index on the reference ###################################
     stdout, stderr, log_out = bwa.index(
         reference_file, 
         env_path, 
         restart
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, {}
 
-    # ################################### 对vcf文件进行转换 ###################################
+    # ################################### Convert vcf files ###################################
     stdout, stderr, log_out, vcf_out_name, vcf_sv_out_name, region_file = convert.vcf_convert(
         code_dir,
         reference_file,
@@ -616,18 +616,18 @@ def ref_vcf_convert(
         env_path, 
         restart
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, {}
 
-    # ################################### 对vcf文件压缩 ###################################
-    if vcf_sv_out_name != vcf_out_name:  # 如果两个文件一样，则不对vcf_sv_out_name进行压缩，否则会报错
+    # ################################### Compress vcf files ###################################
+    if vcf_sv_out_name != vcf_out_name:  # If the two files are the same, vcf_sv_out_name will not be compressed, otherwise an error will be reported
         stdout, stderr, log_out, vcf_sv_out_name = convert.bgzip_vcf(
             vcf_sv_out_name,
             env_path, 
             restart
         )
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
         stdout, stderr, log_out, vcf_out_name = convert.bgzip_vcf(
@@ -635,7 +635,7 @@ def ref_vcf_convert(
             env_path, 
             restart
         )
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
     else:
@@ -645,32 +645,32 @@ def ref_vcf_convert(
             restart
         )
         vcf_sv_out_name = vcf_out_name
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
 
-    # ################################### 构建vg图和索引 ###################################
-    # 先选择vg的软件
+    # ################################### Build vg graph and index ###################################
+    # First select the vg software
     select_software_list = []
-    if isinstance(parser_map["software_list"], str):  # 程序自动判定软件
-        if fasta_base > 200000000:  # 如果基因组大于200Mb，用giraffe跑
+    if isinstance(parser_map["software_list"], str):  # Program Automatic Judgment Software
+        if fasta_base > 200000000:  # If the genome is larger than 200Mb, use giraffe to run
             select_software_list.append("giraffe")
-        else:  # 否则用vg_map跑
+        else:  # Otherwise run with vg_map
             select_software_list.append("map")
-    else:  # 用户自定义软件
+    else:  # user-defined software
         if "VG-MAP" in parser_map["software_list"]:
             select_software_list.append("map")
         if "VG-Giraffe" in parser_map["software_list"]:
             select_software_list.append("giraffe")
 
-    # 多进程进程池
-    if len(select_software_list) > 0:  # 如果文件数量大于1了再构建索引
-        # 多进程
+    # multi-process process pool
+    if len(select_software_list) > 0:  # If the number of files is greater than 1, then build the index
+        # multi-Progress
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             to_do = []
-            # map和giraffe构建索引
+            # Map and giraffe build indexes
             for software in select_software_list:
-                # 更改工作路径
+                # switch paths
                 index_dir = os.path.join(work_path, software)
                 makedir(
                     index_dir,
@@ -679,7 +679,7 @@ def ref_vcf_convert(
                 )
                 os.chdir(index_dir)
 
-                # 提交任务
+                # submit task
                 future = executor.submit(
                     VG_MAP_Giraffe.vg_autoindex,
                     reference_file,
@@ -690,17 +690,17 @@ def ref_vcf_convert(
                     index_dir,
                     restart
                 )
-                # 保存结果
+                # save result
                 to_do.append(future)
 
                 time.sleep(0.05)
 
-            # 回到主工作路径
+            # Back to the main working path
             os.chdir(work_path)
 
-            # GraphAligner构建索引
+            # GraphAligner build index
             if "GraphAligner" in parser_map["software_list"]:
-                # 更改工作路径
+                # switch paths
                 index_dir = os.path.join(work_path, "GraphAligner")
                 makedir(
                     index_dir,
@@ -709,7 +709,7 @@ def ref_vcf_convert(
                 )
                 os.chdir(index_dir)
 
-                # 提交任务
+                # submit task
                 future = executor.submit(
                     GraphAligner.vg_index,
                     reference_file,
@@ -719,24 +719,24 @@ def ref_vcf_convert(
                     env_path, 
                     restart
                 )
-                # 保存结果
+                # save result
                 to_do.append(future)
 
-            # 返回主路径
+            # return to main path
             os.chdir(work_path)
 
-            # 获取多线程返回值，如果log_out存在表明运行失败，退出代码
-            for future in concurrent.futures.as_completed(to_do):  # 并发执行
-                stdout, stderr, log_out = future.result()  # 检查返回值
+            # Obtain the return value of multithreading. If log_out exists, it indicates that the operation failed and the exit code
+            for future in concurrent.futures.as_completed(to_do):  # concurrent execution
+                stdout, stderr, log_out = future.result()  # check return value
                 if log_out:
                     return stdout, stderr, log_out, {}
 
-    # 索引文件的路径
+    # path to the index file
     map_index_dir = os.path.join(work_path, "map")
     giraffe_index_dir = os.path.join(work_path, "giraffe")
     graphaligner_index_dir = os.path.join(work_path, "GraphAligner")
 
-    # 存储转化后文件的路径
+    # The path to store the converted file
     convert_out_map = {
         "reference_file": reference_file,
         "vcf_out_name": vcf_out_name,
@@ -751,20 +751,20 @@ def ref_vcf_convert(
     return stdout, stderr, log_out, convert_out_map
 
 
-# 对测序文件进行转换
+# Convert sequencing files
 def read_convert(
-        work_path: str,
-        sample_name: str,
-        fastq_file1: str,
-        fastq_file2: str,
-        fasta_base: float
+    work_path: str,
+    sample_name: str,
+    fastq_file1: str,
+    fastq_file2: str,
+    fasta_base: float
 ):
     """
-    :param work_path: 工作路径
-    :param sample_name: 样本名
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param fasta_base: 参考基因组base
+    :param work_path:    work path
+    :param sample_name:  sample name
+    :param fastq_file1:  read1
+    :param fastq_file2:  read2
+    :param fasta_base:   the base of reference genome
     :return: stdout, stderr, log_out, fastq_info_map = {
                 "sample_name": sample_name,
                 "fastq_file1": fastq_out_file1,
@@ -779,11 +779,11 @@ def read_convert(
     stderr = ""
     log_out = ""
 
-    # 更改工作路径
+    # switch paths
     os.chdir(work_path)
 
-    # ################################### 对二代数据进行转换 ###################################
-    # 对fastq文件进行评估
+    # ################################### Transform the second-generation data ###################################
+    # Evaluate fastq files
     if fastq_file1:
         stdout, stderr, log_out, fastq_base, read_num, read_len = convert.fastq_count(
             code_dir, 
@@ -791,7 +791,7 @@ def read_convert(
             fastq_file1,
             fastq_file2
         )
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
 
@@ -806,23 +806,23 @@ def read_convert(
             env_path, 
             restart
         )
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
 
-        # 实际的测序深度
+        # actual sequencing depth
         real_depth = min(int(fastq_base) / int(fasta_base), need_depth)
     else:
         read_len = 0
         fastq_out_file1, fastq_out_file2 = "", ""
         real_depth = 0
 
-    # 判断测序深度是不是0
+    # Determine whether the sequencing depth is 0
     if real_depth == 0:
         log_out = '[EVG.run_convert] sequencing depth is 0, please check the input file file.'
         return stdout, stderr, log_out, {}
 
-    # fastq路径、测序深度、读长
+    # fastq path, sequencing depth, read length
     fastq_info_map = {
         "sample_name": sample_name,
         "fastq_file1": fastq_out_file1,
@@ -834,18 +834,18 @@ def read_convert(
     return stdout, stderr, log_out, fastq_info_map
 
 
-# 每个line单独跑
+# Each line runs independently
 def run_genotype(
-        work_path: str,
-        parser_map,
-        convert_out_map,
-        bam_infos_map
+    work_path: str,
+    parser_map,
+    convert_out_map,
+    bam_infos_map
 ):
     """
-    :param work_path: genotype工作路径
-    :param parser_map: get_parser的返回值
-    :param convert_out_map: vcf、reference和测序文件转换后的哈希表
-    :param bam_infos_map: run_bwa返回值
+    :param work_path:        work path
+    :param parser_map:       the return of get_parser
+    :param convert_out_map:  Hash table after conversion of vcf, reference and sequencing files
+    :param bam_infos_map:    run_bwa return value
     :return: stdout, stderr, log_out, vcf_merge_files_map
     """
 
@@ -854,10 +854,10 @@ def run_genotype(
     stderr = ""
     log_out = ""
 
-    # 更改工作路径
+    # switch paths
     os.chdir(work_path)
 
-    # 获取测序数据的最低测序深度和测序长度
+    # Minimum sequencing depth and sequencing length for obtaining sequencing data
     depth_min = 1000
     read_len_mix = 100000
     for key, value in bam_infos_map.items():
@@ -865,13 +865,13 @@ def run_genotype(
         read_len_mix = min(read_len_mix, value["read_len"])
 
     # run select_software
-    if isinstance(parser_map["software_list"], str):  # 程序自动判定软件
+    if isinstance(parser_map["software_list"], str):  # Program Automatic Judgment Software
         select_software_list = select_software.main(depth_min, read_len_mix, convert_out_map["fasta_base"])
-    else:  # 用户自定义软件
+    else:  # user-defined software
         select_software_list = parser_map["software_list"]
 
     # ################################### config ###################################
-    # 生成GraphTyper2、BayesTyper和Paragraph的配置文件
+    # Generate configuration files for GraphTyper2, BayesTyper and Paragraph
     bam2graphtyper_file = ""
     bam2bayestyper_file = ""
     bam2paragraph_file = ""
@@ -890,21 +890,21 @@ def run_genotype(
 
     # ################################### genotype ###################################
     # run genotype
-    # 多进程进程池
+    # multi-process process pool
     pool = Pool(processes=jobs_num)
 
-    # 线程池返回值
-    pool_out_list = []  # 从异步提交任务获取结果
+    # thread pool return value
+    pool_out_list = []  # Get results from asynchronously submitted tasks
 
-    # 保存分型结果位置
+    # Save the location of typing results
     genotype_outs_map = {}  # map<sample_name, map<software, vcf_path>>
 
     for software in select_software_list:
-        # 回到工作路径
+        # back to working path
         os.chdir(work_path)
 
         if software in ["VG-MAP", "VG-Giraffe", "GraphAligner", "PanGenie"]:
-            # 创建文件夹并切换路径
+            # Create folder and switch paths
             os.chdir(work_path)
             software_work_path = os.path.join(work_path, software)
             makedir(
@@ -915,7 +915,7 @@ def run_genotype(
             os.chdir(software_work_path)
 
             for key, value in bam_infos_map.items():
-                # 回到工作路径
+                # back to working path
                 os.chdir(work_path)
 
                 sample_name = key
@@ -924,7 +924,7 @@ def run_genotype(
                 real_depth = value["real_depth"]
 
                 if "VG-MAP" == software:
-                    # 多进程提交任务
+                    # Multi-process submission tasks
                     pool_out = pool.apply_async(run_vg_map_giraffe, args=(
                         sample_name,
                         fastq_file1,
@@ -934,10 +934,10 @@ def run_genotype(
                         software_work_path,
                         convert_out_map["map_index_dir"],
                     ), error_callback=throw_exception)
-                    # 保存多线程的返回值
+                    # Save the return value of multiple threads
                     pool_out_list.append(pool_out)
                 elif "VG-Giraffe" == software:
-                    # 多进程提交任务
+                    # Multi-process submission tasks
                     pool_out = pool.apply_async(run_vg_map_giraffe, args=(
                         sample_name,
                         fastq_file1,
@@ -947,10 +947,10 @@ def run_genotype(
                         software_work_path,
                         convert_out_map["giraffe_index_dir"],
                     ), error_callback=throw_exception)
-                    # 保存多线程的返回值
+                    # Save the return value of multiple threads
                     pool_out_list.append(pool_out)
                 elif "GraphAligner" == software:
-                    # 多进程提交任务
+                    # Multi-process submission tasks
                     pool_out = pool.apply_async(run_graphaligner, args=(
                         sample_name,
                         fastq_file1,
@@ -958,10 +958,10 @@ def run_genotype(
                         software_work_path,
                         convert_out_map["GraphAligner_index_dir"],
                     ), error_callback=throw_exception)
-                    # 保存多线程的返回值
+                    # Save the return value of multiple threads
                     pool_out_list.append(pool_out)
                 else:
-                    # 多进程提交任务
+                    # Multi-process submission tasks
                     pool_out = pool.apply_async(run_pangenie, args=(
                         sample_name,
                         convert_out_map["reference_file"],
@@ -970,24 +970,24 @@ def run_genotype(
                         fastq_file2,
                         software_work_path,
                     ), error_callback=throw_exception)
-                    # 保存多线程的返回值
+                    # Save the return value of multiple threads
                     pool_out_list.append(pool_out)
-                # 线程间隔
+                # thread interval
                 time.sleep(0.05)
-                # 回到工作路径
+                # back to working path
                 os.chdir(work_path)
         elif software == "Paragraph":
-            # 多进程提交任务
+            # Multi-process submission tasks
             pool_out = pool.apply_async(run_paragraph, args=(
                 convert_out_map["reference_file"],
                 convert_out_map["vcf_sv_out_name"],
                 bam2paragraph_file,
                 work_path,
             ), error_callback=throw_exception)
-            # 保存多线程的返回值
+            # Save the return value of multiple threads
             pool_out_list.append(pool_out)
         elif software == "BayesTyper":
-            # 多进程提交任务
+            # Multi-process submission tasks
             pool_out = pool.apply_async(run_bayestyper, args=(
                 convert_out_map["reference_file"],
                 convert_out_map["vcf_out_name"],
@@ -995,10 +995,10 @@ def run_genotype(
                 work_path,
                 bam_infos_map
             ), error_callback=throw_exception)
-            # 保存多线程的返回值
+            # Save the return value of multiple threads
             pool_out_list.append(pool_out)
         elif software == "GraphTyper2":
-            # 多进程提交任务
+            # Multi-process submission tasks
             pool_out = pool.apply_async(run_graphtyper, args=(
                 convert_out_map["reference_file"],
                 convert_out_map["vcf_out_name"],
@@ -1006,19 +1006,19 @@ def run_genotype(
                 bam2graphtyper_file,
                 work_path,
             ), error_callback=throw_exception)
-            # 保存多线程的返回值
+            # Save the return value of multiple threads
             pool_out_list.append(pool_out)
 
-        # 线程间隔
+        # thread interval
         time.sleep(0.05)
-        # 回到工作路径
+        # back to working path
         os.chdir(work_path)
 
-    # 获取多线程返回值
+    # Get multithreaded return value
     for pool_out in pool_out_list:
         stdout, stderr, log_out, software, sample_name, vcf_file = pool_out.get()
 
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
 
@@ -1029,36 +1029,36 @@ def run_genotype(
         else:
             genotype_outs_map[software] = vcf_file
 
-        # 回到工作路径
+        # back to working path
         os.chdir(work_path)
 
-    # 关闭线程池
+    # Close the thread pool
     pool.close()
     pool.join()
 
     # ################################################ graphvcf merge ################################################
-    # 多进程进程池
-    pool = Pool(processes=jobs_num*threads)  # 合并步骤用资源少，因此把所有内核用上
+    # multi-process process pool
+    pool = Pool(processes=jobs_num*threads)  # The merge step uses less resources, so all cores are used
 
-    # 线程池返回值
-    pool_out_list = []  # 从异步提交任务获取结果
+    # thread pool return value
+    pool_out_list = []  # Get results from asynchronously submitted tasks
 
-    # 存储合并后的结果
+    # Store the merged result
     vcf_merge_files_map = {}  # map<sample_name, vcf_file>
 
-    # 合并结果
-    sample_name_tmp_list = bam_infos_map.keys()  # 先获取所有的samples_name
+    # merged result
+    sample_name_tmp_list = bam_infos_map.keys()  # Get all samples_name first
     for sample_name_tmp in sample_name_tmp_list:
-        vcf_out_tmp_list = []  # 用于提交任务的临时列表
-        software_tmp_list = []  # 用于提交任务的临时列表
-        for software in select_software_list:  # 软件没在结果文件中
+        vcf_out_tmp_list = []  # Temporary list for submitting tasks
+        software_tmp_list = []  # Temporary list for submitting tasks
+        for software in select_software_list:  # software not in results file
             if software not in genotype_outs_map.keys():
                 log = '[EVG.genotype] {}: {} results are missing, skipped.'.format(sample_name_tmp, software)
                 sys.stdout.write(log)
                 continue
             software_tmp_list.append(software)
             if isinstance(genotype_outs_map[software], dict):
-                if sample_name_tmp not in genotype_outs_map[software].keys():  # sample_name不在结果文件中
+                if sample_name_tmp not in genotype_outs_map[software].keys():  # sample_name is not in the result file
                     log = '[EVG.genotype] {}: {} results are missing, skipped.'.format(sample_name_tmp, software)
                     sys.stdout.write(log)
                     continue
@@ -1066,7 +1066,7 @@ def run_genotype(
             else:
                 vcf_out_tmp_list.append(genotype_outs_map[software])
 
-        # 多线程提交 graphvcf merge
+        # sample_name is not in the result file, graphvcf merge
         pool_out = pool.apply_async(
             merge.main, args=(
                 code_dir,
@@ -1081,30 +1081,30 @@ def run_genotype(
             ), error_callback=throw_exception
         )
 
-        # 保存多线程的返回值
+        # Save the return value of multiple threads
         pool_out_list.append(pool_out)
 
-        # 多线程间隔
+        # Multi-thread interval
         time.sleep(0.05)
 
-    for pool_out in pool_out_list:  # read的返回值
+    for pool_out in pool_out_list:  # The return value of read
         stdout, stderr, log_out, sample_name, merge_vcf_file = pool_out.get()
 
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, {}
 
-        # 赋值给总的哈希表
+        # Assigned to the total hash table
         vcf_merge_files_map[sample_name] = merge_vcf_file
 
-        # 关闭线程池
+        # Close the thread pool
     pool.close()
     pool.join()
 
     return stdout, stderr, log_out, vcf_merge_files_map
 
 
-# 捕获子进程退出状态
+# capture subprocess exit status
 def throw_exception(name):
     # print log
     log = '[EVG.genotype] %s' % name.__cause__
@@ -1114,47 +1114,47 @@ def throw_exception(name):
 
 
 def main():
-    # 解析参数
+    # parsing parameters
     parser_map = get_parser()
 
     # ################################################ EVG convert ################################################
-    # 返回主工作路径
+    # Return to the main working path
     os.chdir(parser_map["path"])
-    # 多进程进程池
+    # multi-process process pool
     pool = Pool(processes=threads)
 
-    # 线程池返回值
-    pool_out_list = []  # 从异步提交任务获取结果
+    # thread pool return value
+    pool_out_list = []  # Get results from asynchronously submitted tasks
 
-    # 存储多线程结果，fastq路径、测序深度、读长
+    # Store multi-threaded results, fastq path, sequencing depth, read length
     fastq_infos_map = {}
 
-    # 获取测序文件路径和输出路径名
+    # Get sequencing file path and output pathname
     samples_map = get_samples_path(parser_map["samples_file"])
 
-    # reference and vcf 转换存储路径并创建文件夹
-    convert_dir = os.path.join(parser_map["path"], "convert")  # 转换文件存放路径
+    # reference and vcf, Convert storage paths and create folders
+    convert_dir = os.path.join(parser_map["path"], "convert")  # Conversion file storage path
     makedir(
         convert_dir,
         force_tmp=force,
         restart_tmp=restart
     )
 
-    # 返回主工作路径
+    # Return to the main working path
     os.chdir(parser_map["path"])
-    # 对fasta文件进行评估
+    # Evaluate the fasta file
     stdout, stderr, log_out, fasta_base = convert.fasta_count(
         code_dir, 
         env_path, 
         parser_map["reference_file"]
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         logger.error(log_out.strip())
         exit(1)
 
-    # 对reference和vcf进行转换
-    # 多线程提交
+    # Convert reference and vcf
+    # Multi-thread submission
     pool_convert_out = pool.apply_async(
         ref_vcf_convert, args=(
             parser_map,
@@ -1162,17 +1162,17 @@ def main():
         ), error_callback=throw_exception
     )
 
-    # 转换read
-    # 多线程提交
+    # convert read
+    # Multi-thread submission
     for key, value in samples_map.items():
-        # 返回主工作路径
+        # Return to the main working path
         os.chdir(parser_map["path"])
 
         sample_name = key
         fastq_file1 = value[0]
         fastq_file2 = value[1]
 
-        # 多线程对测序文件进行转换
+        # Multi-threaded conversion of sequencing files
         pool_out = pool.apply_async(read_convert, args=(
             convert_dir,
             sample_name,
@@ -1181,25 +1181,25 @@ def main():
             fasta_base,
         ), error_callback=throw_exception)
 
-        # 保存多线程的返回值
+        # Save the return value of multiple threads
         pool_out_list.append(pool_out)
 
-        # 多线程间隔
+        # Multi-thread interval
         time.sleep(0.05)
 
-    # 获取多线程返回值
+    # Get multithreaded return value
     stdout, stderr, log_out, convert_out_map = pool_convert_out.get()  # vcf和reference的返回值
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         logger.error(log_out.strip())
         exit(1)
-    for pool_out in pool_out_list:  # read的返回值
+    for pool_out in pool_out_list:  # The return value of read
         stdout, stderr, log_out, fastq_info_map = pool_out.get()
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             logger.error(log_out.strip())
             exit(1)
-        # 赋值给总的哈希表
+        # Assigned to the total hash table
         fastq_infos_map[fastq_info_map["sample_name"]] = {
             "fastq_file1": fastq_info_map["fastq_file1"],
             "fastq_file2": fastq_info_map["fastq_file2"],
@@ -1207,33 +1207,33 @@ def main():
             "read_len": fastq_info_map["read_len"]
         }
 
-    # 关闭线程池
+    # Close the thread pool
     pool.close()
     pool.join()
 
     # ################################################ bwa mem ################################################
-    # 返回主工作路径
+    # Return to the main working path
     os.chdir(parser_map["path"])
-    # 重新初始化线程池
+    # Reinitialize the thread pool
     pool = Pool(processes=jobs_num)
 
-    # 线程池返回值
-    pool_out_list = []  # 从异步提交任务获取结果
+    # thread pool return value
+    pool_out_list = []  # Get results from asynchronously submitted tasks
 
-    # 存储多线程的结果，bam路径、测序深度、读长
+    # Store multi-threaded results, bam path, sequencing depth, read length
     bam_infos_map = {}
 
-    # 序列比对存储路径
-    bwa_dir = os.path.join(parser_map["path"], "bwa")  # bwa mem 比对路径
+    # Sequence comparison storage path
+    bwa_dir = os.path.join(parser_map["path"], "bwa")  # the path of bwa mem
 
-    # 创建目录
+    # Create a directory
     makedir(
         bwa_dir,
         force_tmp=force,
         restart_tmp=restart
     )
 
-    # 多线程进行序列比对
+    # Multi-threaded sequence alignment
     for key, value in fastq_infos_map.items():
         sample_name = key
         fastq_file1 = value["fastq_file1"]
@@ -1242,7 +1242,7 @@ def main():
         read_len = value["read_len"]
 
         # bwa mem
-        # 多线程对测序文件进行转换
+        # Multi-threaded conversion of sequencing files
         pool_out = pool.apply_async(run_bwa, args=(
             convert_out_map["reference_file"],
             sample_name,
@@ -1253,20 +1253,20 @@ def main():
             bwa_dir
         ), error_callback=throw_exception)
 
-        # 保存多线程的返回值
+        # Save the return value of multiple threads
         pool_out_list.append(pool_out)
 
-        # 多线程间隔
+        # Multi-thread interval
         time.sleep(0.05)
 
-    # 获取多线程返回值
+    # Get multithreaded return value
     for pool_out in pool_out_list:
         stdout, stderr, log_out, bam_info_map = pool_out.get()
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             logger.error(log_out.strip())
             exit(1)
-        # 赋值给总的哈希表
+        # Assigned to the total hash table
         bam_infos_map[bam_info_map["sample_name"]] = {
             "fastq_file1": bam_info_map["fastq_file1"],
             "fastq_file2": bam_info_map["fastq_file2"],
@@ -1275,35 +1275,35 @@ def main():
             "bam_file": bam_info_map["bam_file"]
         }
 
-    # 关闭线程池
+    # Close the thread pool
     pool.close()
     pool.join()
 
     # ################################################ genotype ################################################
-    # 返回主工作路径
+    # Return to the main working path
     os.chdir(parser_map["path"])
 
-    # 分型结果路径
-    genotype_dir = os.path.join(parser_map["path"], "genotype")  # bwa mem 比对路径
-    # 创建目录
+    # Typing result path
+    genotype_dir = os.path.join(parser_map["path"], "genotype")  # the path of bwa mem
+    # Create a directory
     makedir(
         genotype_dir,
         force_tmp=force,
         restart_tmp=restart
     )
-    # 分型
+    # genotyping
     stdout, stderr, log_out, vcf_merge_files_map = run_genotype(
         genotype_dir,
         parser_map,
         convert_out_map,
         bam_infos_map
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         logger.error(log_out.strip())
         exit(1)
 
-    # 打印输出结果
+    # printout result
     print_merge(vcf_merge_files_map)
 
     return 0

@@ -15,7 +15,7 @@ int main_count(int argc, char** argv)
     // read分割数目
     int readSplitNum = 500;
 
-    // 线程数
+    // Threads
 	int threadsNum = 10;
 
     // 输入参数
@@ -144,7 +144,7 @@ void count::fastq_a_count(
     const int & readSplitNum
 )
 {
-    // 记录测序序列信息，用于多线程提交
+    // 记录测序序列信息，用于Multi-thread submission
     vector<long long int> reads1Vec;
     vector<long long int> reads2Vec;
 
@@ -218,14 +218,14 @@ void count::fastq_a_count(
                 vector<long long int>().swap(reads2Vec);
             }
 
-            // 检查任务队列是否执行完，执行完则关闭线程池，否则每隔0.5s检查一次
+            // 检查任务队列是否执行完，执行完则Close the thread pool，否则每隔0.5s检查一次
             while (pool.get_queue() > 0)
             {
                 // 每隔0.5秒检查一次
                 sleep(0.5);
             }
 
-            // 关闭线程池
+            // Close the thread pool
             pool.shutdown();
 
             // 释放内存，关闭文件
@@ -294,14 +294,14 @@ void count::fastq_a_count(
                 vector<long long int>().swap(reads2Vec);
             }
 
-            // 检查任务队列是否执行完，执行完则关闭线程池，否则每隔0.5s检查一次
+            // 检查任务队列是否执行完，执行完则Close the thread pool，否则每隔0.5s检查一次
             while (pool.get_queue() > 0)
             {
                 // 每隔0.5秒检查一次
                 sleep(0.5);
             }
 
-            // 关闭线程池
+            // Close the thread pool
             pool.shutdown();
 
             // 释放内存，关闭文件
@@ -380,7 +380,7 @@ int count::fastq_a_count_run(
     vector<long long int>().swap(reads1Vec);
     vector<long long int>().swap(reads1Vec);
 
-    // 多线程数据锁
+    // 多Threads据锁
     std::lock_guard<std::mutex> mtx_locker(mtx);
     countOut.readBase += readBaseTmp;
 

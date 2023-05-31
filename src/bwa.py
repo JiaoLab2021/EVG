@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import os
 import run_cmd
@@ -13,9 +13,9 @@ def index(
         restart: bool
 ):
     """
-    :param reference_file: 参考基因组
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param reference_file:  reference genome
+    :param env_path:        env path
+    :param restart:         Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out
     """
 
@@ -26,23 +26,23 @@ def index(
     stderr = ""
     log_out = ""
 
-    # bwa构建索引以及比对
-    # bam文件路径
+    # bwa index building and comparison
+    # bam file path
     cmd = "bwa index {} 2>log.index.txt".format(reference_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 如果小于等于0
+        # <= 0
         if getsize("{}.amb".format(reference_file)) <= 0 or \
                 getsize("{}.ann".format(reference_file)) <= 0 or \
                 getsize("{}.bwt".format(reference_file)) <= 0 or \
                 getsize("{}.fai".format(reference_file)) <= 0 or \
                 getsize("{}.pac".format(reference_file)) <= 0 or \
                 getsize("{}.sa".format(reference_file)) <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "bwa.index", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "bwa.index", env_path)
 
     return stdout, stderr, log_out
@@ -59,13 +59,13 @@ def mem(
         fastq_file2: str = ""
 ):
     """
-    :param reference_file: 参考基因组
-    :param threads: 线程数
-    :param sample_name: 样品名称
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
+    :param reference_file: reference genome
+    :param threads:        Threads
+    :param sample_name:    sample name
+    :param env_path:       env path
+    :param restart: Whether to check if the file exists and skip this step
+    :param fastq_file1:    read1
+    :param fastq_file2:    read2
     :return:
     """
 
@@ -74,8 +74,8 @@ def mem(
     stderr = ""
     log_out = ""
 
-    # bwa构建索引以及比对
-    # bam文件路径
+    # bwa index building and comparison
+    # bam file path
     bam_file = os.path.abspath(sample_name + ".bam")
     cmd = "bwa mem -R '@RG\\tID:foo\\tSM:{}\\tLB:library1' -t {} {} {} {} | samtools view -b -S | samtools " \
           "sort -@ {} -o {} && " \
@@ -83,18 +83,18 @@ def mem(
         format(sample_name, threads, reference_file, fastq_file1,
                fastq_file2, threads, bam_file, bam_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             bam_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "bwa.mem", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "bwa.mem", env_path)
 
     return stdout, stderr, log_out, bam_file
@@ -108,7 +108,7 @@ def bam2graphtyper(
     for key, value in bam_infos_map.items():
         out_txt += value["bam_file"] + "\n"
 
-    # 去掉特殊字符
+    # remove special characters
     out_txt = out_txt.strip()
 
     with open("bam_for_GraphTyper2.txt", "w") as f:
@@ -126,7 +126,7 @@ def bam2bayestyper(
     for key, value in bam_infos_map.items():
         out_txt += key + "\tF\t" + os.path.basename(value["bam_file"]) + "\n"
 
-    # 去掉特殊字符
+    # remove special characters
     out_txt = out_txt.strip()
 
     with open("bam_for_BayesTyper.tsv", "w") as f:
@@ -151,7 +151,7 @@ def bam2paragraph(
                    str(value["read_len"]) + \
                    "\n"
 
-    # 去掉特殊字符
+    # remove special characters
     out_txt = out_txt.strip()
 
     with open("bam_for_Paragraph.txt", "w") as f:

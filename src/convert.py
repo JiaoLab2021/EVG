@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import os
 import concurrent.futures
@@ -11,21 +11,21 @@ from getsize import getsize
 import logging
 logger = logging.getLogger('SynDiv')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
-handler = logging.StreamHandler()  # 输出到控制台
+handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-# 将reference中的非ATGCNatgcn转为N
+# Convert non-ATGCNatgcn in reference to N
 def convert_reference(
         reference_file: str,
         env_path, 
         restart: bool
 ):
     """
-    :param reference_file: 原始的参考基因组
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param reference_file:    original reference genome
+    :param env_path:          environment variable
+    :param restart:           Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, out_reference_file
     """
 
@@ -34,61 +34,61 @@ def convert_reference(
     stderr = ""
     log_out = ""
 
-    # 转换后的文件名
+    # converted filename
     out_reference_file = "convert." + os.path.basename(reference_file)
 
     # ############################# awk #############################
-    # 检查fasta
+    # check fasta
     cmd = '''awk '{if ($1~/>/) {print $0} else {$0=toupper($0); gsub(/[^ATGCNatgcn]/,"N"); print $0}}' ''' + \
           reference_file + \
           " 1>" + \
           out_reference_file
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             out_reference_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.awk", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.awk", env_path)
 
-    # 检查log是否正常，不正常提前退出
+    # Check whether the log is normal, and exit early if it is not normal
     if log_out:
         return stdout, stderr, log_out, out_reference_file
 
     # ############################# samtools faidx #############################
-    # 构建索引
+    # build index
     cmd = "samtools faidx " + out_reference_file
 
-    # 提交任务
+    # submit task
     stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.faidx", env_path)
 
-    # 检查log是否正常，不正常提前退出
+    # Check whether the log is normal, and exit early if it is not normal
     if log_out:
         return stdout, stderr, log_out, out_reference_file
 
-    # 将路径补全
+    # Complete the path
     out_reference_file = os.path.abspath(out_reference_file)
 
     return stdout, stderr, log_out, out_reference_file
 
 
-# 对vcf文件进行排序
+# Sort vcf files
 def bgzip_vcf(
     vcf_file: str,
     env_path, 
     restart: bool
 ):
     """
-    :param vcf_file: vcf文件
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param vcf_file:   vcf file
+    :param env_path:   environment variable
+    :param restart:    Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, out_vcf_file
     """
 
@@ -101,23 +101,23 @@ def bgzip_vcf(
 
     cmd = "bgzip -f {} && tabix -f {}".format(vcf_file, out_vcf_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 如果小于等于0
+        # <= 0
         if getsize(out_vcf_file) <= 28 and getsize(out_vcf_file + ".tbi") <= 72:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "bgzip", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "bgzip", env_path)
 
-    # 将路径补全
+    # Complete the path
     out_vcf_file = os.path.abspath(out_vcf_file)
 
     return stdout, stderr, log_out, out_vcf_file
 
 
-# 对fastq文件进行评估
+# Evaluate fastq files
 def fastq_count(
     code_dir: str,
     env_path, 
@@ -125,22 +125,22 @@ def fastq_count(
     fastq_file2: str = ""
 ):
     """
-    :param code_dir: 代码路径
-    :param env_path: 环境变量
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
+    :param code_dir:    code path
+    :param env_path:    environment variable
+    :param fastq_file1: read1
+    :param fastq_file2: read2
     :return: stdout, stderr, log_out, fastq_base, read_num, read_len
     """
-    # 代码的路径
+    # code path
     code_path = os.path.join(code_dir, "fastAQ count")
 
-    # 评估fastq大小
-    if fastq_file2:  # 二代双端测序
+    # Evaluate fastq size
+    if fastq_file2:  # Next-generation paired-end sequencing
         cmd = '{} -i {} -i {}'.format(code_path, fastq_file1, fastq_file2)
-    else:  # 三代测序数据或二代单端测序
+    else:  # Third-generation sequencing data or second-generation single-end sequencing
         cmd = '{} -i {}'.format(code_path, fastq_file1)
 
-    # 提交任务
+    # submit task
     stdout, stderr, log_out = run_cmd.run(cmd, "fastAQ count", env_path)
 
     fastq_base = 0
@@ -154,7 +154,7 @@ def fastq_count(
         if "readLen" in i:
             read_len = int(i.strip().split(":")[1])
 
-    # 检查结果对不对
+    # Is the result of the inspection correct?
     if fastq_base == 0 or read_num == 0 or read_len == 0:
         log = '[EVG.fastAQ count] The fastq file is wrong, please check the parameters.\n'
         logger.error(log)
@@ -163,25 +163,25 @@ def fastq_count(
     return stdout, stderr, log_out, fastq_base, read_num, read_len
 
 
-# 对基因组大小进行评估
+# Estimating Genome Size
 def fasta_count(
     code_dir: str,
     env_path, 
     reference_file: str
 ):
     """
-    :param code_dir: 代码路径
-    :param env_path: 环境变量
-    :param reference_file: 参考基因组
+    :param code_dir:       code path
+    :param env_path:       environment variable
+    :param reference_file: reference genome
     :return: stdout, stderr, log_out, fasta_base
     """
-    # 代码的路径
+    # code path
     code_path = os.path.join(code_dir, "fastAQ count")
 
-    # 评估fasta大小
+    # Assess fasta size
     cmd = '{} -i {}'.format(code_path, reference_file)
 
-    # 提交任务
+    # submit task
     stdout, stderr, log_out = run_cmd.run(cmd, "fasta_count", env_path)
 
     fasta_base = 0
@@ -189,14 +189,14 @@ def fasta_count(
         if "readBase" in i:
             fasta_base = int(i.strip().split(":")[1])
 
-    # 检查结果对不对
+    # Is the result of the inspection correct?
     if fasta_base == 0:
         log_out = '[EVG.fasta_count] The fasta file is wrong, please check the parameters.\n'
 
     return stdout, stderr, log_out, fasta_base
 
 
-# 对fastq文件进行下采样
+# Downsample fastq files
 def downsample(
         code_dir: str,
         fastq_file1: str,
@@ -208,22 +208,22 @@ def downsample(
         restart: bool
 ):
     """
-    :param code_dir: 代码路径
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param fastq_base: 测序文件碱基数
-    :param fasta_base: 参考基因组碱基数
-    :param need_depth: 需要的深度
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param code_dir:       code path
+    :param fastq_file1:    read1
+    :param fastq_file2:    read2
+    :param fastq_base:     the base of fastq
+    :param fasta_base:     the base of fasta
+    :param need_depth:     need depth
+    :param env_path:       environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return:
     """
-    # 初始化log
+    # Initialize log
     stdout = ""
     stderr = ""
     log_out = ""
 
-    # 代码的路径
+    # code path
     code_path = os.path.join(code_dir, "fastAQ sample")
 
     # downsampling
@@ -231,7 +231,7 @@ def downsample(
     need_ratio = round(need_base / fastq_base, 3)
     read_depth = fastq_base / fasta_base
 
-    if need_ratio >= 1:  # 测序数据小于设定值，跳过，不进行下采样
+    if need_ratio >= 1:  # If the sequencing data is less than the set value, it will be skipped and no downsampling will be performed
         log = '[EVG.fastAQ sample] Insufficient sequencing data ({:.2f}×/{}×), skip downsampling step.\n'. \
                   format(read_depth, need_depth)
         logger.error(log)
@@ -240,24 +240,24 @@ def downsample(
     else:
         fastq_out_file1 = "sample." + str(need_ratio) + "." + os.path.basename(fastq_file1)
         fastq_out_file1 = fastq_out_file1.replace(".gz", "").replace(".GZ", "")
-        fastq_out_file1 = os.path.abspath(fastq_out_file1)  # 补全路径
+        fastq_out_file1 = os.path.abspath(fastq_out_file1)  # path completion
 
-        if fastq_file2:  # 二代双端测序
-            # 输出文件名并补全路径
+        if fastq_file2:  # Next-generation paired-end sequencing
+            # Output the filename and complete the path
             fastq_out_file2 = "sample." + str(need_ratio) + "." + os.path.basename(fastq_file2)
             fastq_out_file2 = fastq_out_file2.replace(".gz", "").replace(".GZ", "")
-            fastq_out_file2 = os.path.abspath(fastq_out_file2)  # 补全路径
+            fastq_out_file2 = os.path.abspath(fastq_out_file2)  # path completion
 
-            # 检查文件是否存在
+            # Check if the file exists
             if restart:
-                # 检查文件
+                # check file
                 file_size1 = getsize(
                     fastq_out_file1
                 )
                 file_size2 = getsize(
                     fastq_out_file2
                 )
-                # 两个文件都存在，跳过该步骤
+                # Both files exist, skip this step
                 if file_size1 > 0 and file_size2 > 0:
                     return stdout, stderr, log_out, os.path.abspath(fastq_out_file1), os.path.abspath(fastq_out_file2)
 
@@ -270,31 +270,31 @@ def downsample(
                 to_do.append(future1)
                 to_do.append(future2)
 
-                for future in concurrent.futures.as_completed(to_do):  # 并发执行
-                    stdout, stderr, log_out_tmp = future.result()  # 检查返回值
+                for future in concurrent.futures.as_completed(to_do):  # concurrent execution
+                    stdout, stderr, log_out_tmp = future.result()  # check return value
                     if log_out_tmp:
                         log_out = log_out_tmp
-        else:  # 三代测序数据或二代单端测序
+        else:  # Third-generation sequencing data or second-generation single-end sequencing
             cmd = '{} -i {} -f {} 1>{}'.format(code_path, fastq_file1, need_ratio, fastq_out_file1)
             fastq_out_file2 = ""
 
-            # 检查文件是否存在
+            # Check if the file exists
             if restart:
-                # 检查文件
+                # check file
                 file_size1 = getsize(
                     fastq_out_file1
                 )
-                # 文件存在，跳过该步骤
+                # file exists, skip this step
                 if file_size1 > 0:
                     return stdout, stderr, log_out, os.path.abspath(fastq_out_file1), ""
 
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "fastAQ sample", env_path)
 
     return stdout, stderr, log_out, os.path.abspath(fastq_out_file1), os.path.abspath(fastq_out_file2)
 
 
-# vcf转换
+# vcf convert
 def vcf_convert(
     code_dir: str,
     reference_file: str,
@@ -306,14 +306,14 @@ def vcf_convert(
     restart: bool
 ):
     """
-    :param code_dir: 代码路径
-    :param reference_file: 参考基因组
-    :param vcf_file: vcf文件
-    :param read_len: 读长
-    :param out_name: 输出vcf文件名
-    :param mode: 模式
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param code_dir: code path
+    :param reference_file: reference genome
+    :param vcf_file: vcf file
+    :param read_len: read length
+    :param out_name: the vcf filename of output
+    :param mode:     mode
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, out_name, sv_out_name, region_file
     """
 
@@ -322,7 +322,7 @@ def vcf_convert(
     stderr = ""
     log_out = ""
 
-    # 代码的路径
+    # code path
     code_path = os.path.join(code_dir, "graphvcf convert")
 
     # ################################### graphvcf convert ###################################
@@ -334,25 +334,25 @@ def vcf_convert(
         read_len,
         out_name)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 如果小于等于0
-        if getsize(out_name) <= 0 and getsize(out_name + ".gz") <= 0:  # vcf或者bgzip压缩后的文件存在则跳过
-            # 提交任务
+        # <= 0
+        if getsize(out_name) <= 0 and getsize(out_name + ".gz") <= 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf convert", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf convert", env_path)
 
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, out_name, "", ""
 
-    # 路径补全
+    # path completion
     region_file = os.path.abspath("CHROMOSOME.NAME")
 
     # ################################### sort ###################################
-    # vcf排序
+    # vcfsort
     cmd = '''grep '#' {} > {} && grep -v '#' {} | sort --parallel=10 -k 1,1 -k 2,2n -t $'\t' | '''.format(
         out_name,
         out_name + ".sort",
@@ -364,21 +364,21 @@ def vcf_convert(
         out_name
     )
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 如果小于等于0
-        if getsize(out_name) > 0:  # vcf或者bgzip压缩后的文件存在则跳过
-            # 提交任务
+        # <= 0
+        if getsize(out_name) > 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "sort", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "sort", env_path)
 
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, out_name, "", region_file
 
-    # vcf按类别进行划分
+    # vcf is divided by category
     if mode == "fast":
         sv_out_name = "sv." + out_name
         cmd = ""
@@ -388,18 +388,18 @@ def vcf_convert(
         elif getsize(out_name + ".gz") > 28:
             cmd = '''zcat ''' + out_name + ".gz" + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
                 {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
-        # 检查文件是否存在
+        # Check if the file exists
         if restart:
-            # 检查文件
+            # check file
             file_size = getsize(
                 sv_out_name
             )
-            # 如果小于等于0
+            # <= 0
             if file_size <= 0:
-                # 提交任务
+                # submit task
                 stdout, stderr, log_out = run_cmd.run(cmd, "split", env_path)
-        else:  # 如果没有指定restart，直接运行
-            # 提交任务
+        else:  # If restart is not specified, run directly
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "split", env_path)
     else:
         sv_out_name = out_name

@@ -493,7 +493,7 @@ int VCFWIN::window_len_count(string vcfFilename, map<string,vector<long int>> & 
         groupNumMap[group]++;
     }
 
-    // ±£´æ½á¹û
+    // save result
     ofstream outFile;
     string outputFilename = split(vcfFilename, ".")[0] + ".out";
     outFile.open(outputFilename, ios::out);

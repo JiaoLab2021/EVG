@@ -143,7 +143,7 @@ int main_merge(int argc, char** argv)
         mode
     );
 
-    // 保存结果
+    // save result
     MERGE::result_save(
         mergeVcfStruct.headInfo, 
         outMap, 
@@ -251,7 +251,7 @@ int MERGE::run_index_merge(
 
 
 /*
-    检查文件是否存在
+    Check if the file exists
     fileName -> 需要检查的文件
 */
 bool MERGE::check_file(string fileName)
@@ -888,7 +888,7 @@ int MERGE::vcf_merge(
 
                         // 构造ref和qry共同的长度索引
                         vector<int> trueSeqLenVec;
-                        trueSeqLenVec.push_back(trueRefLen);  // 先添加参考基因组的长度
+                        trueSeqLenVec.push_back(trueRefLen);  // 先添加reference genome的长度
                         trueSeqLenVec.insert(trueSeqLenVec.end(), mergeQryLenVec.begin(), mergeQryLenVec.end());  // 再添加
 
                         // 如果长度为0，则报错，并退出代码。
@@ -1491,7 +1491,7 @@ map<string, map<int, string > > MERGE::vcf_merge_filter(
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Filtering.\n";
 
-    // 保存结果
+    // save result
     map<string, map<int, string > > outMap;  // outMap<chromosome, map<refStart, vcfInfo> >
 
     // 遍历recall哈希表
@@ -1568,7 +1568,7 @@ map<string, map<int, string > > MERGE::vcf_merge_filter(
             float selectDepthNor = depthNorVec[softwareIdx];
             vector<float> selectDepthVec = depthVecVec[softwareIdx];
 
-            // // 保存结果
+            // // save result
             string selectGt = join(selectGtVec, "/");
             selectGt += ":" + selectSoftware 
                     + ":" + to_string(selectDepthNor).substr(0, 5) 
@@ -1608,14 +1608,14 @@ tuple<float, float, float> MERGE::cal_var_sd(const vector<float>& data)
 
 
 /*
-    保存结果
+    save result
     mergeVcfStruct -> 软件合并后的struct
     outMap -> vcf_merge_filter输出结果   outMap[chromosome][refStart][refLen][qryLen]
     prefix -> 输出文件名前缀
 */
 
 /**
- * 保存结果
+ * save result
  *
  * @param headInfo           vcf注释行
  * @param outMap             vcf_merge_filter输出结果   outMap[chromosome][refStart]

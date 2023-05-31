@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import os
 import run_cmd
@@ -16,12 +16,12 @@ def main(
     restart: bool
 ):
     """
-    :param reference_file: 参考基因组
-    :param vcf_file: vcf文件
-    :param bam2paragraph_file: 配置文件
-    :param env_path: 环境变量
-    :param threads: 线程数
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param reference_file: reference genome
+    :param vcf_file: vcf file
+    :param bam2paragraph_file: configure file
+    :param env_path: environment variable
+    :param threads: Threads
+    :param restart: Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, vcf_out_file
     """
 
@@ -45,18 +45,18 @@ def main(
 
     vcf_out_file = os.path.join(os.getcwd(), "genotypes.vcf.gz")
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             vcf_out_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "Paragraph.multigrmpy.py", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "Paragraph.multigrmpy.py", env_path)
 
     return stdout, stderr, log_out, vcf_out_file

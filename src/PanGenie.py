@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import os
 import run_cmd
@@ -16,45 +16,45 @@ def check(
         restart: bool
 ):
     """
-    :param vcf_file: vcf文件路径
-    :param sample_name 样品名
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param vcf_file: the path of vcf file
+    :param sample_name sample name
+    :param fastq_file1: read1
+    :param fastq_file2: read2
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, os.path.abspath(vcf_out_file), os.path.abspath(fastq_out_file)
     """
 
-    #  初始log
+    #  initial log
     stdout = ""
     stderr = ""
     log_out = ""
 
-    # 输出文件路径
+    # output file path
     vcf_out_file = sample_name + ".vcf"
     fastq_out_file = "{}.fq".format(sample_name)
 
-    if '.gz' in vcf_file or ".GZ" in vcf_file:  # 如果是压缩文件，解压
+    if '.gz' in vcf_file or ".GZ" in vcf_file:  # If it is a compressed file, decompress it
         cmd = "gunzip -c {} 1>{}".format(vcf_file, vcf_out_file)
 
-        # 检查文件是否存在
+        # Check if the file exists
         if restart:
-            # 检查文件
+            # check file
             file_size = getsize(
                 vcf_out_file
             )
-            # 如果小于等于0
+            # <= 0
             if file_size <= 0:
-                # 提交任务
+                # submit task
                 stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie.gunzip", env_path)
-        else:  # 如果没有指定restart，直接运行
-            # 提交任务
+        else:  # If restart is not specified, run directly
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie.gunzip", env_path)
 
-        # 如果退出代码有问题，则报错
+        # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, "", "", ""
-    else:  # 否则赋值一样的路径
+    else:  # Otherwise assign the same path
         vcf_out_file = vcf_file
 
     cmd = ""
@@ -65,28 +65,28 @@ def check(
                 cmd += " && gunzip -c {} 1>>{}".format(fastq_file2, fastq_out_file)
             else:
                 cmd += " && cat {} 1>>{}".format(fastq_file2, fastq_out_file)
-    else:  # 不是压缩文件
+    else:  # not a compressed file
         cmd = "cat {} 1>{}".format(fastq_file1, fastq_out_file)
         if fastq_file2:  # fastq2
             if '.gz' in fastq_file2 or ".GZ" in fastq_file2:
                 cmd += " && gunzip -c {} 1>>{}".format(fastq_file2, fastq_out_file)
             else:
                 cmd += " && cat {} 1>>{}".format(fastq_file2, fastq_out_file)
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             fastq_out_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie.gunzip", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie.gunzip", env_path)
 
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, "", "", ""
 
@@ -102,11 +102,11 @@ def merge(
     restart: bool
 ):
     """
-    :param fastq_file1: 测序文件1
-    :param sample_name: 样品名
-    :param fastq_file2: 测序文件2
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param fastq_file1: read1
+    :param sample_name: sample name
+    :param fastq_file2: read2
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return:
     """
 
@@ -115,24 +115,24 @@ def merge(
     stderr = ""
     log_out = ""
 
-    # 输出文件路径
+    # output file path
     fastq_out_file = "{}.fq".format(sample_name)
 
     if fastq_file2:
         cmd = "cat {} {} {}".format(fastq_file1, fastq_file2, fastq_out_file)
 
-        # 检查文件是否存在
+        # Check if the file exists
         if restart:
-            # 检查文件
+            # check file
             file_size = getsize(
                 fastq_out_file
             )
-            # 如果小于等于0
+            # <= 0
             if file_size <= 0:
-                # 提交任务
+                # submit task
                 stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie.gunzip", env_path)
-        else:  # 如果没有指定restart，直接运行
-            # 提交任务
+        else:  # If restart is not specified, run directly
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie.gunzip", env_path)
 
         return stdout, stderr, log_out, os.path.abspath(fastq_out_file)
@@ -152,18 +152,18 @@ def main(
     restart: bool
 ):
     """
-    :param reference_file: 参考基因组
-    :param vcf_file: vcf文件
-    :param sample_name 样品名
-    :param fastq_file1: 测序文件1
-    :param fastq_file2: 测序文件2
-    :param env_path: 环境变量
-    :param threads: 线程数
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param reference_file: reference genome
+    :param vcf_file: vcf file
+    :param sample_name sample name
+    :param fastq_file1: read1
+    :param fastq_file2: read2
+    :param env_path: environment variable
+    :param threads: Threads
+    :param restart: Whether to check if the file exists and skip this step
     :return:
     """
 
-    # 检查文件是否为压缩文件并合并
+    # Check if files are compressed and merge
     stdout, stderr, log_out, vcf_file, fastq_file = check(
         vcf_file,
         sample_name,
@@ -172,28 +172,28 @@ def main(
         env_path, 
         restart
     )
-    # 如果退出代码有问题，则报错
+    # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, ""
 
     cmd = "PanGenie -s {} -i {} -r {} -v {} -t {} -j {} -o {}".\
         format(sample_name, fastq_file, reference_file, vcf_file, threads, threads, sample_name)
 
-    # 输出的vcf路径
+    # output vcf path
     out_vcf_file = os.path.abspath("{}_genotyping.vcf").format(sample_name)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             out_vcf_file
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie", env_path)
 
     return stdout, stderr, log_out, os.path.abspath(out_vcf_file)

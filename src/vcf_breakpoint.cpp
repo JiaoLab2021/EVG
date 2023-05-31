@@ -197,7 +197,7 @@ int BREAKPOINT::vcf_breakpoint(const string & vcfFileName, const string & prefix
                 }
                 outTxt += "\n";
 
-                // 保存结果
+                // save result
                 if (outTxt.size() > 10000000) // 每10Mb写入一次
                 {
                     gzwrite(outFile, outTxt.c_str(), outTxt.length());

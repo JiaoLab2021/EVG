@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python3
-# coding=gb2312
 
 import os
 import run_cmd
@@ -19,15 +19,15 @@ def main(
     restart: bool
 ):
     """
-    :param code_dir: 代码目录
-    :param work_path: 工作路径
+    :param code_dir: code directory
+    :param work_path: work path
     :param line_vcf_file: line的vcf
-    :param sample_name: 品种名
-    :param mode: 模式
+    :param sample_name: sample name
+    :param mode: mode
     :param genotype_vcf_file_list:
     :param select_software_list:
-    :param env_path: 环境变量
-    :param restart: 是否检查文件是否存在，并跳过该步骤
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, sample_name, merge_vcf_file
     """
 
@@ -36,13 +36,13 @@ def main(
     stderr = ""
     log_out = ""
 
-    # 输出文件
+    # output file
     merge_vcf_file = "{}.vcf.gz".format(sample_name)
 
-    # 回到工作目录
+    # back to working directory
     os.chdir(work_path)
 
-    # 代码的路径
+    # code path
     code_path = os.path.join(code_dir, "graphvcf merge")
 
     cmd = code_path + " -v " + line_vcf_file + " "
@@ -52,18 +52,18 @@ def main(
         cmd += "--" + software + " " + file + " "
     cmd += "-n {} -m {} -o {}".format(sample_name, mode, merge_vcf_file)
 
-    # 检查文件是否存在
+    # Check if the file exists
     if restart:
-        # 检查文件
+        # check file
         file_size = getsize(
             "{}.vcf.gz".format(sample_name)
         )
-        # 如果小于等于0
+        # <= 0
         if file_size <= 0:
-            # 提交任务
+            # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf merge", env_path)
-    else:  # 如果没有指定restart，直接运行
-        # 提交任务
+    else:  # If restart is not specified, run directly
+        # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf merge", env_path)
 
     merge_vcf_file = os.path.abspath(merge_vcf_file)

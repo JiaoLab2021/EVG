@@ -382,7 +382,7 @@ int VCFSPLIT::vcf_split_type(const string & vcfFileName, const string & prefix, 
                     otherSVs += information + "\n";
                 }
 
-                // 保存结果
+                // save result
                 if (simpleSVs.size() > 10000000) // 每10Mb写入一次
                 {
                     gzwrite(gzfpSimple, simpleSVs.c_str(), simpleSVs.length());
@@ -955,7 +955,7 @@ int VCFSPLIT::vcf_split_number(
                 SVsMore += information + "\n";
             }
             
-            // 保存结果
+            // save result
             if (SVs0.size() > 10000000) // 每10Mb写入一次
             {
                 gzwrite(SVs0File, SVs0.c_str(), SVs0.length());
