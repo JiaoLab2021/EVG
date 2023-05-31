@@ -4,7 +4,7 @@
 
 A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline
 
-![pipeline.jpf](./pipeline.jpf)
+![pipeline.jpf](fig/pipeline.jpf)
 
 ## Requirements
 
