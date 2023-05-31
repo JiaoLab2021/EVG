@@ -92,3 +92,10 @@ For convenience, let's assume the following file names for the input:
 ```shell
 EVG -r refgenome.fa -v input.vcf.gz -s sample.txt
 ```
+
+The results are stored in the `genotype/` folder, and each file is named after the corresponding sample listed in `sample.txt`: `sample1.vcf.gz`, `sample2.vcf.gz`, ..., `sampleN.vcf.gz`.
+
+**Parameter**
+
+* `--depth`: This parameter specifies the maximum sequencing data depth allowed for downstream analysis. If this value is exceeded, EVG will randomly downsample reads to the specified level in order to speed up the run. The default downsampling level is set at 15×, but it can be adjusted to meet specific requirements.
+* `--mode`: This parameter determines the operating mode of `EVG`. In fast mode, only certain software is utilized to genotype SNPs and indels, while precise mode employs all software to genotype all variants.
