@@ -1,5 +1,7 @@
-# -*- coding: utf-8 -*-
 #!/usr/bin/python3
+
+# -*- coding: utf-8 -*-
+
 
 __data__ = "2023/05/30"
 __version__ = "1.0.1"
@@ -1188,7 +1190,7 @@ def main():
         time.sleep(0.05)
 
     # Get multithreaded return value
-    stdout, stderr, log_out, convert_out_map = pool_convert_out.get()  # vcf和reference的返回值
+    stdout, stderr, log_out, convert_out_map = pool_convert_out.get()  # vcf和reference的返回�?
     # Report an error if there is a problem with the exit code
     if log_out:
         logger.error(log_out.strip())

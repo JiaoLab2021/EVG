@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
 #!/usr/bin/python3
+
+# -*- coding: utf-8 -*-
 
 # select_software
 def main(real_depth, read_len, fasta_base):
