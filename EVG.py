@@ -53,7 +53,7 @@ def print_merge(
     :param vcf_merge_files_map: Merged vcf file, map<sample_name, vcf_file>
     :return:
     """
-    logger.error(f"\n{flag} Result {flag}")
+    logger.error(f"{flag} Result {flag}")
 
     for key, value in vcf_merge_files_map.items():
         log = "{}: {}".format(key, value)
@@ -143,7 +143,7 @@ def get_parser():
     logger.error(f"data: {__data__}")
     logger.error(f"version: {__version__}")
     logger.error(f"author: {__author__}")
-    logger.error(f"\nIf you encounter any issues related to the code, please don't hesitate to contact us via email at {__email__}.\n")
+    logger.error(f"If you encounter any issues related to the code, please don't hesitate to contact us via email at {__email__}.\n")
 
     # parameter
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -281,7 +281,7 @@ def run_bwa(
             "bam_file": bam_file
         }
     """
-    logger.error(f"\n{flag} BWA MEM {flag}")
+    logger.error(f"{flag} BWA MEM {flag}")
 
     os.chdir(work_path)
     stdout, stderr, log_out, bam_file = bwa.mem(
@@ -327,7 +327,7 @@ def run_graphtyper(
     :param work_path:             work path
     :return: "GraphTyper2", sample_name, graphtyper_vcf_file
     """
-    logger.error(f"\n{flag} GraphTyper2 {flag}")
+    logger.error(f"{flag} GraphTyper2 {flag}")
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -367,7 +367,7 @@ def run_paragraph(
     :param work_path:           work path
     :return: "Paragraph", sample_name, paragraph_vcf_file
     """
-    logger.error(f"\n{flag} Paragraph {flag}")
+    logger.error(f"{flag} Paragraph {flag}")
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -408,7 +408,7 @@ def run_bayestyper(
     :param bam_infos_map:         the informations of BAM
     :return:
     """
-    logger.error(f"\n{flag} BayesTyper {flag}")
+    logger.error(f"{flag} BayesTyper {flag}")
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -454,7 +454,7 @@ def run_vg_map_giraffe(
     :param index_dir:            the path of index
     :return: software, sample_name, map_vcf_file
     """
-    logger.error(f"\n{flag} VG {flag}")
+    logger.error(f"{flag} VG {flag}")
 
     # Create folder and switch paths
     os.chdir(software_work_path)
@@ -498,7 +498,7 @@ def run_graphaligner(
     :param index_dir:            the path of index
     :return: "GraphAligner", sample_name, graphaligner_vcf_file
     """
-    logger.error(f"\n{flag} GraphAligner {flag}")
+    logger.error(f"{flag} GraphAligner {flag}")
 
     # genotype
     os.chdir(software_work_path)
@@ -542,7 +542,7 @@ def run_pangenie(
     :param software_work_path: work path
     :return: "PanGenie", sample_name, pangenie_vcf_file
     """
-    logger.error(f"\n{flag} PanGenie {flag}")
+    logger.error(f"{flag} PanGenie {flag}")
 
     # Create folder and switch paths
     os.chdir(software_work_path)
@@ -587,7 +587,7 @@ def ref_vcf_convert(
                 "giraffe_index_dir": giraffe_index_dir
             }
     """
-    logger.error(f"\n{flag} Reference Genome and VCF File Conversion {flag}")
+    logger.error(f"{flag} Reference Genome and VCF File Conversion {flag}")
 
     # switch paths
     os.chdir(work_path)
@@ -793,7 +793,7 @@ def read_convert(
                 "read_len": read_len
             }
     """
-    logger.error(f"\n{flag} Read Conversion {flag}")
+    logger.error(f"{flag} Read Conversion {flag}")
 
     # log
     stdout = ""
@@ -871,7 +871,7 @@ def run_genotype(
     :param bam_infos_map:    run_bwa return value
     :return: stdout, stderr, log_out, vcf_merge_files_map
     """
-    logger.error(f"\n{flag} Genotyping {flag}")
+    logger.error(f"{flag} Genotyping {flag}")
 
     # log
     stdout = ""
@@ -1061,7 +1061,7 @@ def run_genotype(
     pool.join()
 
     # ################################################ graphvcf merge ################################################
-    logger.error(f"\n{flag} Merge the result {flag}")
+    logger.error(f"{flag} Merge the result {flag}")
 
     # merge result path
     merge_dir = os.path.join(main_path, "merge")  # the path of bwa mem
