@@ -7,9 +7,6 @@
 #include "kseq.h"
 #include "get_time.hpp"
 #include <getopt.h>
-#include <mutex>
-#include <malloc.h>
-#include "ThreadPool.hpp"
 #include <vector>
 #include <map>
 #include <regex>
@@ -38,17 +35,7 @@ namespace count
         string inputFileName1, 
         string inputFileName2, 
         countStruct & countOut, 
-        const string & outputFileName, 
-        const int & threadsNum, 
-        const int & readSplitNum
-    );
-
-
-    // fastq/a.gz多线程函数
-    int fastq_a_count_run(
-        vector<long long int> reads1Vec, 
-        vector<long long int> reads2Vec, 
-        countStruct & countOut
+        const string & outputFileName
     );
 }
 
