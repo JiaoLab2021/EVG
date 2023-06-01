@@ -1107,7 +1107,7 @@ def run_genotype(
         pool_out = pool.apply_async(
             merge.main, args=(
                 code_dir,
-                work_path,
+                merge_dir,
                 parser_map["line_vcf_file"],
                 sample_name_tmp,
                 merge_mode,
