@@ -57,7 +57,8 @@ source ~/.bashrc
 
 ```shell
 # To create a conda environment named graph (you can replace it with any other name), 
-# make sure to replace all occurrences of graph in the following code with the name you have chosen.
+# make sure to replace all occurrences of graph in the following code with the name you 
+# have chosen.
 conda create -n graph
 conda activate graph
 # Install software using conda
