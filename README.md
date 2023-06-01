@@ -123,7 +123,16 @@ For convenience, let's assume the following file names for the input:
 EVG -r refgenome.fa -v input.vcf.gz -s sample.txt
 ```
 
-The results are stored in the `genotype/` folder, and each file is named after the corresponding sample listed in `sample.txt`: `sample1.vcf.gz`, `sample2.vcf.gz`, ..., `sampleN.vcf.gz`.
+The results are stored in the `merge/` folder, and each file is named after the corresponding sample listed in `sample.txt`: `sample1.vcf.gz`, `sample2.vcf.gz`, ..., `sampleN.vcf.gz`.
+
+```shell
+$ tree merge/
+merge/
+©À©¤©¤ test1.vcf.gz
+©¸©¤©¤ test2.vcf.gz
+
+0 directories, 2 files
+```
 
 **Parameter**
 
