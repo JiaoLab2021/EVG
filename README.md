@@ -25,15 +25,9 @@ Please note the following requirements before building and running the software:
 
 ## Installation
 
-**Download Releases**
-
-[EVG_url]: https://github.com/JiaoLab2021/EVG/releases/download/v1.0.1/EVG.tar.gz
-
-The simplest means of obtaining [EVG][EVG_url] is by downloading the static binary executable.
-
 **Building on Linux**
 
-If you cannot or do not want to use a pre-built release of `EVG`, building the software from source code is a feasible option.
+Use the following script to build the software:
 
 1. First, obtain the source code.
 
