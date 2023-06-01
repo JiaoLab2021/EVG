@@ -140,3 +140,7 @@ merge/
 Please cite:
 
 [article][article_url]
+
+## License
+
+MIT
