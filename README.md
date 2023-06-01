@@ -53,21 +53,23 @@ echo 'export PATH="$PATH:'$(pwd)'"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-3. Assuming that you have installed all the required software dependencies, please make sure they have been added to your environment path or activated in the corresponding Conda environment. If you haven't installed them yet, you can use the following `code` to install all the dependencies:
+3. Assuming that you have installed all the required software dependencies, please make sure they have been added to your environment path or activated in the corresponding `code` environment. If you haven't installed them yet, you can use the following `code` to install all the dependencies:
 
 ```shell
-# To create a `conda` environment named `graph` (you can replace it with any other name), make sure to replace all occurrences of `graph` in the following code with the name you have chosen。
+# To create a conda environment named graph (you can replace it with any other name), 
+# make sure to replace all occurrences of graph in the following code with the name you have chosen.
 conda create -n graph
 conda activate graph
-# Install software using `conda`
+# Install software using conda
 conda install vg graphaligner paragraph bayestyper graphtyper2 pangenie
-# To install PanGenie using `conda` under the same environment, replace `pangenie` in the `environment.yml` file with the name you have chosen.
+# To install PanGenie using conda under the same environment, replace pangenie in 
+# the environment.yml file with the name you have chosen.
 git clone https://github.com/eblerjana/pangenie.git
 cd pangenie
 sed  -i 's/pangenie/graph/' environment.yml
 conda env update --file environment.yml
-cd src/; echo 'export PATH="$PATH:'$(pwd)'"' >> ~/.bashrc
-# Install `kmc` using `conda`
+echo 'export PATH="$PATH:'$(pwd)/src'"' >> ~/.bashrc
+# Install kmc using conda
 conda install kmc
 ```
 
