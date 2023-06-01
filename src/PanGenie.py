@@ -9,12 +9,12 @@ from getsize import getsize
 
 # check file
 def check(
-        vcf_file: str,
-        sample_name: str,
-        fastq_file1: str,
-        fastq_file2: str,
-        env_path, 
-        restart: bool
+    vcf_file: str,
+    sample_name: str,
+    fastq_file1: str,
+    fastq_file2: str,
+    env_path, 
+    restart: bool
 ):
     """
     :param vcf_file: the path of vcf file
@@ -23,7 +23,7 @@ def check(
     :param fastq_file2: read2
     :param env_path: environment variable
     :param restart: Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, os.path.abspath(vcf_out_file), os.path.abspath(fastq_out_file)
+    :return: stdout, stderr, log_out, vcf_out_file, fastq_out_file
     """
 
     #  initial log
@@ -32,8 +32,8 @@ def check(
     log_out = ""
 
     # output file path
-    vcf_out_file = sample_name + ".vcf"
-    fastq_out_file = "{}.fq".format(sample_name)
+    vcf_out_file = os.path.abspath(sample_name + ".vcf")
+    fastq_out_file = os.path.abspath("{}.fq".format(sample_name))
 
     if '.gz' in vcf_file or ".GZ" in vcf_file:  # If it is a compressed file, decompress it
         cmd = "gunzip -c {} 1>{}".format(vcf_file, vcf_out_file)
@@ -54,7 +54,7 @@ def check(
 
         # Report an error if there is a problem with the exit code
         if log_out:
-            return stdout, stderr, log_out, "", "", ""
+            return stdout, stderr, log_out, "", ""
     else:  # Otherwise assign the same path
         vcf_out_file = vcf_file
 
@@ -89,9 +89,9 @@ def check(
 
     # Report an error if there is a problem with the exit code
     if log_out:
-        return stdout, stderr, log_out, "", "", ""
+        return stdout, stderr, log_out, "", ""
 
-    return stdout, stderr, log_out, os.path.abspath(vcf_out_file), os.path.abspath(fastq_out_file)
+    return stdout, stderr, log_out, vcf_out_file, fastq_out_file
 
 
 # merge reads

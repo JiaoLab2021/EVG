@@ -7,7 +7,7 @@ import logging
 
 
 # log
-logger = logging.getLogger('SynDiv')
+logger = logging.getLogger('getsize')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
 handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
@@ -16,7 +16,7 @@ logger.addHandler(handler)
 
 # Determine whether the file exists, if it is empty, return the size of the file. -1->does not exist  0->size is 0  1->skip this step
 def getsize(
-        file_path: str
+    file_path: str
 ):
     """
     :param file_path:    The file path that needs to be judged
@@ -27,7 +27,7 @@ def getsize(
         if not size:
             return 0
         else:
-            log = '[EVG.getsize] file exists, skip: {}\n'.format(file_path)
+            log = '[EVG.getsize] file exists, skip: {}'.format(file_path)
             logger.error(log)
             return size
     else:

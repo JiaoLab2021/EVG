@@ -18,12 +18,12 @@ def vg_index(
 ):
     """
     :param reference_file: reference genome
-    :param vcf_file: vcf file
-    :param threads: Threads
-    :param index_dir: Threads
-    :param env_path: environment variable
-    :param restart:
-    :return: Whether to check if the file exists and skip this step
+    :param vcf_file:       vcf file
+    :param threads:        Threads
+    :param index_dir:      Threads
+    :param env_path:       environment variable
+    :param restart:        resume
+    :return: stdout, stderr, log_out
     """
 
     # log

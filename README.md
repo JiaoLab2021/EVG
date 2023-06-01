@@ -42,7 +42,7 @@ git clone https://github.com/JiaoLab2021/EVG.git
 cd EVG
 ```
 
-2. Next, compile the software and add the current directory to your system's `PATH` environment variable.
+2. Next, compile the software and add the current directory to your system's `PATH` environment variable. Please make sure that `EVG`, `graphvcf`, and `fastAQ` are all in the same folder, as `EVG` will call these two programs from its own directory.
 
 ```shell
 cmake ./
@@ -53,12 +53,36 @@ echo 'export PATH="$PATH:'$(pwd)'"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-3. To verify that the software has been installed correctly, perform a test run using the following steps:
+3. Assuming that you have installed all the required software dependencies, please make sure they have been added to your environment path or activated in the corresponding Conda environment. If you haven't installed them yet, you can use the following `code` to install all the dependencies:
+
+```shell
+# To create a `conda` environment named `graph` (you can replace it with any other name), make sure to replace all occurrences of `graph` in the following code with the name you have chosen。
+conda create -n graph
+conda activate graph
+# Install software using `conda`
+conda install vg graphaligner paragraph bayestyper graphtyper2 pangenie
+# To install PanGenie using `conda` under the same environment, replace `pangenie` in the `environment.yml` file with the name you have chosen.
+git clone https://github.com/eblerjana/pangenie.git
+cd pangenie
+sed  -i 's/pangenie/graph/' environment.yml
+conda env update --file environment.yml
+cd src/; echo 'export PATH="$PATH:'$(pwd)'"' >> ~/.bashrc
+# Install `kmc` using `conda`
+conda install kmc
+```
+
+4. To verify that the software has been installed correctly, perform a test run using the following steps:
 
 ```shell
 EVG -h
 graphvcf -h
 fastAQ -h
+vg -h
+GraphAligner -h
+paragraph -h
+bayesTyper -h
+graphtyper -h
+PanGenie -h
 # test
 cd test
 EVG -r test.fa -v test.vcf.gz -s sample.txt --software VG-MAP VG-Giraffe GraphAligner Paragraph BayesTyper GraphTyper2 PanGenie &>log.txt &

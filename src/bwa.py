@@ -29,7 +29,7 @@ def index(
 
     # bwa index building and comparison
     # bam file path
-    cmd = "bwa index {} 2>log.index.txt".format(reference_file)
+    cmd = "bwa index {}".format(reference_file)
 
     # Check if the file exists
     if restart:

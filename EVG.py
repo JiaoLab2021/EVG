@@ -27,6 +27,7 @@ import convert, select_software, merge, bwa, GraphTyper2, \
 env_path = {'PATH': os.environ.get('PATH')}
 
 # global parameters
+flag = "*"*65
 force = False
 restart = False
 threads = 10
@@ -52,8 +53,10 @@ def print_merge(
     :param vcf_merge_files_map: Merged vcf file, map<sample_name, vcf_file>
     :return:
     """
+    logger.error(f"\n{flag} Result {flag}")
+
     for key, value in vcf_merge_files_map.items():
-        log = "{}: {}\n".format(key, value)
+        log = "{}: {}".format(key, value)
         logger.error(log)
 
     return 0
@@ -79,10 +82,10 @@ def makedir(
             logger.error(log)
         elif restart_tmp:
             log = '[EVG.makedir] \'{}\' already exists, restart is used, ' \
-                  'skipping emptying folders.\n'.format(path_dir)
+                  'skipping emptying folders.'.format(path_dir)
             logger.error(log)
         else:  # Print a warning and exit code if not forced to delete
-            log = '[EVG.makedir] \'{}\' already exists. used --force to overwrite or --restart to restart workflow.\n'.format(path_dir)
+            log = '[EVG.makedir] \'{}\' already exists. used --force to overwrite or --restart to restart workflow.'.format(path_dir)
             logger.error(log)
             raise SystemExit(1)
     else:
@@ -137,8 +140,6 @@ def get_parser():
     }
     """
     # log
-    logger = logging.getLogger('getParser')
-
     logger.error(f"data: {__data__}")
     logger.error(f"version: {__version__}")
     logger.error(f"author: {__author__}")
@@ -280,6 +281,7 @@ def run_bwa(
             "bam_file": bam_file
         }
     """
+    logger.error(f"\n{flag} BWA MEM {flag}")
 
     os.chdir(work_path)
     stdout, stderr, log_out, bam_file = bwa.mem(
@@ -325,6 +327,7 @@ def run_graphtyper(
     :param work_path:             work path
     :return: "GraphTyper2", sample_name, graphtyper_vcf_file
     """
+    logger.error(f"\n{flag} GraphTyper2 {flag}")
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -364,6 +367,7 @@ def run_paragraph(
     :param work_path:           work path
     :return: "Paragraph", sample_name, paragraph_vcf_file
     """
+    logger.error(f"\n{flag} Paragraph {flag}")
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -404,6 +408,7 @@ def run_bayestyper(
     :param bam_infos_map:         the informations of BAM
     :return:
     """
+    logger.error(f"\n{flag} BayesTyper {flag}")
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -449,6 +454,7 @@ def run_vg_map_giraffe(
     :param index_dir:            the path of index
     :return: software, sample_name, map_vcf_file
     """
+    logger.error(f"\n{flag} VG {flag}")
 
     # Create folder and switch paths
     os.chdir(software_work_path)
@@ -492,6 +498,7 @@ def run_graphaligner(
     :param index_dir:            the path of index
     :return: "GraphAligner", sample_name, graphaligner_vcf_file
     """
+    logger.error(f"\n{flag} GraphAligner {flag}")
 
     # genotype
     os.chdir(software_work_path)
@@ -535,6 +542,7 @@ def run_pangenie(
     :param software_work_path: work path
     :return: "PanGenie", sample_name, pangenie_vcf_file
     """
+    logger.error(f"\n{flag} PanGenie {flag}")
 
     # Create folder and switch paths
     os.chdir(software_work_path)
@@ -579,6 +587,8 @@ def ref_vcf_convert(
                 "giraffe_index_dir": giraffe_index_dir
             }
     """
+    logger.error(f"\n{flag} Reference Genome and VCF File Conversion {flag}")
+
     # switch paths
     os.chdir(work_path)
 
@@ -666,13 +676,19 @@ def ref_vcf_convert(
             select_software_list.append("giraffe")
 
     # multi-process process pool
-    if len(select_software_list) > 0:  # If the number of files is greater than 1, then build the index
-        # multi-Progress
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            to_do = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        # Back to the main working path
+        os.chdir(work_path)
+
+        # save the index result
+        to_do = []
+
+        if len(select_software_list) > 0:  # If the number of files is greater than 1, then build the index
             # Map and giraffe build indexes
             for software in select_software_list:
                 # switch paths
+                os.chdir(work_path)
+
                 index_dir = os.path.join(work_path, software)
                 makedir(
                     index_dir,
@@ -697,41 +713,43 @@ def ref_vcf_convert(
 
                 time.sleep(0.05)
 
-            # Back to the main working path
-            os.chdir(work_path)
+        # Back to the main working path
+        os.chdir(work_path)
 
-            # GraphAligner build index
-            if "GraphAligner" in parser_map["software_list"]:
-                # switch paths
-                index_dir = os.path.join(work_path, "GraphAligner")
-                makedir(
-                    index_dir,
-                    force_tmp=force,
-                    restart_tmp=restart
-                )
-                os.chdir(index_dir)
+        # GraphAligner build index
+        if "GraphAligner" in parser_map["software_list"]:
+            # switch paths
+            index_dir = os.path.join(work_path, "GraphAligner")
+            makedir(
+                index_dir,
+                force_tmp=force,
+                restart_tmp=restart
+            )
+            os.chdir(index_dir)
 
-                # submit task
-                future = executor.submit(
-                    GraphAligner.vg_index,
-                    reference_file,
-                    vcf_out_name,
-                    threads,
-                    index_dir, 
-                    env_path, 
-                    restart
-                )
-                # save result
-                to_do.append(future)
+            # submit task
+            future = executor.submit(
+                GraphAligner.vg_index,
+                reference_file,
+                vcf_out_name,
+                threads,
+                index_dir, 
+                env_path, 
+                restart
+            )
+            # save result
+            to_do.append(future)
 
-            # return to main path
-            os.chdir(work_path)
+            time.sleep(0.05)
 
-            # Obtain the return value of multithreading. If log_out exists, it indicates that the operation failed and the exit code
-            for future in concurrent.futures.as_completed(to_do):  # concurrent execution
-                stdout, stderr, log_out = future.result()  # check return value
-                if log_out:
-                    return stdout, stderr, log_out, {}
+        # return to main path
+        os.chdir(work_path)
+
+        # Obtain the return value of multithreading. If log_out exists, it indicates that the operation failed and the exit code
+        for future in concurrent.futures.as_completed(to_do):  # concurrent execution
+            stdout, stderr, log_out = future.result()  # check return value
+            if log_out:
+                return stdout, stderr, log_out, {}
 
     # path to the index file
     map_index_dir = os.path.join(work_path, "map")
@@ -775,6 +793,7 @@ def read_convert(
                 "read_len": read_len
             }
     """
+    logger.error(f"\n{flag} Read Conversion {flag}")
 
     # log
     stdout = ""
@@ -838,18 +857,21 @@ def read_convert(
 
 # Each line runs independently
 def run_genotype(
+    main_path: str, 
     work_path: str,
     parser_map,
     convert_out_map,
     bam_infos_map
 ):
     """
+    :param main_path:        root path
     :param work_path:        work path
     :param parser_map:       the return of get_parser
     :param convert_out_map:  Hash table after conversion of vcf, reference and sequencing files
     :param bam_infos_map:    run_bwa return value
     :return: stdout, stderr, log_out, vcf_merge_files_map
     """
+    logger.error(f"\n{flag} Genotyping {flag}")
 
     # log
     stdout = ""
@@ -1039,6 +1061,19 @@ def run_genotype(
     pool.join()
 
     # ################################################ graphvcf merge ################################################
+    logger.error(f"\n{flag} Merge the result {flag}")
+
+    # merge result path
+    merge_dir = os.path.join(main_path, "merge")  # the path of bwa mem
+    # Create a directory
+    makedir(
+        merge_dir,
+        force_tmp=force,
+        restart_tmp=restart
+    )
+    # back to main path
+    os.chdir(merge_dir)
+
     # multi-process process pool
     pool = Pool(processes=jobs_num*threads)  # The merge step uses less resources, so all cores are used
 
@@ -1285,7 +1320,7 @@ def main():
     # Return to the main working path
     os.chdir(parser_map["path"])
 
-    # Typing result path
+    # Genotyping result path
     genotype_dir = os.path.join(parser_map["path"], "genotype")  # the path of bwa mem
     # Create a directory
     makedir(
@@ -1295,6 +1330,7 @@ def main():
     )
     # genotyping
     stdout, stderr, log_out, vcf_merge_files_map = run_genotype(
+        parser_map["path"], 
         genotype_dir,
         parser_map,
         convert_out_map,

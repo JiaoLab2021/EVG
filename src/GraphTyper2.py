@@ -22,10 +22,8 @@ def merge_vcf(
     stderr = ""
     log_out = ""
 
-    cmd = "cat */*.vcf.gz > graphtyper.vcf.gz && " \
-          "gunzip graphtyper.vcf.gz && zcat */000000001-001000000.vcf.gz | grep '#' > out.vcf && " \
-          "grep -v '#' graphtyper.vcf >> out.vcf && " \
-          "mv out.vcf graphtyper.vcf"
+    cmd = "for i in $(ls */ | grep 'vcf.gz' | grep -v 'tbi' | head -n1); do zcat */$i | grep '#' > graphtyper.vcf; done && " \
+          "zcat */*.vcf.gz >> graphtyper.vcf"
 
     # Check if the file exists
     if restart:
@@ -36,10 +34,10 @@ def merge_vcf(
         # <= 0
         if file_size <= 0:
             # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_sv", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_merge", env_path)
     else:  # If restart is not specified, run directly
         # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_sv", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_merge", env_path)
 
     vcf_file = os.path.abspath("graphtyper.vcf")
 

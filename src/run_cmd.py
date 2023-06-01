@@ -9,7 +9,7 @@ import logging
 
 
 # log
-logger = logging.getLogger('SynDiv')
+logger = logging.getLogger('run_cmd')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
 handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
@@ -25,7 +25,7 @@ def run(command, subcommands, envPath):
     # submit task
     proc = subprocess.Popen(command, shell=True, stdout=stdout_file, stderr=stderr_file, env=envPath)
 
-    log = f'[EVG.{subcommands}] CMD: {command}\n'
+    log = f'[EVG.{subcommands}] CMD: {command}'
     logger.error(log)
 
     # Reset log is used to judge whether to exit normally

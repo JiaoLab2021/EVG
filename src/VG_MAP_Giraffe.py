@@ -306,10 +306,10 @@ def vg_call(
         # <= 0
         if file_size <= 0:
             # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "vg.call")
+            stdout, stderr, log_out = run_cmd.run(cmd, "vg.call", env_path)
     else:  # If restart is not specified, run directly
         # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "vg.call")
+        stdout, stderr, log_out = run_cmd.run(cmd, "vg.call", env_path)
 
     return stdout, stderr, log_out, vcf_file
 

@@ -10,7 +10,7 @@ from getsize import getsize
 
 # log
 import logging
-logger = logging.getLogger('SynDiv')
+logger = logging.getLogger('convert')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
 handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
@@ -19,9 +19,9 @@ logger.addHandler(handler)
 
 # Convert non-ATGCNatgcn in reference to N
 def convert_reference(
-        reference_file: str,
-        env_path, 
-        restart: bool
+    reference_file: str,
+    env_path, 
+    restart: bool
 ):
     """
     :param reference_file:    original reference genome
@@ -233,7 +233,7 @@ def downsample(
     read_depth = fastq_base / fasta_base
 
     if need_ratio >= 1:  # If the sequencing data is less than the set value, it will be skipped and no downsampling will be performed
-        log = '[EVG.fastAQ sample] Insufficient sequencing data ({:.2f}×/{}×), skip downsampling step.\n'. \
+        log = '[EVG.fastAQ sample] Insufficient sequencing data ({:.2f}×/{}×), skip downsampling step.'. \
                   format(read_depth, need_depth)
         logger.error(log)
         fastq_out_file1 = fastq_file1
