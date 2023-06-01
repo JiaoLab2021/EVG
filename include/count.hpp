@@ -4,14 +4,13 @@
 #include <string>
 #include <iostream>
 #include "zlib.h"
+
 #include "kseq.h"
 #include "get_time.hpp"
 #include <getopt.h>
 #include <vector>
 #include <map>
 #include <regex>
-
-std::mutex mtx;
 
 using namespace std;
 

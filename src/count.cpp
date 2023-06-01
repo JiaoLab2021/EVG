@@ -165,7 +165,7 @@ void count::fastq_a_count(
         
             while(kseq_read(ks) >= 0)
             {
-                countOut.readBase +=  ks1->seq.l;
+                countOut.readBase +=  ks->seq.l;
                 countOut.readNum++;
             }
 
