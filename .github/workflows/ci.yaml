@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      DATA_DIR: ./test/
+      DATA_DIR: ./test
 
     strategy:
       matrix:
@@ -27,6 +27,12 @@ jobs:
         submodules: 'recursive'
       env:
         NODE_VERSION: 16.x
+
+    - name: Set up Node.js 16.x
+      uses: actions/setup-node@v2.4.1
+      with:
+        node-version: 16.x
+        registry-url: 'https://npm.pkg.github.com'
 
     - name: Install dependencies
       run: |
@@ -41,6 +47,6 @@ jobs:
     - name: Run tests
       run: |
         echo "Testing"
-        ./graphvcf count -v $DATA_DIR/test.vcf
+        ./graphvcf count -v $DATA_DIR/test.vcf.gz
         ./fastAQ count -i $DATA_DIR/test.fa
         python EVG.py -h
