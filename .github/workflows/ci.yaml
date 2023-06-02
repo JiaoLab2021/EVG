@@ -40,7 +40,8 @@ jobs:
 
     - name: Run tests
       run: |
-	graphvcf $DATA_DIR/test.vcf.gz
+	echo "Testing graphvcf..."
+	./graphvcf count -v $DATA_DIR/test.vcf.gz
 	fastAQ count -i $DATA_DIR/test.fa
 	python EVG.py -h
 
