@@ -1,5 +1,9 @@
 # EVG
 
+[![GitHub Downloads](https://img.shields.io/github/downloads/JiaoLab2021/EVG/total.svg?style=social&logo=github&label=Download)](https://github.com/JiaoLab2021/EVG/releases)
+[![BioConda Install](https://img.shields.io/conda/dn/bioconda/EVG.svg?style=flag&label=BioConda%20install)](https://anaconda.org/bioconda/EVG)
+[![Build Status](https://github.com/JiaoLab2021/EVG/actions/workflows/ci.yaml/badge.svg)](https://github.com/JiaoLab2021/EVG/actions)
+
 ## Introduction
 
 A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline
