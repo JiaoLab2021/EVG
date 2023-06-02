@@ -21,12 +21,6 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Setup CMake ${{ matrix.cmake-version }} and ${{ matrix.compiler }}
-      uses: Kitware/setup-cmake@v1
-      with:
-        cmake-version: ${{ matrix.cmake-version }}
-        compiler: ${{ matrix.compiler }}
-
     - name: Install dependencies
       run: |
         sudo apt-get update
