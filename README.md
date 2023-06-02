@@ -1,7 +1,8 @@
 # EVG
 
 [![GitHub Downloads](https://img.shields.io/github/downloads/JiaoLab2021/EVG/total.svg?style=social&logo=github&label=Download)](https://github.com/JiaoLab2021/EVG/releases)
-[![BioConda Install](https://img.shields.io/conda/dn/bioconda/EVG.svg?style=flag&label=BioConda%20install)](https://anaconda.org/bioconda/EVG)
+[![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg)
+[![GitHub last commit](https://img.shields.io/github/last-commit/JiaoLab2021/evg.svg?label=Last%20commit&logo=github&style=flat)](https://github.com/JiaoLab2021/EVG/releases)
 [![Build Status](https://github.com/JiaoLab2021/EVG/actions/workflows/ci.yaml/badge.svg)](https://github.com/JiaoLab2021/EVG/actions)
 
 ## Introduction
