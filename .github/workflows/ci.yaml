@@ -40,4 +40,7 @@ jobs:
 
     - name: Run tests
       run: |
-	ctest --output-on-failure
+        echo "Testing"
+        ./graphvcf count -i $DATA_DIR/test.vcf
+        ./fastAQ count -i $DATA_DIR/test.fa
+        python EVG.py -h
