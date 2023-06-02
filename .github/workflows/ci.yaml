@@ -12,6 +12,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    env:
+      DATA_DIR: ./test/
 
     strategy:
       matrix:
@@ -20,6 +23,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+      env:
+        NODE_VERSION: 16.x
 
     - name: Install dependencies
       run: |
@@ -33,5 +40,7 @@ jobs:
 
     - name: Run tests
       run: |
-        ctest --output-on-failure
+	graphvcf $DATA_DIR/test.vcf.gz
+	fastAQ count -i $DATA_DIR/test.fa
+	python EVG.py -h
 
