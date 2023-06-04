@@ -24,7 +24,7 @@ Please note the following requirements before building and running the software:
 
 * `Linux` operating system
 * cmake version `3.12` or higher
-* Python version `3.8` or higher
+* Python version `3.0` or higher
 * C++ compiler that supports `C++14` or higher, and the `zlib` library installed (we recommend using GCC version `"4.9"` or newer) for building `graphvcf` and `fastAQ`
 * The following dependencies must also be installed: [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
@@ -35,10 +35,12 @@ Please note the following requirements before building and running the software:
 The easiest way to install EVG is through Anaconda.
 
 ```shell
-# Create a new environment and install EVG with all dependencies
-conda create -n evg_env -c bioconda -c kdm801 -c duzezhen evg
+# Create a new environment named evg_env
+conda create -n evg_env
 # Activate the environment
 conda activate evg_env
+# Install EVG with all dependencies
+conda install -c bioconda -c conda-forge -c kdm801 -c duzezhen evg
 ```
 
 **Building on Linux**
@@ -66,10 +68,12 @@ source ~/.bashrc
 3. Assuming that you have installed all the required software dependencies, please make sure they have been added to your environment path or activated in the corresponding code environment. If you haven't installed them yet, you can use the following code to install all the dependencies:
 
 ```shell
-# To create a conda environment named evg_env, and install software using conda
-conda create -n evg_env -c bioconda -c kdm801 vg graphaligner paragraph bayestyper graphtyper kmc pangenie
+# Create a new environment named evg_env
+conda create -n evg_env
 # Activate the environment
 conda activate evg_env
+# Install software using conda
+conda install -c bioconda -c conda-forge -c kdm801 vg graphaligner paragraph bayestyper graphtyper kmc pangenie
 ```
 
 **Test**

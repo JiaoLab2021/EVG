@@ -8,12 +8,12 @@ source:
 requirements:
   build:
     - cmake >=3.12
-    - python >=3.8
+    - python >=3.0
     - zlib
 
   run:
     - cmake >=3.12
-    - python >=3.8
+    - python >=3.0
     - zlib
     - vg
     - graphaligner
