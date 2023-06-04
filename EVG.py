@@ -34,7 +34,7 @@ threads = 10
 jobs_num = 3
 mode = "precise"
 need_depth = 15.0
-merge_mode = "specific"
+merge_mode = "all"  # Merge process algorithm, if the same, use all algorithm
 
 
 # log
@@ -133,10 +133,8 @@ def get_parser():
         "reference_file": reference_file,
         "vcf_file": vcf_file,
         "samples_file": samples_file,
-        "vcf_out_name": vcf_out_name,
         "path": path,
-        "software_list": software_list,
-        "line_vcf_file": line_vcf_file
+        "software_list": software_list
     }
     """
     # log
@@ -156,10 +154,6 @@ def get_parser():
     input_option.add_argument("-s", dest="samples", help="samples file (name read1_path read2_path)",
                               type=argparse.FileType('r'), required=True)
 
-    optional_option = parser.add_argument_group(title="optional input")
-    optional_option.add_argument("-V", dest="VCF", help="input line-specific vcf file [-v]",
-                                 type=argparse.FileType('r'))
-
     # Set how many x data to take to type
     depth_option = parser.add_argument_group(title="depth")
     depth_option.add_argument("--depth", dest="depth", help="read depth for genotyping [15]",
@@ -177,6 +171,17 @@ def get_parser():
     # process
     algorithm_option.add_argument(
         "--mode", dest="mode", help="software mode [precise]", type=str, choices=['precise', 'fast'], default="precise"
+    )
+
+    # VCF filtering parameters
+    filter_option = parser.add_argument_group(
+        title="VCF filtering"
+    )
+    filter_option.add_argument(
+        "--maf", dest="maf", help="exclude SNPs with minor allele frequency lower than threshold [0]", type=float, default=0
+    )
+    filter_option.add_argument(
+        "--geno", dest="geno", help="exclude SNPs with missing call frequencies greater than threshold [1.0]", type=float, default=1.0
     )
 
     # parallel parameter
@@ -209,15 +214,11 @@ def get_parser():
     # parsing parameters
     reference_file = args.reference.name
     vcf_file = args.vcf.name
-    try:
-        line_vcf_file = args.VCF.name
-    except AttributeError:
-        line_vcf_file = vcf_file
 
     # Sequencing data files
     samples_file = args.samples.name
 
-    vcf_out_name = "convert." + os.path.basename(vcf_file.replace(".gz", ""))
+    # software list
     software_list = args.software
 
     # Modify global variables
@@ -228,13 +229,10 @@ def get_parser():
     jobs_num = args.jobs
     mode = args.mode
     need_depth = args.depth
-    if line_vcf_file == vcf_file:  # Merge process algorithm, if the same, use all algorithm
-        merge_mode = "all"
 
     # Complete the path
     reference_file = os.path.abspath(reference_file)
     vcf_file = os.path.abspath(vcf_file)
-    line_vcf_file = os.path.abspath(line_vcf_file)
     samples_file = os.path.abspath(samples_file)
 
     # current path
@@ -245,10 +243,8 @@ def get_parser():
         "reference_file": reference_file,
         "vcf_file": vcf_file,
         "samples_file": samples_file,
-        "vcf_out_name": vcf_out_name,
         "path": path,
-        "software_list": software_list,
-        "line_vcf_file": line_vcf_file
+        "software_list": software_list
     }
 
     return parser_map
@@ -571,8 +567,8 @@ def run_pangenie(
 
 # Conversion of reference genome and vcf files
 def ref_vcf_convert(
-        parser_map,
-        work_path
+    parser_map,
+    work_path
 ):
     """
     :param parser_map: get_parser(), Returned parameter dictionary
@@ -623,7 +619,6 @@ def ref_vcf_convert(
         reference_file,
         parser_map["vcf_file"],
         350,
-        parser_map["vcf_out_name"],
         mode, 
         env_path, 
         restart
@@ -840,7 +835,7 @@ def read_convert(
 
     # Determine whether the sequencing depth is 0
     if real_depth == 0:
-        log_out = '[EVG.run_convert] sequencing depth is 0, please check the input file file.'
+        log_out = f'[EVG.run_convert] sequencing depth is 0, please check the input file: {fastq_file1} {fastq_file2}'
         return stdout, stderr, log_out, {}
 
     # fastq path, sequencing depth, read length
@@ -1108,7 +1103,7 @@ def run_genotype(
             merge.main, args=(
                 code_dir,
                 merge_dir,
-                parser_map["line_vcf_file"],
+                convert_out_map["vcf_out_name"], 
                 sample_name_tmp,
                 merge_mode,
                 vcf_out_tmp_list,

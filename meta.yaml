@@ -1,0 +1,40 @@
+package:
+  name: evg
+  version: 1.0.1
+
+source:
+  path: .
+
+requirements:
+  build:
+    - cmake >=3.12
+    - python >=3.8
+    - zlib
+
+  run:
+    - cmake >=3.12
+    - python >=2.8
+    - zlib
+    - vg
+    - graphaligner
+    - paragraph
+    - bayestyper
+    - graphtyper
+    - kmer-jellyfish
+    - pangenie
+    - kmc
+
+channels:
+    - kdm801
+    - bioconda
+    - defaults
+    - conda-forge
+
+about:
+  home: https://github.com/JiaoLab2021/EVG
+  license: MIT
+  summary: A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline
+
+extra:
+  recipe-maintainers:
+    - duzezhen

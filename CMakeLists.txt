@@ -71,3 +71,17 @@ target_link_libraries(vcf_breakpoint PUBLIC
     save
     strip_split_join
 )
+
+# 添加安装命令
+install(TARGETS graphvcf fastAQ ${LIBRARIES}
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION bin)
+
+install(FILES EVG.py
+        DESTINATION bin
+        )
+
+# copy
+install(CODE "execute_process(COMMAND cp -r src ${CMAKE_INSTALL_PREFIX}/bin/)")
+install(CODE "execute_process(COMMAND chmod +x ${CMAKE_INSTALL_PREFIX}/bin/EVG.py)")
+install(CODE "execute_process(COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/bin/EVG.py ${CMAKE_INSTALL_PREFIX}/bin/EVG)")

@@ -15,7 +15,7 @@ int main_convert(int argc, char** argv)
     int readLen = 350; // 测序的读长
 
     // 过滤阈值
-    double MAF = 0.;  // 最小等位基因频率
+    double MAF = 0;  // 最小等位基因频率
     double MISSRATE = 1.0;  // 缺失率
 
     // 输入参数
@@ -113,7 +113,7 @@ int main_convert(int argc, char** argv)
 // 帮助文档
 void help_convert(char** argv)
 {
-  cerr << "usage: " << argv[0] << " " << argv[1] << " -r -v [options]" << endl
+  cerr << "usage: " << argv[0] << " " << argv[1] << " -r FILE -v FILE [options]" << endl
        << "convert vcf files merged by vcftools to the format required by genome graph." << endl
        << endl
        << "required arguments:" << endl
@@ -122,8 +122,8 @@ void help_convert(char** argv)
        << endl
 	   << "optional arguments:" << endl
        << "    -l, --length      INT      read length [350]" << endl
-       << "    --maf             FLOAT    exclude variants with minor allele frequency lower than threshold [0.0]" << endl
-       << "    --geno            FLOAT    exclude variants with missing call frequencies greater than threshold [1.0]" << endl
+       << "    --maf             FLOAT    exclude SNPs with minor allele frequency lower than threshold [0.0]" << endl
+       << "    --geno            FLOAT    exclude SNPs with missing call frequencies greater than threshold [1.0]" << endl
        << "    -o, --out         FILE     output file name [vcfConvert.out.vcf.gz]" << endl
        << endl
        << "    -h, --help                 print this help document" << endl;

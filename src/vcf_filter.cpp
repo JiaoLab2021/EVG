@@ -86,15 +86,15 @@ int main_filter(int argc, char** argv)
 // °ïÖúÎÄµµ
 void help_filter(char** argv)
 {
-  cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
+  cerr << "usage: " << argv[0] << " " << argv[1] << " -v FILE [options]" << endl
        << "filter SNPs by maf and missing rate" << endl
        << endl
        << "required arguments:" << endl
        << "    -v, --vcf        FILE      vcf file to be converted" << endl
        << endl
        << "optional arguments:" << endl
-       << "    --maf            FLOAT     exclude variants with minor allele frequency lower than threshold [0.01]" << endl
-       << "    --geno           FLOAT     exclude variants with missing call frequencies greater than threshold [0.1]" << endl
+       << "    --maf            FLOAT     exclude SNPs with minor allele frequency lower than threshold [0.01]" << endl
+       << "    --geno           FLOAT     exclude SNPs with missing call frequencies greater than threshold [0.1]" << endl
        << "    -o, --out        FILE      output filename [stdout]" << endl
        << endl
        << "    -h, --help                 print this help document" << endl;

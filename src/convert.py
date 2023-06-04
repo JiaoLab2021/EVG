@@ -301,21 +301,19 @@ def vcf_convert(
     reference_file: str,
     vcf_file: str,
     read_len: int,
-    out_name: str,
     mode: str,
     env_path, 
     restart: bool
 ):
     """
-    :param code_dir: code path
-    :param reference_file: reference genome
-    :param vcf_file: vcf file
-    :param read_len: read length
-    :param out_name: the vcf filename of output
-    :param mode:     mode
-    :param env_path: environment variable
-    :param restart: Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, out_name, sv_out_name, region_file
+    :param code_dir:            code path
+    :param reference_file:      reference genome
+    :param vcf_file:            vcf file
+    :param read_len:            read length
+    :param mode:                mode
+    :param env_path:            environment variable
+    :param restart:             Whether to check if the file exists and skip this step
+    :return: stdout, stderr, log_out, vcf_out_name, sv_out_name, region_file
     """
 
     # log
@@ -326,6 +324,9 @@ def vcf_convert(
     # code path
     code_path = os.path.join(code_dir, "graphvcf convert")
 
+    # output filename of convert result
+    vcf_out_name = "convert." + os.path.basename(vcf_file.replace(".gz", ""))
+
     # ################################### graphvcf convert ###################################
     # graphvcf convert
     cmd = '{} -r {} -v {} -l {} -o {}'.format(
@@ -333,12 +334,12 @@ def vcf_convert(
         reference_file,
         vcf_file,
         read_len,
-        out_name)
+        vcf_out_name)
 
     # Check if the file exists
     if restart:
         # <= 0
-        if getsize(out_name) <= 0 and getsize(out_name + ".gz") <= 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
+        if getsize(vcf_out_name) <= 0 and getsize(vcf_out_name + ".gz") <= 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
             # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf convert", env_path)
     else:  # If restart is not specified, run directly
@@ -347,7 +348,7 @@ def vcf_convert(
 
     # Report an error if there is a problem with the exit code
     if log_out:
-        return stdout, stderr, log_out, out_name, "", ""
+        return stdout, stderr, log_out, vcf_out_name, "", ""
 
     # path completion
     region_file = os.path.abspath("CHROMOSOME.NAME")
@@ -355,20 +356,20 @@ def vcf_convert(
     # ################################### sort ###################################
     # vcfsort
     cmd = '''grep '#' {} > {} && grep -v '#' {} | sort --parallel=10 -k 1,1 -k 2,2n -t $'\t' | '''.format(
-        out_name,
-        out_name + ".sort",
-        out_name
+        vcf_out_name,
+        vcf_out_name + ".sort",
+        vcf_out_name
     )
     cmd += '''awk -F "\t" '!a[$1,$2]++' 1>>{} && mv {} {}'''.format(
-        out_name+".sort",
-        out_name+".sort",
-        out_name
+        vcf_out_name+".sort",
+        vcf_out_name+".sort",
+        vcf_out_name
     )
 
     # Check if the file exists
     if restart:
         # <= 0
-        if getsize(out_name) > 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
+        if getsize(vcf_out_name) > 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
             # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "sort", env_path)
     else:  # If restart is not specified, run directly
@@ -377,17 +378,17 @@ def vcf_convert(
 
     # Report an error if there is a problem with the exit code
     if log_out:
-        return stdout, stderr, log_out, out_name, "", region_file
+        return stdout, stderr, log_out, vcf_out_name, "", region_file
 
     # vcf is divided by category
     if mode == "fast":
-        sv_out_name = "sv." + out_name
+        sv_out_name = "sv." + vcf_out_name
         cmd = ""
-        if getsize(out_name) > 0:
-            cmd = '''cat ''' + out_name + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
+        if getsize(vcf_out_name) > 0:
+            cmd = '''cat ''' + vcf_out_name + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
             {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
-        elif getsize(out_name + ".gz") > 28:
-            cmd = '''zcat ''' + out_name + ".gz" + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
+        elif getsize(vcf_out_name + ".gz") > 28:
+            cmd = '''zcat ''' + vcf_out_name + ".gz" + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
                 {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
         # Check if the file exists
         if restart:
@@ -403,9 +404,9 @@ def vcf_convert(
             # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, "split", env_path)
     else:
-        sv_out_name = out_name
+        sv_out_name = vcf_out_name
 
-    out_name = os.path.abspath(out_name)
+    vcf_out_name = os.path.abspath(vcf_out_name)
     sv_out_name = os.path.abspath(sv_out_name)
 
-    return stdout, stderr, log_out, out_name, sv_out_name, region_file
+    return stdout, stderr, log_out, vcf_out_name, sv_out_name, region_file
