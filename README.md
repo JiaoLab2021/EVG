@@ -66,13 +66,11 @@ source ~/.bashrc
 3. Assuming that you have installed all the required software dependencies, please make sure they have been added to your environment path or activated in the corresponding `code` environment. If you haven't installed them yet, you can use the following `code` to install all the dependencies:
 
 ```shell
-# To create a conda environment named evg_env (you can replace it with any other name).
+# To create a conda environment named evg_env (you can replace it with any other name)
 conda create -n evg_env
 conda activate evg_env
 # Install software using conda
-conda install -c bioconda vg graphaligner paragraph bayestyper graphtyper kmc
-# Install PanGenie using conda under the same environment.
-conda install -c kdm801 pangenie
+conda install -c bioconda -c kdm801 vg graphaligner paragraph bayestyper graphtyper kmc pangenie
 ```
 
 **Test**
