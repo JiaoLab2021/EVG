@@ -13,7 +13,7 @@ requirements:
 
   run:
     - cmake >=3.12
-    - python >=2.8
+    - python >=3.8
     - zlib
     - vg
     - graphaligner
