@@ -72,14 +72,19 @@ target_link_libraries(vcf_breakpoint PUBLIC
     strip_split_join
 )
 
+# 添加相对的动态库搜索路径
+target_link_directories(graphvcf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+target_link_directories(fastAQ PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+
 # 添加安装命令
 install(TARGETS graphvcf fastAQ ${LIBRARIES}
         RUNTIME DESTINATION bin
-        LIBRARY DESTINATION bin)
+        LIBRARY DESTINATION lib
+)
 
 install(FILES EVG.py
         DESTINATION bin
-        )
+)
 
 # copy
 install(CODE "execute_process(COMMAND cp -r src ${CMAKE_INSTALL_PREFIX}/bin/)")
