@@ -70,7 +70,7 @@ source ~/.bashrc
 conda create -n evg_env
 conda activate evg_env
 # Install software using conda
-conda install -c bioconda vg graphaligner paragraph bayestyper graphtyper2 kmc
+conda install -c bioconda vg graphaligner paragraph bayestyper graphtyper kmc
 # Install PanGenie using conda under the same environment.
 conda install -c kdm801 pangenie
 ```
