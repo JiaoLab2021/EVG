@@ -1,4 +1,4 @@
-// g++ fastAQ.cpp -o fastAQ -lpthread -lz -O2
+// g++ fastAQ.cpp -o fastAQ -lpthread -lz -O3
 #include <fstream>
 #include <string>
 #include <iostream>

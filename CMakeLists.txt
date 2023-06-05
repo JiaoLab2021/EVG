@@ -4,6 +4,8 @@ project(EVG CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -malign-double")
+
 # 添加所有的库
 set(LIBRARIES check_vcf_sort strip_split_join get_time save sort_find
               vcf_breakpoint vcf_convert vcf_count vcf_filter vcf_merge

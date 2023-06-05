@@ -1,4 +1,4 @@
-// g++ graphvcf.cpp -o graphvcf -lpthread -lz -O2
+// g++ graphvcf.cpp -o graphvcf -lpthread -lz -O3
 #include <fstream>
 #include <string>
 #include <iostream>
