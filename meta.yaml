@@ -8,19 +8,20 @@ source:
 requirements:
   build:
     - cmake >=3.12
-    - python >=3.0
+    - gcc >=4.9
+    - python >=3.9
     - zlib
 
   run:
     - cmake >=3.12
-    - python >=3.0
+    - gcc >=4.9
+    - python >=3.6
     - zlib
     - vg
     - graphaligner
     - paragraph
     - bayestyper
     - graphtyper
-    - kmer-jellyfish
     - pangenie
     - kmc
 

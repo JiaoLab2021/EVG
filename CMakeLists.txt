@@ -39,9 +39,9 @@ set(COMMON_LIBRARIES
 # 添加链接库
 target_link_libraries(graphvcf PRIVATE 
     check_vcf_sort
-    delly2vcf
     save
     sort_find
+    delly2vcf
     vcf_breakpoint
     vcf_convert
     vcf_count
@@ -63,14 +63,6 @@ target_link_libraries(fastAQ PRIVATE
 # 添加编译选项
 target_compile_options(graphvcf PRIVATE -O3)
 target_compile_options(fastAQ PRIVATE -O3)
-
-# 添加依赖关系
-target_link_libraries(vcf_breakpoint PUBLIC
-    check_vcf_sort
-    get_time
-    save
-    strip_split_join
-)
 
 # 添加相对的动态库搜索路径
 target_link_directories(graphvcf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)

@@ -1,9 +1,9 @@
 # EVG
 
 [![GitHub Downloads](https://img.shields.io/github/downloads/JiaoLab2021/EVG/total.svg?style=social&logo=github&label=Download)](https://github.com/JiaoLab2021/EVG/releases)
-[![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg)
 [![GitHub last commit](https://img.shields.io/github/last-commit/JiaoLab2021/evg.svg?label=Last%20commit&logo=github&style=flat)](https://github.com/JiaoLab2021/EVG/releases)
 [![Build Status](https://github.com/JiaoLab2021/EVG/actions/workflows/ci.yaml/badge.svg)](https://github.com/JiaoLab2021/EVG/actions)
+<!-- [![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg) -->
 
 ## Introduction
 
@@ -24,13 +24,13 @@ Please note the following requirements before building and running the software:
 
 * `Linux` operating system
 * cmake version `3.12` or higher
-* Python version `3.0` or higher
+* Python version `3.6` or higher
 * C++ compiler that supports `C++14` or higher, and the `zlib` library installed (we recommend using GCC version `"4.9"` or newer) for building `graphvcf` and `fastAQ`
 * The following dependencies must also be installed: [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
 ## Installation
 
-**Install via Anaconda**
+<!-- **Install via Anaconda**
 
 The easiest way to install EVG is through Anaconda.
 
@@ -41,7 +41,7 @@ conda create -n evg_env
 conda activate evg_env
 # Install EVG with all dependencies
 conda install -c bioconda -c conda-forge -c kdm801 -c duzezhen evg
-```
+``` -->
 
 **Building on Linux**
 
@@ -74,6 +74,8 @@ conda create -n evg_env
 conda activate evg_env
 # Install software using conda
 conda install -c bioconda -c conda-forge -c kdm801 vg graphaligner paragraph bayestyper graphtyper kmc pangenie
+# "ModuleNotFoundError: No module named 'pysam.bcftools'", therefore it is recommended to upgrade pysam in this case
+conda update pysam
 ```
 
 **Test**
