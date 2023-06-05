@@ -20,8 +20,8 @@ add_executable(graphvcf graphvcf.cpp)
 add_executable(fastAQ fastAQ.cpp)
 
 # 添加头文件搜索路径
-target_include_directories(graphvcf PRIVATE include)
-target_include_directories(fastAQ PRIVATE include)
+target_include_directories(graphvcf PUBLIC include)
+target_include_directories(fastAQ PUBLIC include)
 
 # 查找线程库和zlib库
 find_package(Threads REQUIRED)
