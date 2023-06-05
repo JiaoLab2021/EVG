@@ -37,7 +37,7 @@ set(COMMON_LIBRARIES
 )
 
 # 添加链接库
-target_link_libraries(graphvcf PRIVATE 
+target_link_libraries(graphvcf PUBLIC 
     check_vcf_sort
     save
     sort_find
@@ -54,7 +54,7 @@ target_link_libraries(graphvcf PRIVATE
     ${COMMON_LIBRARIES}	
 )
 
-target_link_libraries(fastAQ PRIVATE 
+target_link_libraries(fastAQ PUBLIC 
     convert
     count
     ${COMMON_LIBRARIES}
