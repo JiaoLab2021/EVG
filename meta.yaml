@@ -9,21 +9,21 @@ requirements:
   build:
     - cmake >=3.12
     - gcc >=4.9
-    - python >=3.9
+    - python =3.9
     - zlib
 
   run:
     - cmake >=3.12
     - gcc >=4.9
-    - python >=3.6
+    - python =3.9
     - zlib
     - vg
     - graphaligner
     - paragraph
     - bayestyper
     - graphtyper
-    - pangenie
     - kmc
+    - pangenie
 
 channels:
     - kdm801
