@@ -1,88 +1,83 @@
 cmake_minimum_required(VERSION 3.12)
+
 project(EVG CXX)
 
+# 设置 C++ 标准版本 (这里使用 C++14)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -malign-double")
+# 添加源文件
+set(SRC_FILES_graphvcf
+    src/check_vcf_sort.cpp
+    src/get_time.cpp
+    src/save.cpp
+    src/sort_find.cpp
+    src/strip_split_join.cpp
+    src/delly2vcf.cpp
+    src/vcf_breakpoint.cpp
+    src/vcf_convert.cpp
+    src/vcf_count.cpp
+    src/vcf_filter.cpp
+    src/vcf_merge.cpp
+    src/vcf_open.cpp
+    src/vcf_recall.cpp
+    src/vcf_split.cpp
+    src/vcf_win.cpp
+)
 
-# 添加所有的库
-set(LIBRARIES check_vcf_sort strip_split_join get_time save sort_find
-              vcf_breakpoint vcf_convert vcf_count vcf_filter vcf_merge
-              vcf_open vcf_recall vcf_split vcf_win delly2vcf count convert)
-
-foreach(library IN LISTS LIBRARIES)
-    add_library(${library} SHARED src/${library}.cpp)
-    target_compile_features(${library} PRIVATE cxx_std_14)
-    target_compile_options(${library} PRIVATE -Wall -Wextra -O3)
-endforeach()
+set(SRC_FILES_fastAQ
+    src/get_time.cpp
+    src/save.cpp
+    src/sort_find.cpp
+    src/strip_split_join.cpp
+    src/convert.cpp
+    src/count.cpp
+)
 
 # 添加可执行文件
 add_executable(graphvcf graphvcf.cpp)
 add_executable(fastAQ fastAQ.cpp)
 
-# 添加头文件搜索路径
-target_include_directories(graphvcf PRIVATE include)
-target_include_directories(fastAQ PRIVATE include)
+# 添加源文件
+target_sources(graphvcf PRIVATE ${SRC_FILES_graphvcf})
+target_sources(fastAQ PRIVATE ${SRC_FILES_fastAQ})
 
-# 查找线程库和zlib库
-find_package(Threads REQUIRED)
-find_package(ZLIB REQUIRED)
-
-# 设置公共链接库列表
-set(COMMON_LIBRARIES 
-    strip_split_join
-    get_time
-    Threads::Threads
-    ZLIB::ZLIB
-    stdc++fs
-)
-
-# 添加链接库
-target_link_libraries(graphvcf PRIVATE 
-    check_vcf_sort
-    save
-    sort_find
-    delly2vcf
-    vcf_breakpoint
-    vcf_convert
-    vcf_count
-    vcf_filter
-    vcf_merge
-    vcf_open
-    vcf_recall
-    vcf_split
-    vcf_win
-    ${COMMON_LIBRARIES}	
-)
-
-target_link_libraries(fastAQ PRIVATE 
-    convert
-    count
-    ${COMMON_LIBRARIES}
-)
-
-# 添加编译选项
+# 为目标添加编译选项
 target_compile_options(graphvcf PRIVATE -O3)
 target_compile_options(fastAQ PRIVATE -O3)
 
-# 添加依赖关系
-target_link_libraries(vcf_breakpoint PUBLIC
-    check_vcf_sort
-    get_time
-    save
-    strip_split_join
-)
+# 为目标添加编译选项（包括 -O3、额外的警告和错误和CPU优化）
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # target_compile_options(graphvcf PRIVATE -O3 -Wall -Wextra -Werror -pedantic-errors -march=native)
+    # target_compile_options(fastAQ PRIVATE -O3 -Wall -Wextra -Werror -pedantic-errors -march=native)
+    target_compile_options(graphvcf PRIVATE -O3 -Wall -Wextra -march=native)
+    target_compile_options(fastAQ PRIVATE -O3 -Wall -Wextra -march=native)
+endif()
 
-# 添加相对的动态库搜索路径
-target_link_directories(graphvcf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
-target_link_directories(fastAQ PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
-# 添加安装命令
-install(TARGETS graphvcf fastAQ ${LIBRARIES}
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-)
+# 添加 include 目录
+target_include_directories(graphvcf PRIVATE include)
+target_include_directories(fastAQ PRIVATE include)
+
+# 添加链接库
+find_package(Threads REQUIRED)
+target_link_libraries(graphvcf Threads::Threads)
+target_link_libraries(fastAQ Threads::Threads)
+
+find_package(ZLIB REQUIRED)
+target_link_libraries(graphvcf ZLIB::ZLIB)
+target_link_libraries(fastAQ ZLIB::ZLIB)
+
+target_link_libraries(graphvcf stdc++fs)
+target_link_libraries(fastAQ stdc++fs)
+
+# install function
+install(TARGETS graphvcf DESTINATION bin)
+install(TARGETS fastAQ DESTINATION bin)
+
+# 安装头文件
+install(DIRECTORY include/ DESTINATION include)
 
 install(FILES EVG.py
         DESTINATION bin

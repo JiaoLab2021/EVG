@@ -1,9 +1,9 @@
 # EVG
 
 [![GitHub Downloads](https://img.shields.io/github/downloads/JiaoLab2021/EVG/total.svg?style=social&logo=github&label=Download)](https://github.com/JiaoLab2021/EVG/releases)
+[![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg)
 [![GitHub last commit](https://img.shields.io/github/last-commit/JiaoLab2021/evg.svg?label=Last%20commit&logo=github&style=flat)](https://github.com/JiaoLab2021/EVG/releases)
 [![Build Status](https://github.com/JiaoLab2021/EVG/actions/workflows/ci.yaml/badge.svg)](https://github.com/JiaoLab2021/EVG/actions)
-<!-- [![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg) -->
 
 ## Introduction
 
@@ -30,9 +30,9 @@ Please note the following requirements before building and running the software:
 
 ## Installation
 
-<!-- **Install via Anaconda**
+**Install via Anaconda**
 
-The easiest way to install EVG is through Anaconda.
+The easiest way to install EVG is through Anaconda, but please note that in this case, the Python version must be 3.9. Conda will automatically set the Python version for you, so please ensure that your system can install Python 3.9.
 
 ```shell
 # Create a new environment named evg_env
@@ -41,7 +41,7 @@ conda create -n evg_env
 conda activate evg_env
 # Install EVG with all dependencies
 conda install -c bioconda -c conda-forge -c kdm801 -c duzezhen evg
-``` -->
+```
 
 **Building on Linux**
 
