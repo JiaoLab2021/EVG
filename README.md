@@ -32,7 +32,7 @@ Please note the following requirements before building and running the software:
 
 **Install via Anaconda**
 
-The easiest way to install EVG is through Anaconda, but please note that in this case, the Python version must be 3.9. Conda will automatically set the Python version for you, so please ensure that your system can install Python 3.9.
+The easiest way to install EVG is through Anaconda, but please note that in this case, the Python version must be `3.9`. Conda will automatically set the Python version for you, so please ensure that your system can install Python `3.9`.
 
 ```shell
 # Create a new environment named evg_env
