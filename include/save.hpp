@@ -16,36 +16,64 @@
 
 using namespace std;
 
-namespace SAVE
+/**
+ * @brief save result
+ * 
+ * @param outputFileName
+ * 
+ * @return
+**/
+class SAVE
 {
-    /**
-     * @brief 打开vcf文件
-     * 
-     * @param outputFileName_
-     * 
-     * @return
-    **/
-    class SAVE
-    {
-    private:
-        // vcf文件
-        string outputFileName;
+private:
+    // output stream
+    string outputFileName_;
 
-        // 输出文件流
-        ofstream fpO;
-        gzFile gzfpO;
-    public:
-        void init(
-            const string & outputFileName_
-        );
+    // file handle
+    ofstream fpO;
+    gzFile gzfpO;
+public:
+    SAVE() {}
+    SAVE(string aliFileName) {
+        outputFileName_ = aliFileName;
 
-        int open();
-        int save(
-            string & outTxt_
-        );
-        int close();
-    };
-
-} // namespace SAVE
+        if (outputFileName_.find(".gz") != string::npos || outputFileName_.find(".GZ") != string::npos)
+        {
+            // open file
+            gzfpO = gzopen(outputFileName_.c_str(), "wb");
+            if(!gzfpO)
+            {
+                cerr << "[" << __func__ << "::" << getTime() << "] " 
+                    << "'" << outputFileName_ << "': No such file or directory or possibly reached the maximum open file limit. You can set 'ulimit -n' to a larger value to continue." << endl;
+                exit(1);
+            }
+        }
+        else if (outputFileName_.size() > 0)
+        {
+            // open file
+            fpO.open(outputFileName_, ios::out);
+            if(!fpO)
+            {
+                cerr << "[" << __func__ << "::" << getTime() << "] " 
+                    << "'" << outputFileName_ << "': No such file or directory or possibly reached the maximum open file limit. You can set 'ulimit -n' to a larger value to continue." << endl;
+                exit(1);
+            }
+        }
+    }
+    ~SAVE() {
+        if (outputFileName_.find(".gz") != string::npos || outputFileName_.find(".GZ") != string::npos)
+        {
+            // close file
+            gzclose(gzfpO);
+        }
+        else if (outputFileName_.size() > 0)
+        {
+            // close file
+            fpO.close();
+        }
+    }
+    
+    int save(string & outTxt);
+};
 
 #endif

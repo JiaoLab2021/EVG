@@ -5,6 +5,7 @@
 #include <iostream>
 #include "zlib.h"
 
+#include "save.hpp"
 #include "kseq.h"
 #include "get_time.hpp"
 #include <getopt.h>
@@ -17,25 +18,37 @@ using namespace std;
 void help_count(char** argv);
 int main_count(int argc, char** argv);
 
-// kseq.h 打开文件
-KSEQ_INIT(gzFile, gzread)
-
-namespace count
+struct countStruct
 {
-    struct countStruct
-    {
-        long long int readNum = 0;
-        long long int readBase = 0;
-    };
+    uint32_t readNum;
+    uint32_t readBase;
 
+    countStruct() : readNum(0), readBase(0) {}
+};
 
-    // 打开fastq/a.gz文件
-    void fastq_a_count(
-        string inputFileName1, 
-        string inputFileName2, 
-        countStruct & countOut, 
+class Count
+{
+private:
+    // kseq.h 打开文件
+    KSEQ_INIT(gzFile, gzread)
+
+    string inputFileName1_;
+    string inputFileName2_;
+    string outputFileName_;
+
+    countStruct countOut_;
+public:
+    Count(
+        const string& inputFileName1, 
+        const string& inputFileName2, 
         const string & outputFileName
     );
-}
+
+    // 打开fastq/a.gz文件
+    void fastq_a_count();
+
+    // 打开fastq/a.gz文件
+    void save_result();
+};
 
 #endif

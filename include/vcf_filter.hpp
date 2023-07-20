@@ -26,25 +26,31 @@ void help_filter(char** argv);
 int main_filter(int argc, char** argv);
 
 
-namespace VCFFILTER
+class VCFFilter
 {
+private:
+    string vcfFileName_;
+    string outputFileName_;
+    double MAF_;
+    double MISSRATE_;
+public:
     /**
-     * @brief 根据次等位基因频率和缺失率过滤SNPs
+	 * init
+	 *
+	 * @param vcfFileName         input VCF  file name
+     * @param outputFileName      output file name
+     * @param MAF                 MAF
+     * @param MISSRATE            MISSRATE
      * 
-     * @param vcfFileName    输入vcf文件
-     * @param outputFileName 输出文件名
-     * @param MAF            次等位基因频率
-     * @param MISSRATE       缺失率
-     * 
-     * @return 0
-    **/
-    int vcf_filter(
+	**/
+    VCFFilter(
         const string & vcfFileName, 
         const string & outputFileName, 
         const double & MAF, 
         const double & MISSRATE
     );
 
-} // namespace VCFFILTER
+    void vcf_filter();
+};
 
 #endif

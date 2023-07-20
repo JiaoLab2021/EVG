@@ -1,3 +1,6 @@
+#ifndef CONVERT_HPP
+#define CONVERT_HPP
+
 #include <fstream>
 #include <string>
 #include <iostream>
@@ -8,6 +11,7 @@
 #include "strip_split_join.hpp"
 #include "zlib.h"
 
+#include "save.hpp"
 #include "kseq.h"
 
 using namespace std;
@@ -15,7 +19,19 @@ using namespace std;
 void help_convert(char** argv);
 int main_convert(int argc, char** argv);
 
-namespace convert
+class Convert
 {
-    int convert(string * fastaFilename, string * outputFilename);
-}
+private:
+    string fastaFilename_;
+    string outputFilename_;
+public:
+    Convert(
+        const string& fastaFilename, 
+        const string& outputFilename
+    );
+
+    void convert();
+
+};
+
+#endif

@@ -51,12 +51,14 @@ int main_count(int argc, char** argv)
         return 1;
     }
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
     
-    // 统计结果
-    VCFCOUNT::count(vcfFileName);
+    // init
+    VCFCount VCFCountClass(vcfFileName);
+    // count
+    VCFCountClass.count();
     
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
     return 0;
 }
@@ -65,7 +67,7 @@ int main_count(int argc, char** argv)
 void help_count(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
-       << "count the number of alleles" << endl
+       << "calculate the number of alleles." << endl
        << endl
        << "required arguments:" << endl
        << "    -v, --vcf           FILE       vcf file to be converted" << endl
@@ -75,80 +77,71 @@ void help_count(char** argv)
 
 
 /**
- * @brief 统计vcf文件
+ * init
+ *
+ * @param vcfFileName       input VCF  file name
  * 
- * @param vcfFileName  输入vcf文件
- * 
- * @return 0
 **/
-int VCFCOUNT::count(
+VCFCount::VCFCount(
     const string & vcfFileName
-)
+) : vcfFileName_(vcfFileName) {}
+
+
+void VCFCount::count()
 {
     // 记录各种变异的数量
     uint32_t snpNum = 0;
     uint32_t indelNum = 0;
     uint32_t insNum = 0;
     uint32_t delNum = 0;
-    // uint32_t invNum = 0;
-    // uint32_t dupNum = 0;
+    uint32_t invNum = 0;
+    uint32_t dupNum = 0;
     uint32_t otherNum = 0;
 
     // 存储vcf信息
     VCFINFOSTRUCT INFOSTRUCTTMP;
 
     // 初始化
-    VCFOPEN VCFOPENCLASS;
-    VCFOPENCLASS.init(
-        vcfFileName
-    );
-
-    // 打开vcf文件
-    VCFOPENCLASS.open();
+    VCFOPEN VCFOPENCLASS(vcfFileName_);
 
     // 如果没有遍历完，继续
-    while (VCFOPENCLASS.read(INFOSTRUCTTMP))
-    {
-        // 有长度信息再计算
-        if (INFOSTRUCTTMP.POS > 0)
-        {
-            // 遍历qry序列列表
-            for (auto qrySeq : INFOSTRUCTTMP.ALTVec)
-            {
-                uint32_t qryLen = qrySeq.size();
+    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+        // empty or comment line, skip
+        if (INFOSTRUCTTMP.line.empty() || INFOSTRUCTTMP.line.find("#") != string::npos) {
+            continue;
+        }
+        
+        // 遍历qry序列列表
+        for (const auto& qrySeq : INFOSTRUCTTMP.ALTVec) {
+            // Record the amount of variation
+            uint32_t qryLen = qrySeq.size();
+            int32_t svLen = qryLen - INFOSTRUCTTMP.LEN;
+            double lengthRatio = qryLen / float(INFOSTRUCTTMP.LEN);
 
-                int32_t svLen = qryLen -INFOSTRUCTTMP.LEN;
-
-                if (svLen == 0)
-                {
-                    snpNum++;
-                }
-                else if (svLen <= 49 && svLen >= -49)
-                {
-                    indelNum++;
-                }
-                else if (svLen < -49)
-                {
-                    delNum++;
-                }
-                else if (svLen > 49)
-                {
-                    insNum++;
-                }
-                else
-                {
-                    otherNum++;
-                }
+            if (svLen == 0 && INFOSTRUCTTMP.LEN == 1 && qryLen == 1) {
+                snpNum++;
+            } else if (svLen <= 49 && svLen >= -49 && INFOSTRUCTTMP.LEN <= 49 && qryLen <= 49) {
+                indelNum++;
+            } else if (svLen >= -2 && svLen <= 2 && INFOSTRUCTTMP.LEN > 49 && qryLen > 49 ) {
+                invNum++;
+            } else if (lengthRatio >= 1.8 && lengthRatio <= 2.2 && INFOSTRUCTTMP.LEN > 49 && qryLen > 49) {
+                dupNum++;
+            } else if (svLen < 0) {
+                delNum++;
+            } else if (svLen > 0) {
+                insNum++;
+            } else {
+                otherNum++;
             }
         }
     }
 
-    // 关闭vcf文件
-    VCFOPENCLASS.close();
-
     // 打印结果
-    cout << "SNP\tInDels\tDeletion\tInsertion\tOther\n";
-    cout << snpNum << "\t" << indelNum << "\t" << delNum << "\t" << insNum << "\t" << otherNum << endl;
-    
-    return 0;
+    cout << "           - SNP: " << snpNum << endl
+        << "           - InDels: " << indelNum << endl
+        << "           - Insertion: " << insNum << endl
+        << "           - Deletion: " << delNum << endl
+        << "           - Inversion: " << invNum << endl
+        << "           - Duplication: " << dupNum << endl
+        << "           - Other: " << otherNum << endl;
 }

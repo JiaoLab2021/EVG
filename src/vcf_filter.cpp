@@ -68,17 +68,18 @@ int main_filter(int argc, char** argv)
         return 1;
     }
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
     
-    // 统计结果
-    VCFFILTER::vcf_filter(
+    // init
+    VCFFilter VCFFilterClass(
         vcfFileName, 
         outputFileName, 
         MAF, 
         MISSRATE
     );
+    VCFFilterClass.vcf_filter();
     
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
     return 0;
 }
@@ -87,7 +88,7 @@ int main_filter(int argc, char** argv)
 void help_filter(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v FILE [options]" << endl
-       << "filter SNPs by maf and missing rate" << endl
+       << "filter SNPs by maf and missing rate." << endl
        << endl
        << "required arguments:" << endl
        << "    -v, --vcf        FILE      vcf file to be converted" << endl
@@ -102,95 +103,85 @@ void help_filter(char** argv)
 
 
 /**
- * @brief 根据次等位基因频率和缺失率过滤SNPs
+ * init
+ *
+ * @param vcfFileName         input VCF  file name
+ * @param outputFileName      output file name
+ * @param MAF                 MAF
+ * @param MISSRATE            MISSRATE
  * 
- * @param vcfFileName    输入vcf文件
- * @param outputFileName 输出文件名
- * @param MAF            次等位基因频率
- * @param MISSRATE       缺失率
- * 
- * @return 0
 **/
-int VCFFILTER::vcf_filter(
+VCFFilter::VCFFilter(
     const string & vcfFileName, 
     const string & outputFileName, 
     const double & MAF, 
     const double & MISSRATE
-)
+) : vcfFileName_(vcfFileName), outputFileName_(outputFileName), MAF_(MAF), MISSRATE_(MISSRATE) {}
+
+
+
+void VCFFilter::vcf_filter()
 {
-    // 输入文件流
-    // 存储vcf信息
+    // input file stream
     VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS;
-    VCFOPENCLASS.init(
-        vcfFileName
-    );
-    // 打开vcf文件
-    VCFOPENCLASS.open();
+    VCFOPEN VCFOPENCLASS(vcfFileName_);
 
 
-    // 输出文件流
-    SAVE::SAVE SAVECLASS;
-    SAVECLASS.init(
-        outputFileName
-    );
-    SAVECLASS.open();
+    // output file stream
+    SAVE SAVECLASS(outputFileName_);
 
 
     // 临时存储输出字符串
     string outTxt = "";
 
     // 如果没有遍历完，继续
-    while (VCFOPENCLASS.read(INFOSTRUCTTMP))
-    {
+    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+        // empty line, skip
+        if (INFOSTRUCTTMP.line.empty()) {
+            continue;
+        }
+        
         // 如果注释行，直接保存
-        if (INFOSTRUCTTMP.INFO.find("#") != string::npos)
-        {
-            outTxt += INFOSTRUCTTMP.INFO + "\n";
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {
+            outTxt += INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
         // 获取变异类型
-        INFOSTRUCTTMP.TYPE = VCFOPENCLASS.get_TYPE(
+        INFOSTRUCTTMP.ID = VCFOPENCLASS.get_TYPE(
             INFOSTRUCTTMP.LEN, 
             INFOSTRUCTTMP.ALTVec
         );
 
-        if (INFOSTRUCTTMP.TYPE == "SNP")  // SNP时再判断是否过滤
-        {
+        if (INFOSTRUCTTMP.ID == "SNP") {  // SNP时再判断是否过滤
             double MAFTMP;  // 最小等位基因频率
             double MISSRATETMP;  // 缺失率
 
             // 获取所有的基因型   map<idx, vector<gtString>>
             map<int, vector<string> > GTVecMapTmp = VCFOPENCLASS.get_gt(
-                INFOSTRUCTTMP.INFOVec
+                INFOSTRUCTTMP.lineVec
             );
 
             // 如果只有一个基因型，跳过。
-            if (GTVecMapTmp.size() <= 1)
-            {
+            if (GTVecMapTmp.size() <= 1) {
                 continue;
             }
             
             // 计算最小等位基因频率和缺失率
             tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
                 GTVecMapTmp, 
-                INFOSTRUCTTMP.INFOVec.size() - 9
+                INFOSTRUCTTMP.lineVec.size() - 9
             );
 
             // 通过阈值了直接保存
-            if (MAFTMP >= MAF && MISSRATETMP <= MISSRATE)
-            {
-                outTxt += INFOSTRUCTTMP.INFO + "\n";
+            if (MAFTMP >= MAF_ && MISSRATETMP <= MISSRATE_) {
+                outTxt += INFOSTRUCTTMP.line + "\n";
             }
-        }
-        else  // 其它类型的变异直接保存
-        {
-            outTxt += INFOSTRUCTTMP.INFO + "\n";
+        } else {  // 其它类型的变异直接保存
+            outTxt += INFOSTRUCTTMP.line + "\n";
         }
 
-        if (outTxt.size() >= 10000000)  // 每10m写一次
-        {
+        if (outTxt.size() >= 10 * 1024 * 1024) {  // 每10m写一次
             // 输出文件流
             SAVECLASS.save(
                 outTxt
@@ -198,25 +189,16 @@ int VCFFILTER::vcf_filter(
 
             // 清空
             outTxt.clear();
-            string().swap(outTxt);
         }
     }
 
-    if (outTxt.size() >= 0)  // 最后写一次
-    {
+    if (outTxt.size() > 0) {  // 最后写一次
         // 其它类型的变异直接保存
         SAVECLASS.save(
             outTxt
         );
 
         // 清空
-        outTxt.clear();
         string().swap(outTxt);
     }
-
-    // 关闭文件
-    VCFOPENCLASS.close();
-    SAVECLASS.close();
-    
-    return 0;
 }

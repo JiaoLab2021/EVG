@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.12)
 
 project(EVG CXX)
 
-# 设置 C++ 标准版本 (这里使用 C++14)
-set(CMAKE_CXX_STANDARD 14)
+# 设置 C++ 标准版本 (这里使用 C++17)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

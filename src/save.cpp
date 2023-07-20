@@ -2,102 +2,36 @@
 
 using namespace std;
 
-/**
- * @brief 初始化
- * 
- * @param outputFileName_
- * 
- * @return
-**/
-void SAVE::SAVE::init(
-    const string & outputFileName_
-)
-{
-    outputFileName = outputFileName_;
-}
 
 /**
- * @brief 打开文件
- * 
- * @return 0
-**/
-int SAVE::SAVE::open(
-
-)
-{
-    if (outputFileName.find(".gz") != string::npos || outputFileName.find(".GZ") != string::npos)
-    {
-        // 输出文件流
-        gzfpO = gzopen(outputFileName.c_str(), "wb");
-        if(!gzfpO)
-        {
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'" << outputFileName << "': No such file or directory." << endl;
-            exit(1);
-        }
-    }
-    else if (outputFileName.size() > 0)
-    {
-        // 输出文件流
-        fpO.open(outputFileName, ios::out);
-        if(!fpO)
-        {
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'" << outputFileName << "': No such file or directory." << endl;
-            exit(1);
-        }
-    }
-
-    return 0;
-}
-
-
-/**
- * @brief 存储
+ * @brief save result to file
  * 
  * @return int
 **/
-int SAVE::SAVE::save(
-    string & outTxt_
+int SAVE::save(
+    string & outTxt
 )
 {
-    outTxt_ = strip(outTxt_, '\n');  // 去除换行符
+    outTxt = strip(outTxt, '\n');  // remove '\n'
 
-    if (outputFileName.find(".gz") != string::npos || outputFileName.find(".GZ") != string::npos)
+    if (outTxt.empty())
     {
-        gzwrite(gzfpO, outTxt_.c_str(), outTxt_.length());
+        return 0;
     }
-    else if (outputFileName.size() > 0)
+
+    if (outputFileName_.find(".gz") != string::npos || outputFileName_.find(".GZ") != string::npos)
     {
-        fpO << outTxt_ << endl;
+        outTxt += "\n";
+        gzwrite(gzfpO, outTxt.c_str(), outTxt.length());
+    }
+    else if (outputFileName_.size() > 0)
+    {
+        fpO << outTxt << endl;
     }
     else
     {
-        cout << outTxt_ << endl;
+        cout << outTxt << endl;
     }
     
-    return 0;
-}
-
-/**
- * @brief 关闭文件
- * 
- * @return 0
-**/
-int SAVE::SAVE::close(
-
-)
-{
-    if (outputFileName.find(".gz") != string::npos || outputFileName.find(".GZ") != string::npos)
-    {
-        // 关闭文件
-        gzclose(gzfpO);
-    }
-    else if (outputFileName.size() > 0)
-    {
-        // 关闭文件
-        fpO.close();
-    }
-
     return 0;
 }

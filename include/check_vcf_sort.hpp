@@ -3,6 +3,8 @@
 #include <string>
 #include <iostream>
 #include "zlib.h"
+
+#include "vcf_open.hpp"
 #include "get_time.hpp"
 #include "strip_split_join.hpp"
 

@@ -14,24 +14,27 @@ def main(
     line_vcf_file: str,
     sample_name: str,
     mode: str,
-    genotype_vcf_file_list,
-    select_software_list,
+    genotype_vcf_file_list: list,
+    select_software_list: list, 
+    bam2bayestyper_samplename_list: list, 
+    bam2paragraph_samplename_list: list, 
     env_path, 
     restart: bool
 ):
     """
     :param code_dir: code directory
     :param work_path: work path
-    :param line_vcf_file: line的vcf
+    :param line_vcf_file: line's vcf
     :param sample_name: sample name
     :param mode: mode
     :param genotype_vcf_file_list:
     :param select_software_list:
+    :param bam2bayestyper_samplename_list:        BayesTyper all sample names
+    :param bam2paragraph_samplename_list:         Paragraph all sample names
     :param env_path: environment variable
     :param restart: Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, sample_name, merge_vcf_file
     """
-
     # log
     stdout = ""
     stderr = ""
@@ -47,18 +50,35 @@ def main(
     code_path = os.path.join(code_dir, "graphvcf merge")
 
     cmd = code_path + " -v " + line_vcf_file + " "
+    
     for index in range(len(genotype_vcf_file_list)):
+
         file = genotype_vcf_file_list[index]
         software = select_software_list[index]
-        cmd += "--" + software + " " + file + " "
-    cmd += "-n {} -m {} -o {}".format(sample_name, mode, merge_vcf_file)
+
+        if software == "BayesTyper":
+            try:
+                fileIndex = bam2bayestyper_samplename_list.index(sample_name)
+                fileTmp = file[fileIndex//30]
+                cmd += f"--{software} {fileTmp} "
+            except IndexError:
+                continue
+        elif software == "Paragraph":
+            try:
+                fileIndex = bam2paragraph_samplename_list.index(sample_name)
+                fileTmp = file[fileIndex//10]
+                cmd += f"--{software} {fileTmp} "
+            except IndexError:
+                continue
+        else:
+            cmd += f"--{software} {file} "
+            
+    cmd += f"-n {sample_name} -m {mode} -o {merge_vcf_file}"
 
     # Check if the file exists
     if restart:
         # check file
-        file_size = getsize(
-            "{}.vcf.gz".format(sample_name)
-        )
+        file_size = getsize(merge_vcf_file)
         # <= 0
         if file_size <= 0:
             # submit task

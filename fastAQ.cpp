@@ -11,9 +11,9 @@
 #include "include/convert.hpp"
 
 // define data
-#define PROGRAM_DATA "2023/05/30"
+#define PROGRAM_DATA "2023/07/20"
 // define version
-#define PROGRAM_VERSION "1.0.1"
+#define PROGRAM_VERSION "1.0.2"
 // define author
 #define PROGRAM_AUTHOR "Zezhen Du"
 // define E-mail
@@ -29,6 +29,8 @@ int main(int argc, char** argv)
         help(argv);
         return 1;
     }
+
+	cerr << "[" << __func__ << "::" << getTime() << "] " << "You are using fastAQ (v" << PROGRAM_VERSION << ")\n\n";
 
 	// 选择的子功能
 	string subcommand = argv[1];

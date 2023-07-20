@@ -1,6 +1,6 @@
 package:
   name: evg
-  version: 1.0.1
+  version: 1.0.2
 
 source:
   path: .
@@ -8,13 +8,13 @@ source:
 requirements:
   build:
     - cmake >=3.12
-    - gcc >=4.9
+    - gcc >=7.3.0
     - python =3.9
     - zlib
 
   run:
     - cmake >=3.12
-    - gcc >=4.9
+    - gcc >=7.3.0
     - python =3.9
     - zlib
     - vg

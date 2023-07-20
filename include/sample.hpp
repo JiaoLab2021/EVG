@@ -1,3 +1,6 @@
+#ifndef SAMPLE_HPP
+#define SAMPLE_HPP
+
 #include <fstream>
 #include <string>
 #include <iostream>
@@ -316,3 +319,5 @@ namespace sample
         return result;
     }
 }
+
+#endif

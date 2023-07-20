@@ -49,9 +49,7 @@ def main(
     # Check if the file exists
     if restart:
         # check file
-        file_size = getsize(
-            vcf_out_file
-        )
+        file_size = getsize(vcf_out_file)
         # <= 0
         if file_size <= 0:
             # submit task

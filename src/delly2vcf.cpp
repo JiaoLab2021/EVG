@@ -5,7 +5,7 @@ using namespace std;
 int main_delly2vcf(int argc, char** argv)
 {
     string dellyFilename;
-    string refgenomeFilename;
+    string refFileName;
     string outputFilename;
 
     // 输入参数
@@ -15,7 +15,7 @@ int main_delly2vcf(int argc, char** argv)
         static const struct option long_options[] = 
         {
             {"vcf", required_argument, 0, 'v'},
-            {"refgenome", required_argument, 0, 'r'},
+            {"reference", required_argument, 0, 'r'},
             {"out", no_argument, 0, 'o'},
             {"help", no_argument, 0, 'h'},
             {0, 0, 0, 0}
@@ -34,7 +34,7 @@ int main_delly2vcf(int argc, char** argv)
             dellyFilename = optarg;
             break;
         case 'r':
-            refgenomeFilename = optarg;
+            refFileName = optarg;
             break;
         case 'o':
             outputFilename = optarg;
@@ -61,17 +61,16 @@ int main_delly2vcf(int argc, char** argv)
         outputFilename = split(dellyFilename, ".")[0] + ".convert.vcf";
     }
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
 
-    // 构建序列字典
-    map<string,string> seq_dict = DELLY2VCF::build_dict(& refgenomeFilename);
+    // init
+    Delly2VCF Delly2VCFClass(refFileName, dellyFilename, outputFilename);
+    // build index
+    Delly2VCFClass.build_fasta_index();
+    // convert
+    Delly2VCFClass.vcf_convert();
 
-    // vcf转换
-    DELLY2VCF::vcf_convert(& dellyFilename, seq_dict, & outputFilename);
-
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
     return 0;
 }
 
@@ -79,93 +78,90 @@ int main_delly2vcf(int argc, char** argv)
 void help_delly2vcf(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v -r [options]" << endl
-       << "convert the format of delly to vcf" << endl
+       << "convert delly-generated VCF file to standard format." << endl
        << endl
        << "required arguments:" << endl
-       << "    -v, --vcf       FILE    vcf file output by delly" << endl
-       << "    -r, --refgenome FILE    refgenome genome (fasta)" << endl
+       << "    -v, --vcf         FILE    VCF file output by delly" << endl
+       << "    -r, --reference   FILE    reference genome (fasta)" << endl
        << endl
 	   << "optional arguments:" << endl
-       << "    -o, --out       FILE    output file name [xxx.convert.vcf]" << endl
+       << "    -o, --out         FILE    output file name [xxx.convert.vcf]" << endl
        << endl
        << "    -h, --help              print this help document" << endl;
 }
 
 
-map<string,string> DELLY2VCF::build_dict(string * ref_file)
+/**
+ * init
+ *
+ * @param refFileName
+ * @param dellyFilename
+ * @param outputFilename
+ * 
+**/
+Delly2VCF::Delly2VCF(
+    const string& refFileName,
+    const string& dellyFilename, 
+    const string& outputFilename
+) : refFileName_(refFileName), dellyFilename_(dellyFilename), outputFilename_(outputFilename) {}
+
+
+void Delly2VCF::build_fasta_index()
 {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Build index.\n";
-    ifstream fasta_file;
-    fasta_file.open(*ref_file, ios::in);
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Building refFileName_ index: " << refFileName_ << endl;
 
-    string fastas;
-    string fasta;
+    uint64_t genomeSize = 0;
 
-    if(!fasta_file.is_open())
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << *ref_file << "': No such file or directory." << endl;
+    // open fasta file
+    gzFile gzfp = gzopen(refFileName_.c_str(), "rb");
+
+    // input file stream
+    if(!gzfp) {
+        cerr << "[" << __func__ << "::" << getTime() << "] " 
+            << "'" << refFileName_ << "': No such file or directory." << endl;
         exit(1);
     }
-    else
-        while(getline(fasta_file,fasta))
-        {
-            if(fasta.empty())
-            {
-                continue;
-            }
+    else {
+        kseq_t *ks;
+        ks = kseq_init(gzfp);
 
-            string::size_type idx;
-            idx = fasta.find('>'); //看是否存在>，存在则在后边加换行符，不存在则直接相加
-            if (idx == string::npos)
-            {
-                fastas += strip(fasta, '\n'); // 用strip删除序列两端的换行符
-            }
-            else
-            {
-                fastas += '\n' + strip(fasta, '\n') + '\t';
-            }
+        // Define local variables to avoid frequent application and release of memory inside the loop
+        string chromosome;
+        string sequence;
+
+        while( kseq_read(ks) >= 0 ) {
+            // ks->name.s  name
+            // ks->seq.s   sequence
+            chromosome = ks->name.s;
+            sequence = ks->seq.s;
+
+            // record the length of sequence
+            genomeSize += ks->seq.l;
+
+            // build fasta index
+            FastaMap_.emplace(chromosome, sequence);
         }
 
-    fasta_file.close();
-    fastas = strip(fastas,'\n');
-    std::vector<string> fastas_split = split(fastas, "\n");
-
-    size_t size = fastas_split.size();
-
-    map<string,string> seq_dict;
-
-    for (int i = 0; i < size; ++i) 
-    {
-        std::vector<string> fastas_split_split = split(fastas_split[i], "\t"); //将loc和seq拆分，\t
-        string seq = fastas_split_split[1];
-        std::vector<string> locs = split(fastas_split_split[0], " ");
-        string loc = locs[0];
-        loc.erase(std::remove(loc.begin(), loc.end(), '>'), loc.end()); //删除loc开头的>
-        seq_dict[loc] = seq;
+        // free memory and close file
+        kseq_destroy(ks);
+        gzclose(gzfp);
     }
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Successfully build index.\n";
-
-    return seq_dict;
 }
 
-int DELLY2VCF::vcf_convert(string * dellyFilename, map<string,string> seq_dict, string * outputFilename)
+void Delly2VCF::vcf_convert()
 {
     // 打开文件
     ifstream dellyFile;
-    dellyFile.open(*dellyFilename, ios::in);
+    dellyFile.open(dellyFilename_, ios::in);
 
     string informations;
-    string out_txt;
-
-    string::size_type idx;
-    string::size_type idx_bnd;
+    string outTxt;
 
     string chromosome;
-    int start;
-    string ref_seq;
-    int end;
-    string qry_seq;
+    uint32_t start;
+    string refSeq;
+    uint32_t end;
+    string qrySeq;
 
     // 正则表达式对END进行重新替换，有[]时，不能用于regex库，所以先行删除
     std::regex end_reg("END=(\\d+)");
@@ -176,102 +172,74 @@ int DELLY2VCF::vcf_convert(string * dellyFilename, map<string,string> seq_dict, 
     
     srand((int)time(0));  // 产生随机种子,也可以把0换成NULL。
 
-    if(!dellyFile.is_open())
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << *dellyFilename << "': No such file or directory." << endl;
+    if(!dellyFile.is_open()) {
+        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << dellyFilename_ << "': No such file or directory." << endl;
         exit(1);
-    }
-    else
-    {
-        while(getline(dellyFile,informations))
-        {
-            idx = informations.find("#");
-            if (idx != string::npos)
-            {
+    } else {
+        while(getline(dellyFile,informations)) {
+            if (informations.find("#") != string::npos) {
                 std::regex reg_INFO("INFO\t.*");
-                out_txt += regex_replace(string(informations), regex(reg_INFO), string("INFO")) + "\n";
-            }
-            else
-            {
+                outTxt += regex_replace(string(informations), regex(reg_INFO), string("INFO")) + "\n";
+            } else {
                 // 删除方括号
                 informations = regex_replace(string(informations), regex(reg1), string(""));
                 informations = regex_replace(string(informations), regex(reg2), string(""));
                 
                 chromosome = split(informations, "\t")[0];
                 start = stoi(split(informations, "\t")[1]);
-                ref_seq = split(informations, "\t")[3];
-                qry_seq = split(informations, "\t")[4];
+                refSeq = split(informations, "\t")[3];
+                qrySeq = split(informations, "\t")[4];
 
-                std::regex reg_ref_seq("\t" + ref_seq + "\t");
-                std::regex reg_qry_seq("\t" + qry_seq + "\t");
+                std::regex reg_ref_seq("\t" + refSeq + "\t");
+                std::regex reg_qry_seq("\t" + qrySeq + "\t");
                 std::regex reg_PASS("PASS.*");
 
                 
                 // 找INFO字段中的END位置
-                if (regex_search(informations, end_search, end_reg))
-                {
+                if (regex_search(informations, end_search, end_reg)) {
                     // end = stoi(end_search.format("$1")) - 1;
                     end = stoi(end_search.str(1)) - 1;
-                }
-                else
-                {
+                } else {
                     cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: skip ->" << informations << endl;
                 }
 
                 // delly找的结构变异有的会很大很大，将该变异缩小。
-                if ((end - start) > 10000)
-                {
+                if ((end - start) > 10000) {
                     end = start + 10000;
                 }        
-
-                // 寻找是否是Translocation
-                idx_bnd = qry_seq.find(chromosome);
                 
-                ref_seq = seq_dict[chromosome].substr(start-1, end-start+1);
+                refSeq = FastaMap_[chromosome].substr(start-1, end-start+1);
                 
-                if (qry_seq == "<INV>")
-                {
-                    qry_seq = ref_seq;
-                    reverse(qry_seq.begin(), qry_seq.end());
-                }
-                else if (qry_seq == "<DEL>")
-                {
-                    qry_seq = ref_seq[0];
-                }
-                else if (qry_seq == "<DUP>")
-                {
-                    qry_seq = ref_seq + ref_seq;
-                }
-                else if (qry_seq == "<INS>")
-                {
-                    int chromosome_len = seq_dict[chromosome].length();
-                    int qry_start = rand()%(chromosome_len-10001)+0;
-                    int qryLen = rand()%10000+50;
-                    qry_seq = ref_seq[0] + seq_dict[chromosome].substr(qry_start, qryLen);
-                }              
-                else if (idx_bnd == string::npos) // Translocation.
-                {
-                    if (ref_seq.length() == 1)
-                    {
+                if (qrySeq == "<INV>") {
+                    qrySeq = refSeq;
+                    reverse(qrySeq.begin(), qrySeq.end());
+                } else if (qrySeq == "<DEL>") {
+                    qrySeq = refSeq[0];
+                } else if (qrySeq == "<DUP>") {
+                    qrySeq = refSeq + refSeq;
+                } else if (qrySeq == "<INS>") {
+                    uint32_t chromosome_len = FastaMap_[chromosome].length();
+                    uint32_t qry_start = rand()%(chromosome_len-10001)+0;
+                    uint32_t qryLen = rand()%10000+50;
+                    qrySeq = refSeq[0] + FastaMap_[chromosome].substr(qry_start, qryLen);
+                } else if (qrySeq.find(chromosome) == string::npos) {  // Translocation.
+                
+                    if (refSeq.length() == 1) {
                         cerr << "[" << __func__ << "::" << getTime() << "] " << "Skip this short variations: " << chromosome << " " << start << endl;
                         continue;
+                    } else {
+                        qrySeq = refSeq[0];
                     }
-                    else
-                    {
-                        qry_seq = ref_seq[0];
-                    }
-                }
-                else
-                {
+                } else {
                     cerr << "[" << __func__ << "::" << getTime() << "] " << "This variations could not be converted, please check code: " << informations << endl;
                 }
 
                 
-                informations = regex_replace(string(informations), regex(reg_ref_seq), string("\t" + ref_seq + "\t"));
-                informations = regex_replace(string(informations), regex(reg_qry_seq), string("\t" + qry_seq + "\t"));
+                informations = regex_replace(string(informations), regex(reg_ref_seq), string("\t" + refSeq + "\t"));
+                informations = regex_replace(string(informations), regex(reg_qry_seq), string("\t" + qrySeq + "\t"));
                 informations = regex_replace(string(informations), regex(reg_PASS), string("PASS\tEND=" + to_string(end)));
 
-                out_txt += informations + "\n";
+                outTxt += informations + "\n";
             }
         }
     }
@@ -279,12 +247,15 @@ int DELLY2VCF::vcf_convert(string * dellyFilename, map<string,string> seq_dict, 
     // save result
     ofstream outFile;
 
-    outFile.open(* outputFilename, ios::app);
-    outFile << out_txt;
+    outFile.open(outputFilename_, ios::app);
+
+    if(!outFile.is_open()) {
+        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << outputFilename_ << "': No such file or directory." << endl;
+        exit(1);
+    }
+    outFile << outTxt;
 
     // 释放内存
     dellyFile.close();
     outFile.close();
-
-    return 0;
 }

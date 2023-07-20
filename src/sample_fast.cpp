@@ -6,10 +6,8 @@
 #include <vector>
 #include <algorithm>
 #include <getopt.h>
-#include "../include/kseq.h"
-#include "../include/get_time.hpp"
+
 #include "../include/sample_fast.hpp"
-#include "../include/get_time.hpp"
 
 using namespace std;
 
@@ -79,7 +77,7 @@ int main_sample(int argc, char** argv)
     if (imputFileName.empty())
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
-             << "parameter error: -i.\n";
+            << "parameter error: -i.\n";
         help_sample(argv);
         exit(1);
     }
@@ -92,7 +90,7 @@ int main_sample(int argc, char** argv)
     if (frac == 0 || frac == 1)
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
-             << "Skip: frac=" << frac << ".\n";
+            << "Skip: frac=" << frac << ".\n";
         exit(1);
     }
 
@@ -104,8 +102,7 @@ int main_sample(int argc, char** argv)
     );
 
     // log
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
     
     return 0;
 }

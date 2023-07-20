@@ -10,7 +10,7 @@ int main_count(int argc, char** argv)
     string fastaFileName = "";
 
     // 输出文件
-    string outputFileName = "";
+    string outputFileName_ = "";
 
     // 输入参数
     int c;
@@ -44,7 +44,7 @@ int main_count(int argc, char** argv)
             }
             break;
         case 'o':
-            outputFileName = optarg;
+            outputFileName_ = optarg;
             break;
         case 'h':
         case '?':
@@ -63,26 +63,20 @@ int main_count(int argc, char** argv)
     }
 
     // print log
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
     
-    count::countStruct countOut;
-    if (FileName1.length() > 0)
-    {
-        count::fastq_a_count(
-            FileName1, 
-            FileName2, 
-            countOut, 
-            outputFileName
-        );
-    }
-    else
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-             << "parameter error: -i.\n";
-        exit(1);
-    }
+    // init
+    Count CountClass(
+        FileName1, 
+        FileName2, 
+        outputFileName_
+    );
+    // count
+    CountClass.fastq_a_count();
+    // save
+    CountClass.save_result();
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
     return 0;
 }
@@ -101,41 +95,38 @@ void help_count(char** argv)
        << "    -h, --help              print this help document" << endl;
 }
 
+Count::Count(
+    const string& inputFileName1, 
+    const string& inputFileName2, 
+    const string & outputFileName
+) : inputFileName1_(inputFileName1), inputFileName2_(inputFileName2), outputFileName_(outputFileName) {}
+
 
 // 打开fastq/a.gz文件
-void count::fastq_a_count(
-    string inputFileName1, 
-    string inputFileName2, 
-    countStruct & countOut, 
-    const string & outputFileName
-)
+void Count::fastq_a_count()
 {
-    if (inputFileName1.length() > 0 && inputFileName2.length() > 0) // 双端测序
-    {
+    if (inputFileName1_.length() > 0 && inputFileName2_.length() > 0) {  // 双端测序
         // 输入文件流
-        gzFile gzfp1 = gzopen(inputFileName1.c_str(), "rb");
-        gzFile gzfp2 = gzopen(inputFileName2.c_str(), "rb");
+        gzFile gzfp1 = gzopen(inputFileName1_.c_str(), "rb");
+        gzFile gzfp2 = gzopen(inputFileName2_.c_str(), "rb");
 
         // 打开文件
-        if(!gzfp1 || !gzfp2)
-        {
+        if(!gzfp1 || !gzfp2) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
-                    << "'" << inputFileName1 << "' or '" << inputFileName2
-                    << "': No such file or directory.\n";
+                << "'" << inputFileName1_ << "' or '" << inputFileName2_
+                << "': No such file or directory.\n";
             exit(1);
         }
-        else
-        {
+        else {
             kseq_t *ks1;
             kseq_t *ks2;
             ks1 = kseq_init(gzfp1);
             ks2 = kseq_init(gzfp2);
         
-            while(kseq_read(ks1) >= 0 && kseq_read(ks2) >= 0)
-            {
-                countOut.readBase +=  ks1->seq.l;
-                countOut.readBase += ks2->seq.l;
-                countOut.readNum += 2;
+            while(kseq_read(ks1) >= 0 && kseq_read(ks2) >= 0) {
+                countOut_.readBase += ks1->seq.l;
+                countOut_.readBase += ks2->seq.l;
+                countOut_.readNum += 2;
             }
 
             // 释放内存，关闭文件
@@ -144,29 +135,23 @@ void count::fastq_a_count(
             gzclose(gzfp1);
             gzclose(gzfp2);
         }
-    }
-    else if (inputFileName1.length() > 0 && inputFileName2.length() == 0) // 单端测序
-    {
+    } else if (inputFileName1_.length() > 0 && inputFileName2_.length() == 0) {  // 单端测序
         // 输入文件流
-        gzFile gzfp = gzopen(inputFileName1.c_str(), "rb");
+        gzFile gzfp = gzopen(inputFileName1_.c_str(), "rb");
 
         // 打开文件
-        if(!gzfp)
-        {
+        if(!gzfp) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
-                    << inputFileName1
-                    << "': No such file or directory.\n";
+                << inputFileName1_
+                << "': No such file or directory.\n";
             exit(1);
-        }
-        else
-        {
+        } else {
             kseq_t *ks;
             ks = kseq_init(gzfp);
         
-            while(kseq_read(ks) >= 0)
-            {
-                countOut.readBase +=  ks->seq.l;
-                countOut.readNum++;
+            while(kseq_read(ks) >= 0) {
+                countOut_.readBase +=  ks->seq.l;
+                countOut_.readNum++;
             }
 
             // 释放内存，关闭文件
@@ -174,41 +159,15 @@ void count::fastq_a_count(
             gzclose(gzfp);
         }
     }
+}
 
+void Count::save_result()
+{
     // 输出结果
-    if (outputFileName.empty()) // 如果没有指定输出文件名，则打印到标准输出
-    {
-        cout << "readBase:" << countOut.readBase << "\n" 
-            << "readNum:" << countOut.readNum << "\n" 
-            << "readLen:" << countOut.readBase/countOut.readNum 
-            << endl;
-    }
-    else // 保存到文件
-    {
-        // 输出文件流
-        ofstream outputFile;
-        outputFile.open(outputFileName, ios::out);
+    string outTxt = "readBase:" + to_string(countOut_.readBase) + "\n" + 
+                    "readNum:" + to_string(countOut_.readNum) + "\n" + 
+                    "readLen:" + to_string(countOut_.readBase/countOut_.readNum) + "\n";
 
-        // 打开文件
-        if(!outputFile)
-        {
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'"
-                << outputFileName 
-                << "': No such file or directory." 
-                << endl;
-            outputFile.close();
-            exit(1);
-        }
-        else
-        {
-            outputFile << "readBase:" << countOut.readBase << "\n" 
-                    << "readNum:" << countOut.readNum << "\n" 
-                    << "readLen:" << countOut.readBase/countOut.readNum 
-                    << endl;
-        }
-
-        // 关闭文件
-        outputFile.close();
-    }
+    SAVE saveClass(outputFileName_);
+    saveClass.save(outTxt);
 }

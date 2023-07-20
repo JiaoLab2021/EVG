@@ -14,12 +14,14 @@ def main(real_depth, read_len, fasta_base):
         select_software_list.append("Paragraph")
         select_software_list.append("BayesTyper")
 
-        if fasta_base > 200000000:  # If the genome is larger than 200Mb, use giraffe to run
+        if fasta_base > 200 * 1024 * 1024:  # If the genome is larger than 200Mb, use giraffe to run
             select_software_list.append("VG-Giraffe")
         else:  # Otherwise run with vg_map
             select_software_list.append("VG-MAP")
 
         if read_len > 130 and real_depth > 5:  # When the read length is greater than 120bp, and the sequencing depth is greater than 5×, then choose GraphTyper2
             select_software_list.append("GraphTyper2")
+        else:
+            select_software_list.append("PanGenie")  # Otherwise choose pangenie
 
     return select_software_list

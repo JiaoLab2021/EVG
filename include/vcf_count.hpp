@@ -25,19 +25,20 @@ void help_count(char** argv);
 int main_count(int argc, char** argv);
 
 
-namespace VCFCOUNT
+class VCFCount
 {
+private:
+    string vcfFileName_;
+public:
     /**
-     * @brief 统计vcf文件
+	 * init
+	 *
+	 * @param vcfFileName       input VCF  file name
      * 
-     * @param vcfFileName  输入vcf文件
-     * 
-     * @return 0
-    **/
-    int count(
-        const string & vcfFileName
-    );
+	**/
+    VCFCount(const string & vcfFileName);
 
-} // namespace VCFCOUNT
+    void count();
+};
 
 #endif

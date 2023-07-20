@@ -25,14 +25,14 @@ int findPosArray(T ar[], int n, T element)  //²éÕÒÔªËØ²¢·µ»ØÎ»ÖÃÏÂ±ê£¬find(Êı×é£
 }
 
 // ÏòÁ¿Ë÷Òı
-int findPosVector(vector <int> input, int number);
+int findPosVector(vector<int> input, int number);
 
 // ÄæĞò
 bool Reverse(int a, int b);
 
 template<typename T>
 // ¶ş·Ö²éÕÒ
-int search_Binary_left(vector<T>v, T value, int low = 0, int high = INT_MAX) // search_Binary_left(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
+int search_Binary_left(const vector<T>& v, T value, int low = 0, int high = INT_MAX) // search_Binary_left(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
 {
 	int vectorSize = v.size()-1;
 	high = min(vectorSize, INT_MAX);
@@ -62,7 +62,7 @@ int search_Binary_left(vector<T>v, T value, int low = 0, int high = INT_MAX) // 
 }
 
 template<typename T>
-int search_Binary_right(vector<T>v, T value,  int low = 0, int high = INT_MAX) // search_Binary_right(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
+int search_Binary_right(const vector<T>& v, T value,  int low = 0, int high = INT_MAX) // search_Binary_right(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
 {
 	int vectorSize = v.size()-1;
 	high = min(vectorSize, INT_MAX);

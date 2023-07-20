@@ -6,8 +6,6 @@
 #include "zlib.h"
 #include <vector>
 #include <algorithm>
-#include "get_time.hpp"
-#include "strip_split_join.hpp"
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -19,7 +17,14 @@
 #include <assert.h>
 #include <math.h>
 
+#include "kseq.h"
+#include "get_time.hpp"
+#include "strip_split_join.hpp"
+
 using namespace std;
+
+// kseq.h 打开文件
+KSEQ_INIT(gzFile, gzread)
 
 
 #ifndef __AC_KHASH_H

@@ -1,5 +1,4 @@
 // g++ vcf_convert.cpp -o vcf_convert -lz
-#include <getopt.h>
 
 #include "../include/vcf_convert.hpp"
 
@@ -9,9 +8,9 @@ using namespace std;
 int main_convert(int argc, char** argv)
 {
     // 输入文件和参数
-    string referenceFilename;
-    string vcfFilename;
-    string outFilename = "vcfConvert.out.vcf.gz";
+    string refFileName;
+    string vcfFileName;
+    string outFileName = "vcfConvert.out.vcf.gz";
     int readLen = 350; // 测序的读长
 
     // 过滤阈值
@@ -44,10 +43,10 @@ int main_convert(int argc, char** argv)
         switch (c)
         {
         case 'r':
-            referenceFilename = optarg;
+            refFileName = optarg;
             break;
         case 'v':
-            vcfFilename = optarg;
+            vcfFileName = optarg;
             break;
         case 'l':
             readLen = stoi(optarg);
@@ -59,7 +58,7 @@ int main_convert(int argc, char** argv)
             MISSRATE = stod(optarg);
             break;
         case 'o':
-            outFilename = optarg;
+            outFileName = optarg;
             break;
         case 'h':
         case '?':
@@ -77,35 +76,21 @@ int main_convert(int argc, char** argv)
     }
 
     // 打印log
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
 
-    // 构建reference的索引
-    CONVERT::refIndexStruct refIndexS;
-    CONVERT::build_reference_index(
-        referenceFilename, 
-        refIndexS
-    );
+    // If the length of "raed" is greater than 1000, there's no need to filter by read length because we don't have to process paragraph
+    readLen = (readLen > 1000) ? 0 : readLen;
+    
 
-    // 如果raed的长度大于1000，则不用read length过滤，因为不用跑paragraph
-    if (readLen > 1000)
-    {
-        readLen = 0;
-    }
-
-    // vcf文件转换
-    CONVERT::vcf_convert(
-        vcfFilename, 
-        readLen, 
-        MAF, 
-        MISSRATE, 
-        refIndexS, 
-        outFilename
-    );
+    // init
+    Convert ConvertClass(refFileName, vcfFileName, readLen, MAF, MISSRATE, outFileName);
+    // build reference index
+    ConvertClass.build_reference_index();
+    // Convert VCF file
+    ConvertClass.vcf_convert();
 
     // 打印log
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
     return 0;
 }
@@ -114,7 +99,7 @@ int main_convert(int argc, char** argv)
 void help_convert(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -r FILE -v FILE [options]" << endl
-       << "convert vcf files merged by vcftools to the format required by genome graph." << endl
+       << "convert VCF files to the required format for genome graph software." << endl
        << endl
        << "required arguments:" << endl
        << "    -r, --reference   FILE     input FASTA reference" << endl
@@ -130,12 +115,34 @@ void help_convert(char** argv)
 }
 
 
-/*
-    打开fasta文件
-    inputFileName -> refgenome
-    refIndexS -> 保存contig长度和序列信息
-*/
-void CONVERT::build_reference_index(string inputFileName, refIndexStruct & refIndexS)
+
+/**
+ * @brief Convert vcf to the format required by graph genome tools
+ * 
+ * @param refFileName     reference genome
+ * @param vcfFileName     input VCF file name
+ * @param readLen         read length
+ * @param MAF             Minimal allele frequency
+ * @param MISSRATE        Missing rate
+ * @param outFileName     output file name
+ * 
+**/
+Convert::Convert(
+    string refFileName, 
+    string vcfFileName, 
+    int readLen, 
+    double MAF, 
+    double MISSRATE, 
+    string outFileName
+) : refFileName_(refFileName), vcfFileName_(vcfFileName), readLen_(readLen), MAF_(MAF), MISSRATE_(MISSRATE), outFileName_(outFileName) {}
+
+
+/**
+ * @brief build the reference genome index
+ * 
+ * @return void
+**/
+void Convert::build_reference_index()
 {
     // 染色体名称输出，graphtyper需要
     ofstream outFile;
@@ -143,22 +150,19 @@ void CONVERT::build_reference_index(string inputFileName, refIndexStruct & refIn
     if(!outFile.is_open())
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'CHROMOSOME.NAME': No such file or directory." 
-                << endl;
+            << "'CHROMOSOME.NAME': No such file or directory." 
+            << endl;
         exit(1);
     }
 
     // 输入文件流
-    gzFile gzfp = gzopen(inputFileName.c_str(), "rb");
+    gzFile gzfp = gzopen(refFileName_.c_str(), "rb");
 
     // 打开文件
     if(!gzfp)
     {
         cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "'"
-                << inputFileName 
-                << "': No such file or directory." 
-                << endl;
+            << "'" << refFileName_ << "': No such file or directory." << endl;
         exit(1);
     }
     else
@@ -169,11 +173,11 @@ void CONVERT::build_reference_index(string inputFileName, refIndexStruct & refIn
         while( kseq_read(ks) >= 0 )
         {
             string chromosome = ks->name.s;
-            long long int chrLen = ks->seq.l;
+            uint32_t chrLen = ks->seq.l;
             string sequence = ks->seq.s;
 
-            refIndexS.chrLenTxt += "##contig=<ID=" + chromosome + ",length=" + to_string(chrLen) + ">\n";
-            refIndexS.sequenceMap[chromosome] = sequence;
+            refIndexS_.chrLenTxt += "##contig=<ID=" + chromosome + ",length=" + to_string(chrLen) + ">\n";
+            refIndexS_.sequenceMap[chromosome] = sequence;
 
             // 输出染色体名称
             outFile << chromosome + "\n";
@@ -190,139 +194,102 @@ void CONVERT::build_reference_index(string inputFileName, refIndexStruct & refIn
 
 
 /*
-    对vcf文件进行替换
-    vcfFilename -> 需要转换的vcf文件
-    readLen -> 测序文件的read长度
-    refIndexS -> contig长度和序列信息
-    outFilename -> 输出文件名
-    a. 表头加染色体长度
-    b. 第一个变异要大于read length
-    c. 序列必须与reference对应
-    d. 对vcf的第八列 'END=' 进行替换
-    e. refSeq的第一个碱基要和qrySeq的第一个碱基一样
-    f. 检查ref和qry序列是否一样，一样的位点跳过
-    g. 检查refSeq和qrySeq中是否含有atgcnATGCN外的字符，含有的话跳过该位点
-    h. 检查替换后的qry有没有相同的，有的话跳过该位点 --> e.
-    i. 检查是否有位置重复的变异
-    j. 将基因型中的.转为.|.
-    k. 将基因型中的/转为|
-    l. 只保留基因型中的二倍体变异
-    m. 检查GT是不是比qry的序列还多
+ 1. Add Chromosome Length to Header
+ 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
+ 3. First mutation should be greater than read length
+ 4. Sequences must correspond to the reference
+ 5. Replace the 'END=' in the eighth column of the VCF
+ 6. Different padding base for REF and ALT. (paragraph要求SV的ALT第一个字母要和REF一样)
+ 7. 检查ref和qry序列是否一样，一样的位点跳过
+ 8. 检查refSeq和qrySeq中是否含有atgcnATGCN外的字符，含有的话跳过该位点
+ 9. 检查替换后的qry有没有相同的，有的话跳过该位点 --> e.
+ 10. 检查是否有位置重复的变异
+ 11. 将基因型中的.转为.|. -> PanGenie
+ 12. 将基因型中的/转为|
+ 13. 只保留基因型中的二倍体变异
+ 14. 检查GT是不是比qry的序列还多
 */
 /**
- * @brief 将vcf转换为 graph genome tools 需要的格式
+ * @brief Convert vcf to the format required by graph genome tools
  * 
- * @param vcfFileName     输入vcf文件
- * @param readLen         读长
- * @param MAF            次等位基因频率
- * @param MISSRATE       缺失率
- * @param refIndexS       reference genome长度和序列信息
- * @param outFilename     输出文件名
- * 
- * @return 0
+ * @return void
 **/
-void CONVERT::vcf_convert(
-    const string & vcfFilename, 
-    const int & readLen, 
-    const double & MAF, 
-    const double & MISSRATE, 
-    const refIndexStruct & refIndexS, 
-    const string & outFilename
-)
+void Convert::vcf_convert()
 {
-    // check file是否排序
-    check_vcf_sort(vcfFilename);
+    // Whether check file is sorted
+    check_vcf_sort(vcfFileName_);
 
     // 基因组上的序列信息
-    map<string, string> seqMap = refIndexS.sequenceMap;
+    const map<string, string>& seqMap = refIndexS_.sequenceMap;
 
     // 保存转换后的结果
     string outTxt;
 
-
     // 输出文件流
-    SAVE::SAVE SAVECLASS;
-    SAVECLASS.init(
-        outFilename
-    );
-    SAVECLASS.open();
-
+    SAVE SAVECLASS(outFileName_);
 
     // 记录上一个变异的start和染色体号
     string preChromosome;
-    long long int preRefStart = 0;
+    uint32_t preRefStart = 0;
 
 
     // 输入文件流
     // 存储vcf信息
     VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS;
-    VCFOPENCLASS.init(
-        vcfFilename
-    );
-    // 打开vcf文件
-    VCFOPENCLASS.open();
+    VCFOPEN VCFOPENCLASS(vcfFileName_);
 
-
-    // 如果没有遍历完，继续
+    // If not traversed, continue
     while (VCFOPENCLASS.read(INFOSTRUCTTMP))
     {
-        // 注释行
-        if (INFOSTRUCTTMP.INFO.find("#") != string::npos)
+        // empty line, skip
+        if (INFOSTRUCTTMP.line.empty())
         {
-            // 如果vcf中含有染色体长度信息则跳过
-            if (INFOSTRUCTTMP.INFO.find("#CHROM") != string::npos)
+            continue;
+        }
+        
+        // comment line
+        if (INFOSTRUCTTMP.line.find("#") != string::npos)
+        {
+            if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos)
             {
-                // 保存染色体长度信息
-                outTxt += refIndexS.chrLenTxt;
+                // 1. Add Chromosome Length to Header
+                outTxt += refIndexS_.chrLenTxt;
 
-                // 保存表头
-                outTxt += INFOSTRUCTTMP.INFO + "\n";
+                // save header
+                outTxt += INFOSTRUCTTMP.line + "\n";
             }
-            else if (INFOSTRUCTTMP.INFO.find(",length") == string::npos)
+            // Skip if the vcf contains chromosome length information
+            else if (INFOSTRUCTTMP.line.find(",length") == string::npos)
             {
-                outTxt += INFOSTRUCTTMP.INFO + "\n";
+                outTxt += INFOSTRUCTTMP.line + "\n";
             }
 
             continue;
         }
 
-        // 非注释行
-        if (INFOSTRUCTTMP.INFOVec.size() < 9) // 先check file对不对，不对则跳出代码
-        {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Error '"
-                    << vcfFilename 
-                    << "' -> The number of vcf columns is less than 9." 
-                    << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                    << endl;
-            exit(1);
-        }
-
-
 
         /* ************************ filter SNPs by maf and missing rate ************************ */
         // 判断是否需要过滤
-        if (MAF > 0 && MISSRATE < 1)
+        if (MAF_ > 0 && MISSRATE_ < 1)
         {
             // 获取变异类型
-            INFOSTRUCTTMP.TYPE = VCFOPENCLASS.get_TYPE(
+            INFOSTRUCTTMP.ID = VCFOPENCLASS.get_TYPE(
                 INFOSTRUCTTMP.LEN, 
                 INFOSTRUCTTMP.ALTVec
             );
 
-            if (INFOSTRUCTTMP.TYPE == "SNP")  // SNP时再判断是否过滤
+            if (INFOSTRUCTTMP.ID == "SNP")  // SNP时再判断是否过滤
             {
                 double MAFTMP;  // 最小等位基因频率
                 double MISSRATETMP;  // 缺失率
 
                 // 获取所有的基因型   map<idx, vector<gtString>>
                 map<int, vector<string> > GTVecMapTmp = VCFOPENCLASS.get_gt(
-                    INFOSTRUCTTMP.INFOVec
+                    INFOSTRUCTTMP.lineVec
                 );
 
                 // 如果只有一个基因型，跳过。
-                if (GTVecMapTmp.size() <= 1)
+                if (GTVecMapTmp.empty())
                 {
                     continue;
                 }
@@ -330,11 +297,11 @@ void CONVERT::vcf_convert(
                 // 计算最小等位基因频率和缺失率
                 tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
                     GTVecMapTmp, 
-                    INFOSTRUCTTMP.INFOVec.size() - 9
+                    INFOSTRUCTTMP.lineVec.size() - 9
                 );
 
                 // 没通过阈值，直接下一个循环
-                if (MAFTMP < MAF || MISSRATETMP > MISSRATE)
+                if (MAFTMP < MAF_ || MISSRATETMP > MISSRATE_)
                 {
                     continue;
                 }
@@ -342,86 +309,86 @@ void CONVERT::vcf_convert(
         }
 
 
-
-        // 基因组上的ref序列信息
-        // 先看提交的基因组中有没有对应的染色体信息，没有的话退出程序
+        // Check if there is corresponding chromosome information in the submitted genome
         if (seqMap.find(INFOSTRUCTTMP.CHROM) == seqMap.end())
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Error: "
-                    << INFOSTRUCTTMP.CHROM 
-                    << " -> Chromosome does not exist in refgenome." 
-                    << endl;
+                << "Error: '"
+                << INFOSTRUCTTMP.CHROM 
+                << "' is not present in '" << refFileName_ << "'" 
+                << endl;
             exit(1);
         }
 
-        // 检查qrySeq有没有<之类的信息，有的话该位点直接写出 (<INS>;<DUP>)
-        if (INFOSTRUCTTMP.INFOVec[4].find("<") != string::npos)
+        // 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
+        if (INFOSTRUCTTMP.lineVec[4].find("<") != string::npos)
         {
-            outTxt += INFOSTRUCTTMP.INFO + "\n";
-
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                << "Warning: The query sequence contains the '>' symbol, skip this site -> " 
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << "\t" 
+                << INFOSTRUCTTMP.lineVec[4] << endl;
             continue;
         }
         
 
-        // 1. 检查第一个变异是否大于read length，如果大于的话再进行转换，否则跳过该变异
-        if (readLen > INFOSTRUCTTMP.POS) // paragraph的要求
+        // 3. First mutation should be greater than read length
+        if (readLen_ > INFOSTRUCTTMP.POS) // paragraph的要求
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: start of variation is less than read length, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << "\t" 
-                    << INFOSTRUCTTMP.POS << endl;
-
+                << "Warning: Start of variation is less than read length, skip this site -> "
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
             continue;
         }
         
 
-        // 2. vcf对应到reference上的序列
-        if (seqMap[INFOSTRUCTTMP.CHROM].size() < (INFOSTRUCTTMP.END)) // 检查染色体长度是否正确
+        // 4.Sequences must correspond to the reference
+        if (seqMap.at(INFOSTRUCTTMP.CHROM).size() < (INFOSTRUCTTMP.END)) // 检查染色体长度是否正确
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Chromosome length error: " 
-                    << INFOSTRUCTTMP.CHROM << ".size()=" << seqMap[INFOSTRUCTTMP.CHROM].size() << endl;
+                << "Error: The variant end position is greater than the chromosome length -> " 
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
             exit(1);
         }
         
-        string trueRefSeq = seqMap[INFOSTRUCTTMP.CHROM].substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
+        string trueRefSeq = seqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
         if (trueRefSeq != INFOSTRUCTTMP.REF) // 如果和reference genome上的序列不一样，则替换成reference genome的序列
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: sequence difference between refgenome and vcf, replace by refgenome sequence -> "
-                    << INFOSTRUCTTMP.CHROM << " " 
-                    << INFOSTRUCTTMP.POS << " " 
-                    << INFOSTRUCTTMP.REF << "(" << trueRefSeq << ")\n";
+                << "Warning: sequence difference between refgenome and vcf, replace by refgenome sequence -> "
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
 
-            INFOSTRUCTTMP.INFOVec[3] = trueRefSeq;
+            INFOSTRUCTTMP.lineVec[3] = trueRefSeq;
             INFOSTRUCTTMP.REF = trueRefSeq;
         }
 
 
-        // 3. 对vcf的第八列 'END=' 进行替换
+        // 5. Replace the 'END=' in the eighth column of the VCF
         // paragrpah (raise Exception("{}:{} error in adding ref support.".format(start, end)))
         // 正则表达式对END进行重新替换
         std::regex endReg("END=\\d+");
-        INFOSTRUCTTMP.INFOVec[7] = regex_replace(INFOSTRUCTTMP.INFOVec[7], endReg, "END=" + to_string(INFOSTRUCTTMP.END));
+        INFOSTRUCTTMP.lineVec[7] = regex_replace(INFOSTRUCTTMP.lineVec[7], endReg, "END=" + to_string(INFOSTRUCTTMP.END));
 
 
-        // 4. Different padding base for REF and ALT. (paragraph要求SV的ALT第一个字母要和REF一样)
+        // 6. Different padding base for REF and ALT. (paragraph要求SV的ALT第一个字母要和REF一样)
         for (int i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++)
         {
             string qrySeq = INFOSTRUCTTMP.ALTVec[i];
 
-            // 第一个碱基不一样的时候，对qrySeq的序列加上refSrq的前一个碱基
+            // When the first base is different, add the preceding base of refSeq to the sequence of qrySeq
             if (qrySeq[0] != INFOSTRUCTTMP.REF[0] && (qrySeq.length() > 1 || INFOSTRUCTTMP.REF.length() > 1))
             {
-                // 坐标往前挪1
+                // Move the coordinates one step backward
                 INFOSTRUCTTMP.POS = INFOSTRUCTTMP.POS - 1;
-                INFOSTRUCTTMP.INFOVec[1] = to_string(INFOSTRUCTTMP.POS);
+                INFOSTRUCTTMP.lineVec[1] = to_string(INFOSTRUCTTMP.POS);
                 INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.LEN + 1;
-                INFOSTRUCTTMP.REF = seqMap[INFOSTRUCTTMP.CHROM].substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN); // 重新提取序列信息
-                INFOSTRUCTTMP.INFOVec[3] = INFOSTRUCTTMP.REF; // 对Vector进行赋值
+                INFOSTRUCTTMP.REF = seqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN); // 重新提取序列信息
+                INFOSTRUCTTMP.lineVec[3] = INFOSTRUCTTMP.REF; // 对Vector进行赋值
 
-                // 将 'INFOSTRUCTTMP.ALTVec' 中所有序列都加上 'refSeq[0]'
+                // Add 'refSeq[0]' to all sequences in 'INFOSTRUCTTMP.ALTVec'
                 for (size_t j = 0; j < INFOSTRUCTTMP.ALTVec.size(); j++)
                 {
                     INFOSTRUCTTMP.ALTVec[j] = INFOSTRUCTTMP.REF[0] + INFOSTRUCTTMP.ALTVec[j];
@@ -430,55 +397,49 @@ void CONVERT::vcf_convert(
                 qrySeq = INFOSTRUCTTMP.ALTVec[i]; // qrySeq 重新赋值
             }
 
-            // 5. 检查refSeq和qrySeq是否一样，一样则跳过
+            // 7. 检查ref和qry序列是否一样，一样的位点跳过
             if (qrySeq == INFOSTRUCTTMP.REF)
             {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
-                        << "Warning: sequence same in REF and ALT, skip this site -> "
-                        << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                        << endl;
-
+                    << "Warning: Sequence same in REF and ALT, skip this site -> "
+                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.POS << endl;
                 continue;
             }
 
-            // 6. 检查refSeq和qrySeq中是否含有atgcnATGCN外的字符，含有的话跳过该位点
+            // 8. 检查refSeq和qrySeq中是否含有atgcnATGCN外的字符，含有的话跳过该位点
             smatch results;
             std::regex atgcReg("[^ATGCNatgcn]");
-            if (regex_search(qrySeq, results, atgcReg) != 0)
+            if (!regex_search(qrySeq, results, atgcReg))
             {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
-                        << "Warning: sequence contains non-ATGCNatgcn characters, skip this site -> "
-                        << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                        << endl;
-
+                    << "Warning: Sequence contains non-ATGCNatgcn characters, skip this site -> "
+                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.POS << endl;
                 continue;
             }
         }
         // 对qry序列进行替换
-        INFOSTRUCTTMP.INFOVec[4] = join(INFOSTRUCTTMP.ALTVec, ",");
+        INFOSTRUCTTMP.lineVec[4] = join(INFOSTRUCTTMP.ALTVec, ",");
 
 
-        // 7. 检查替换后的qry有没有相同的，有的话跳过该位点
+        // 9. 检查替换后的qry有没有相同的，有的话跳过该位点 --> e.
         // bayestyper要求 (A    ATG,TGT,ATG)
         // Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed.
-        int qrySeqNum = 0;
-        for (auto it : INFOSTRUCTTMP.ALTVec)
+        for (const auto& it : INFOSTRUCTTMP.ALTVec)
         {
-            int qrySeqNumTmp = count(INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end(), it);
-            qrySeqNum = max(qrySeqNumTmp, qrySeqNum);
-        }
-        if (qrySeqNum > 1)
-        {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: allelic repeat, skip -> "
-                    << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                    << endl;
-
-            continue;
+            if (count(INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end(), it) > 1)
+            {
+                cerr << "[" << __func__ << "::" << getTime() << "] "
+                    << "Warning: Allelic repeat, skip this site -> "
+                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.POS << endl;
+                continue;
+            }
         }
 
 
-        // 8. 检查变异是否重复，重复的话跳过
+        // 10. 检查是否有位置重复的变异
         // 如果是新的染色体，则将起始位置归零
         if (INFOSTRUCTTMP.CHROM != preChromosome)
         {
@@ -488,115 +449,97 @@ void CONVERT::vcf_convert(
         if (INFOSTRUCTTMP.POS == preRefStart)
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: multiple variants observed on position " 
-                    << INFOSTRUCTTMP.POS 
-                    << " on " 
-                    << INFOSTRUCTTMP.CHROM
-                    << ", skip this site"
-                    << endl;
-
+                << "Warning: multiple variants observed, skip this site -> " 
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
 
-        // 9. 对基因型列进行检查。只能有二倍体变异、'/'替换为'|'、'.'替换为'.|.'。PanGenie软件
         // 找FORMAT字段中gt的位置
-        vector<string> formatVec = split(strip(INFOSTRUCTTMP.INFOVec[8], '\n'), ":");
+        vector<string> formatVec = split(INFOSTRUCTTMP.FORMAT, ":");
         vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
         int maxGT = 0; // 记录最大的GT，看是否比qry的序列还多，多的话跳过该位点
         // 只要GT字段
-        INFOSTRUCTTMP.INFOVec[8] = "GT";
+        INFOSTRUCTTMP.lineVec[8] = "GT";
 
-        int gtIndex = 0;
         if (gtItera != formatVec.end()) // FORMAT中有GT
         {
             // GT的index
-            gtIndex = distance(formatVec.begin(), gtItera);
-
+            int gtIndex = distance(formatVec.begin(), gtItera);
+            
             // 对GT列进行循环
-            for (int i = 9; i < INFOSTRUCTTMP.INFOVec.size(); i++)
+            for (int i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++)
             {
                 // 找到基因型
-                string gt = strip(split(INFOSTRUCTTMP.INFOVec[i], ":")[gtIndex], '\n');
+                string gt = split(INFOSTRUCTTMP.lineVec[i], ":")[gtIndex];
 
-                // 看是不是'.'，是的话替换为'.|.'
+                // 11. 将基因型中的.转为.|. -> PanGenie
                 if (gt == ".")
                 {
                     gt = ".|.";
                 }
+                else if (gt == "0")
+                {
+                    gt = "0|0";
+                }
+                
 
-                // 将'/'替换为'|'
+                // 12. 将基因型中的/转为| -> PanGenie
                 if (gt.find("/") != string::npos)
                 {
                     std::regex reg("/");
                     gt = regex_replace(string(gt), regex(reg), string("|"));
                 }
-                INFOSTRUCTTMP.INFOVec[i] = gt;
 
                 // 循环找最大的GT
-                if (gt.find("/") != string::npos)
+                vector<string> gtVec = VCFOPENCLASS.gt_split(gt);
+                for (auto it1 : gtVec)
                 {
-                    for (auto it1 : split(gt, "/"))
+                    try
                     {
-                        try
+                        if (stoi(it1) > maxGT)
                         {
-                            if (stoi(it1) > maxGT)
-                            {
-                                maxGT = stoi(it1);
-                            }
-                        }
-                        catch(const std::invalid_argument& e)
-                        {
-                            continue;
+                            maxGT = stoi(it1);
                         }
                     }
-                }
-                else if (gt.find("|") != string::npos)
-                {
-                    for (auto it1 : split(gt, "|"))
+                    catch(const std::invalid_argument& e)
                     {
-                        try
-                        {
-                            if (stoi(it1) > maxGT)
-                            {
-                                maxGT = stoi(it1);
-                            }
-                        }
-                        catch(const std::invalid_argument& e)
-                        {
-                            continue;
-                        }
+                        continue;
                     }
                 }
-                else
+
+                // 13. 只保留基因型中的二倍体变异
+                if (gtVec.size() == 1)
                 {
-                    cerr << "[" << __func__ << "::" << getTime() << "] "
-                            << "Error: invalid delimiter: " 
-                            << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                            << endl;
-                    exit(1);
+                    gt = gtVec[0] + "|0";
                 }
+                else if (gtVec.size() > 2)
+                {
+                    gt = gtVec[0] + "|" + gtVec[1];
+                }
+                
+                INFOSTRUCTTMP.lineVec[i] = gt;
             }
         }
-        else // 没有的话退出代码
+        else // 跳过该位点
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Error: GT not in FORMAT column -> " 
-                    << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                    << endl;
-            exit(1);
+                << "Warning: GT not in FORMAT column, skip this site -> " 
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
+            continue;
         }
 
 
-        // 10. 检查GT是不是比qry的序列还多
+        // 14. 检查GT是不是比qry的序列还多
         // pangenie要求：VariantReader::VariantReader: invalid genotype in VCF.
         if (INFOSTRUCTTMP.ALTVec.size() < maxGT)
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: there are more GTs than qry sequences: " 
-                    << " (" << strip(INFOSTRUCTTMP.INFO, '\n') << ")"
-                    << endl;
-
+                << "Warning: there are more GTs than qry sequences: " 
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
             continue;
         }
         
@@ -605,19 +548,17 @@ void CONVERT::vcf_convert(
         preRefStart = INFOSTRUCTTMP.POS;
 
         // 检查information是否被清空，清空的话跳过
-        if (INFOSTRUCTTMP.INFO.empty())
+        if (INFOSTRUCTTMP.line.empty())
         {
             continue;
         }
 
         // 将替换后的字符串加到outTxt中
-        outTxt += join(INFOSTRUCTTMP.INFOVec, "\t") + "\n";
+        outTxt += join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
 
-        if (outTxt.size() > 10000000) // 每10Mb写入一次，减少磁盘IO
+        if (outTxt.size() > 10 * 1024 * 1024) // 每10Mb写入一次，减少磁盘IO
         {
-            SAVECLASS.save(
-                outTxt
-            );
+            SAVECLASS.save(outTxt);
 
             // 清空字符串
             outTxt.clear();
@@ -626,18 +567,12 @@ void CONVERT::vcf_convert(
     }
 
 
-    if (outTxt.size() >= 0)  // 最后写一次
+    if (outTxt.size() > 0)  // 最后写一次
     {
-        SAVECLASS.save(
-            outTxt
-        );
+        SAVECLASS.save(outTxt);
 
         // 清空
         outTxt.clear();
         string().swap(outTxt);
     }
-
-    // 关闭文件
-    VCFOPENCLASS.close();
-    SAVECLASS.close();
 }

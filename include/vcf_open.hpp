@@ -10,6 +10,11 @@
 #include <tuple>
 #include <iomanip>
 #include "zlib.h"
+#include <sstream>
+#include <vector>
+#include <iterator>
+
+
 #include <unordered_map>
 #include "strip_split_join.hpp"
 #include "get_time.hpp"
@@ -19,26 +24,27 @@ using namespace std;
 struct VCFINFOSTRUCT
 {
     public:
-    // 总的信息
-    string INFO = "";
-    vector<string> INFOVec;
+    // general information
+    string line;
+    vector<string> lineVec;
+    vector<string> ALTVec;  // [4]
 
-    string CHROM = "";  // CHROM  [0]
-    uint32_t POS = 0;  // POS  [1]
-    string REF = "";  // REF  [3]
-    vector<string> ALTVec;  // ALT 列表  [4]
-    double QUAL = 0;  // QUAL  [5]
-    string FILTER = ""; // FILTER  [6]
+    string CHROM;  // [0]
+    uint32_t POS;  // [1]
+    string ID;  // [2]
+    string REF;  // [3]
+    string ALT;  // [4]
+    double QUAL;  // [5]
+    string FILTER;  // [6]
+    string INFO;  // [7]
+    string FORMAT;  // [8]
 
-    string TYPE = "";  // 变异类型
-    uint32_t LEN = 0;  // ref长度
-    uint32_t END = 0;  // ref结束
+    uint32_t LEN;  // REF length
+    uint32_t END;  // ALT length
 
-    vector<string> GTVec; // 基因型列表
-    double MAF = 0.0;  // 次等位基因频率
-    double MISSRATE = 0.0;  // 缺失比例
+    VCFINFOSTRUCT() : line(""), CHROM(""), POS(0), ID(""), REF(""), ALT(""), QUAL(0.0), FILTER(""), INFO(""), FORMAT("") {}
 
-    // 清空结构体
+    // clear
     void clear();
 };
 
@@ -46,7 +52,7 @@ struct VCFINFOSTRUCT
 /**
  * @brief 打开vcf文件
  * 
- * @param vcfFileName_   the output of vcf file
+ * @param vcfFileName   the output of vcf file
  * 
  * @return
 **/
@@ -54,38 +60,70 @@ class VCFOPEN
 {
 private:
     // vcf文件
-    string vcfFileName;
+    string vcfFileName_;
 
     // 输入文件流
     gzFile gzfpI;
 public:
-    void init(
-        const string & vcfFileName_
+    VCFOPEN(
+        const string & vcfFileName
     );
 
-    int open();
+    ~VCFOPEN();
 
     bool read(
-        VCFINFOSTRUCT & INFOSTRUCTTMP_
+        VCFINFOSTRUCT & INFOSTRUCTTMP
     );
 
+    /**
+     * Get the type of variant
+     * 
+     * @param refLen  the length of REF variant
+     * @param ALTVec  vector<qrySeq>
+     * 
+     * @return string   TYPE: SNP, InDel, Deletion, Insertion, Inversion, Duplication, Other
+    **/
     string get_TYPE(
-        const uint32_t & LEN,
+        const uint32_t & refLen,
         const vector<string> & ALTVec
     );
 
-    // 找所有line的分型结果
+    /**
+     * Get a list of locus genotypes.
+     *
+     * @param lineVec  lineVec
+     * 
+     * 
+     * @return GTVecMap   map<int, vector<string> >,  map<idx, vector<GTString> >
+    **/
     map<int, vector<string> > get_gt(
-        const vector<string> & INFOVec
+        const vector<string> & lineVec
     );
 
-    // 计算MAF和MISSRATE
+    /**
+     * split gt
+     *
+     * @param gtTxt
+     * 
+     * 
+     * @return vector<gt>
+    **/
+    vector<string> gt_split(const string & gtTxt);
+
+    
+    /**
+     * Calculate MAF and MISSRATE.
+     *
+     * @param GTVecMap    map<int, vector<string> >,  map<idx, vector<GTString> >
+     * @param sampleNum   total number of samples
+     * 
+     * 
+     * @return tuple<double, double>   tuple<MAF, MISSRATE>
+    **/
     tuple<double, double> calculate(
         const map<int, vector<string> > & GTVecMap, 
         uint32_t sampleNum
     );
-
-    int close();
 };
 
 #endif

@@ -109,9 +109,6 @@ def bam2graphtyper(
     for key, value in bam_infos_map.items():
         out_txt += value["bam_file"] + "\n"
 
-    # remove special characters
-    out_txt = out_txt.strip()
-
     with open("bam_for_GraphTyper2.txt", "w") as f:
         f.write(out_txt)
 
@@ -120,29 +117,58 @@ def bam2graphtyper(
 
 # save result for BayesTyper
 def bam2bayestyper(
-        bam_infos_map
+    bam_infos_map
 ):
+    out_samplename_list = []
+    out_txt_list = []
     out_txt = ""
-
+    
+    # Only 30 samples can be processed each time
+    num = 0
     for key, value in bam_infos_map.items():
+        num += 1
         out_txt += key + "\tF\t" + os.path.basename(value["bam_file"]) + "\n"
+        out_samplename_list.append(key)
 
-    # remove special characters
-    out_txt = out_txt.strip()
+        if num == 30:
+            out_txt_list.append(out_txt)
+            out_txt = ""
+            num = 0
 
-    with open("bam_for_BayesTyper.tsv", "w") as f:
-        f.write(out_txt)
+    # last save
+    if num > 0:
+        out_txt_list.append(out_txt)
+        out_txt = ""
+        num = 0
 
-    return os.path.abspath("bam_for_BayesTyper.tsv")
+    out_file_list = []
+    num = 0
+    for out_txt in out_txt_list:
+        # save the file name
+        out_file = os.path.abspath(f"bam_for_BayesTyper_{num}.tsv")
+        out_file_list.append(out_file)
+        num += 1
+        # save to file
+        with open(out_file, "w") as f:
+            f.write(out_txt)
+
+    return out_samplename_list, out_file_list
 
 
 # save result for ParaGraph
 def bam2paragraph(
-        bam_infos_map
+    bam_infos_map
 ):
-    out_txt = "id\tpath\tdepth\tread length\n"
+    out_samplename_list = []
+    out_txt_list = []
+    head_txt = "id\tpath\tdepth\tread length\n"
 
+    out_txt = ""
+
+    # Only 10 samples can be processed each time
+    num = 0
     for key, value in bam_infos_map.items():
+        num += 1
         out_txt += key + \
                    "\t" + \
                    value["bam_file"] + \
@@ -151,11 +177,28 @@ def bam2paragraph(
                    "\t" + \
                    str(value["read_len"]) + \
                    "\n"
+        out_samplename_list.append(key)
 
-    # remove special characters
-    out_txt = out_txt.strip()
+        if num == 10:
+            out_txt_list.append(out_txt)
+            out_txt = ""
+            num = 0
 
-    with open("bam_for_Paragraph.txt", "w") as f:
-        f.write(out_txt)
+    # last save
+    if num > 0:
+        out_txt_list.append(out_txt)
+        out_txt = ""
+        num = 0
 
-    return os.path.abspath("bam_for_Paragraph.txt")
+    out_file_list = []
+    num = 0
+    for out_txt in out_txt_list:
+        # save the file name
+        out_file = os.path.abspath(f"bam_for_Paragraph_{num}.txt")
+        out_file_list.append(out_file)
+        num += 1
+        # save to file
+        with open(out_file, "w") as f:
+            f.write(head_txt + out_txt)
+
+    return out_samplename_list, out_file_list

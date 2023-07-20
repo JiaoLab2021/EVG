@@ -65,7 +65,7 @@ def convert_reference(
 
     # ############################# samtools faidx #############################
     # build index
-    cmd = "samtools faidx " + out_reference_file
+    cmd = f"samtools faidx {out_reference_file}"
 
     # submit task
     stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.faidx", env_path)

@@ -12,7 +12,7 @@ int main_breakpoint(int argc, char** argv)
     string prefix = "breakpoint";
 
     // 断点误差大小
-    int breakpointErrorSize = 1;
+    int breakpointErrorSize_ = 1;
 
     // 输入参数
     int c;
@@ -44,7 +44,7 @@ int main_breakpoint(int argc, char** argv)
             prefix = optarg;
             break;;
         case 's':
-            breakpointErrorSize = stoi(optarg);
+            breakpointErrorSize_ = stoi(optarg);
             break;
         case 'h':
         case '?':
@@ -65,13 +65,14 @@ int main_breakpoint(int argc, char** argv)
         return 1;
     }
     
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
+
+    // init
+    VCFBreakpoint VCFBreakpointClass(vcfFileName, prefix, breakpointErrorSize_);
+    // set breakpoint
+    VCFBreakpointClass.vcf_breakpoint();
     
-    BREAKPOINT::vcf_breakpoint(vcfFileName, prefix, breakpointErrorSize);
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
     return 0;
 }
@@ -80,7 +81,7 @@ int main_breakpoint(int argc, char** argv)
 void help_breakpoint(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
-       << "set error for breakpoint of variations" << endl
+       << "set error for variants breakpoints." << endl
        << endl
        << "required arguments (Note: vcf files must be sorted):" << endl
        << "    -v, --vcf           FILE       vcf file to set breakpoint error" << endl
@@ -93,137 +94,64 @@ void help_breakpoint(char** argv)
 }
 
 
-int BREAKPOINT::vcf_breakpoint(const string & vcfFileName, const string & prefix, const int & breakpointErrorSize)
+/**
+ * init
+ *
+ * @param vcfFileName                     tinput VCF  file name
+ * @param prefix                          output file prefix
+ * @param breakpointErrorSize             breakpoint error
+ * 
+**/
+VCFBreakpoint::VCFBreakpoint(
+    const string & vcfFileName, 
+    const string & prefix, 
+    const int & breakpointErrorSize
+) : vcfFileName_(vcfFileName), prefix_(prefix), breakpointErrorSize_(breakpointErrorSize) {}
+
+
+void VCFBreakpoint::vcf_breakpoint()
 {
-    // 输入文件流
-    gzFile gzfpI = gzopen(vcfFileName.c_str(), "rb");
-    if(!gzfpI)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << vcfFileName << "': No such file or directory." << endl;
-        exit(1);
-    }
+    // input file stream
+    VCFINFOSTRUCT INFOSTRUCTTMP;
+    VCFOPEN VCFOPENCLASS(vcfFileName_);
 
     // 记录转换后的结果
     string outTxt;
 
-    // 输出文件名
-    string outFileName = prefix + ".vcf.gz";
+    // ouyput file stream
+    SAVE outFile(prefix_ + ".vcf.gz");
 
-    // 输出文件流
-    gzFile outFile = gzopen(outFileName.c_str(), "wb");
+    while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // 检查是否是注释行
+            string headLine = INFOSTRUCTTMP.line + "\n";
+            outFile.save(headLine);
+        } else {
+            // 使用正则表达式提取长度信息
+            std::regex reg("END=(\\d+)");
+            
+            // 添加误差
+            INFOSTRUCTTMP.lineVec[1] = (INFOSTRUCTTMP.POS > breakpointErrorSize_) ? to_string(INFOSTRUCTTMP.POS - breakpointErrorSize_) : "1";
 
-    if(!outFile)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'"
-                << outFileName
-                << "': No such file or directory." 
-                << endl;
-        exit(1);
-    }
+            // end position
+            uint32_t refEnd = stoul(INFOSTRUCTTMP.lineVec[1]) + INFOSTRUCTTMP.LEN - 1;
+            INFOSTRUCTTMP.lineVec[7] = regex_replace(string(INFOSTRUCTTMP.lineVec[7]), regex(reg), string("END=" + to_string(refEnd)));
 
-    // 打开vcf文件进行转换
-    string information = ""; // 临时字符串
-    char line[1024]; // 一次只读1024字节的数据
+            // 添加到输出字符串中
+            outTxt += join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
 
-    while(gzgets(gzfpI, line, 1024))
-    {
-        information += line;
-        if (information.find("\n") != string::npos) // 一行结束
-        {
-            if(line != nullptr && line[0] == '\0')
-            {
-                continue;
+            // save result
+            if (outTxt.size() > 10 * 1024 * 1024) {  // 每10Mb写入一次
+                outFile.save(outTxt);
+
+                // 清空字符串
+                outTxt.clear();
             }
-
-            information = strip(information, '\n'); // 去掉换行符
-
-            if (information.find("#") != string::npos) // 检查是否是注释行
-            {
-                string headLine = information + "\n";
-                gzwrite(outFile, headLine.c_str(), headLine.length());
-            }
-            else
-            {
-                vector<string> informationVec = split(information, "\t");
-
-                // vcf的各种信息
-                string refChr = informationVec[0];
-                long long int refStart = stol(informationVec[1]);
-
-                string refSeq = informationVec[3];
-                string qrySeqs = informationVec[4];
-                vector<string> qrySeqsVec = split(qrySeqs, ",");
-                long long int refLen = refSeq.length();
-                long long int refEnd = refStart + refLen - 1;
-                long long int svLen = qrySeqs.length() - refLen;
-
-
-                // 搜索INFO里边的end信息
-                smatch endResult;
-                regex endReg("END=(\\d+)");
-
-                string::const_iterator iterStart = informationVec[7].begin();
-                string::const_iterator iterEnd = informationVec[7].end();
-                regex_search(iterStart, iterEnd, endResult, endReg);
-
-                string endResultTmp = endResult[1];
-                if (endResultTmp.empty())
-                {
-                    if (refEnd == stol(endResult[1]))
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " <<  information << endl;
-                    }
-                }
-
-                // 添加误差
-                refStart -= breakpointErrorSize;
-                informationVec[1] = to_string(refStart);
-                refEnd -= breakpointErrorSize;
-                informationVec[7] = regex_replace(string(informationVec[7]), regex(endReg), string("END=" + to_string(refEnd)));
-
-                // 添加到输出字符串中
-                for (size_t i = 0; i < informationVec.size(); i++)
-                {
-                    if (i > 0)
-                    {
-                        outTxt += "\t";
-                    }
-                    outTxt += informationVec[i];
-                }
-                outTxt += "\n";
-
-                // save result
-                if (outTxt.size() > 10000000) // 每10Mb写入一次
-                {
-                    gzwrite(outFile, outTxt.c_str(), outTxt.length());
-
-                    // 清空字符串
-                    outTxt.clear();
-                    string().swap(outTxt);
-                }
-            }
-
-            // 清空字符串
-            information.clear();
-            string().swap(information);
         }
     }
-    // 关闭文件
-    gzclose(gzfpI);
 
     // 最后写入一次
-    gzwrite(outFile, outTxt.c_str(), outTxt.length());
+    outFile.save(outTxt);
 
     // 清空字符串
-    outTxt.clear();
     string().swap(outTxt);
-
-    gzclose(outFile);
-
-    return 0;
 }

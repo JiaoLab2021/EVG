@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2023/05/30"
-__version__ = "1.0.1"
+__data__ = "2023/07/20"
+__version__ = "1.0.2"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -26,10 +26,14 @@ import convert, select_software, merge, bwa, GraphTyper2, \
 # environment variable
 env_path = {'PATH': os.environ.get('PATH')}
 
+# work directory
+base_work_dir = os.getcwd()
+
 # global parameters
 flag = "*"*65
 force = False
 restart = False
+select_software_list = []  # Final selection of software list
 threads = 10
 jobs_num = 3
 mode = "precise"
@@ -38,7 +42,7 @@ merge_mode = "all"  # Merge process algorithm, if the same, use all algorithm
 
 
 # log
-logger = logging.getLogger('SynDiv')
+logger = logging.getLogger('EVG')
 formatter = logging.Formatter('[%(asctime)s] %(message)s')
 handler = logging.StreamHandler()  # output to the console
 handler.setFormatter(formatter)
@@ -56,7 +60,7 @@ def print_merge(
     logger.error(f"{flag} Result {flag}")
 
     for key, value in vcf_merge_files_map.items():
-        log = "{}: {}".format(key, value)
+        log = f"{key}: {value}"
         logger.error(log)
 
     return 0
@@ -78,16 +82,14 @@ def makedir(
         if force_tmp:  # If forced to delete, empty the directory and create a new one
             shutil.rmtree(path_dir)
             os.makedirs(path_dir)
-            log = '[EVG.makedir] \'{}\' already exists, clear and recreate.'.format(path_dir)
+            log = f'[EVG.makedir] \'{path_dir}\' already exists, clear and recreate.'
             logger.error(log)
         elif restart_tmp:
-            log = '[EVG.makedir] \'{}\' already exists, restart is used, ' \
-                  'skipping emptying folders.'.format(path_dir)
+            log = f'[EVG.makedir] \'{path_dir}\' already exists, restart is used, skipping emptying folders.'
             logger.error(log)
         else:  # Print a warning and exit code if not forced to delete
-            log = '[EVG.makedir] \'{}\' already exists. used --force to overwrite or --restart to restart workflow.'.format(path_dir)
-            logger.error(log)
-            raise SystemExit(1)
+            log = f'[EVG.makedir] \'{path_dir}\' already exists. used --force to overwrite or --restart to restart workflow.'
+            raise SystemExit(log)
     else:
         os.makedirs(path_dir)
 
@@ -106,10 +108,8 @@ def get_samples_path(
 
     # Judge the length of samples_list
     if len(samples_list) == 0:
-        log = '[EVG.get_parser] Error: empty file -> {}.\n'.format(samples_file)
-        logger.error(log)
-        # os.killpg(os.getpgid(os.getpid()), signal.SIGKILL)
-        raise SystemExit(1)
+        log = f'[EVG.get_parser] Error: empty file -> {samples_file}.\n'
+        raise SystemExit(log)
 
     for sample in samples_list:
         if not sample or "#" in sample or "read1_path" in sample:
@@ -132,9 +132,7 @@ def get_parser():
     :return: parser_map = {
         "reference_file": reference_file,
         "vcf_file": vcf_file,
-        "samples_file": samples_file,
-        "path": path,
-        "software_list": software_list
+        "samples_file": samples_file
     }
     """
     # log
@@ -218,13 +216,12 @@ def get_parser():
     # Sequencing data files
     samples_file = args.samples.name
 
-    # software list
-    software_list = args.software
-
     # Modify global variables
-    global force, restart, threads, jobs_num, mode, need_depth, merge_mode
+    global force, restart, select_software_list, threads, jobs_num, mode, need_depth, merge_mode
     force = args.force
     restart = args.restart
+    # software list
+    select_software_list = args.software
     threads = args.threads
     jobs_num = args.jobs
     mode = args.mode
@@ -235,16 +232,11 @@ def get_parser():
     vcf_file = os.path.abspath(vcf_file)
     samples_file = os.path.abspath(samples_file)
 
-    # current path
-    path = os.getcwd()
-
     # dictionary of output parameters
     parser_map = {
         "reference_file": reference_file,
         "vcf_file": vcf_file,
-        "samples_file": samples_file,
-        "path": path,
-        "software_list": software_list
+        "samples_file": samples_file
     }
 
     return parser_map
@@ -353,17 +345,21 @@ def run_graphtyper(
 def run_paragraph(
         reference_file: str,
         vcf_file: str,
-        bam2paragraph_file: str,
+        bam2paragraph_file_list: list,
         work_path: str
 ):
     """
-    :param reference_file:      reference genome
-    :param vcf_file:            vcf file
-    :param bam2paragraph_file:  configuration file of BAM
-    :param work_path:           work path
+    :param reference_file:           reference genome
+    :param vcf_file:                 vcf file
+    :param bam2paragraph_file_list:  configuration file of BAM (10 ways for each)
+    :param work_path:                work path
     :return: "Paragraph", sample_name, paragraph_vcf_file
     """
     logger.error(f"{flag} Paragraph {flag}")
+
+    stdout = ""
+    stderr = ""
+    log_out = ""
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -376,35 +372,55 @@ def run_paragraph(
     os.chdir(paragraph_path)
 
     # genotype
-    stdout, stderr, log_out, paragraph_vcf_file = Paragraph.main(
-        reference_file,
-        vcf_file,
-        bam2paragraph_file, 
-        env_path, 
-        threads,
-        restart
-    )
+    num = 0
+    paragraph_vcf_file_list = []
+    for bam2paragraph_file in bam2paragraph_file_list:
+        # Create folder and switch paths
+        os.chdir(paragraph_path)
+        paragraph_sample_path = os.path.join(paragraph_path, str(num))
+        makedir(
+            paragraph_sample_path,
+            force_tmp=force,
+            restart_tmp=restart
+        )
+        os.chdir(paragraph_sample_path)
 
-    return stdout, stderr, log_out, "Paragraph", "", paragraph_vcf_file
+        stdout, stderr, log_out, paragraph_vcf_file = Paragraph.main(
+            reference_file,
+            vcf_file,
+            bam2paragraph_file, 
+            env_path, 
+            threads,
+            restart
+        )
+
+        paragraph_vcf_file_list.append(paragraph_vcf_file)
+        num += 1
+    
+    return stdout, stderr, log_out, "Paragraph", "", paragraph_vcf_file_list
 
 
 # BayesTyper
 def run_bayestyper(
-        reference_file: str,
-        vcf_file: str,
-        bam2bayestyper_file: str,
-        work_path: str,
-        bam_infos_map: str
+    reference_file: str,
+    vcf_file: str,
+    bam2bayestyper_file_list: list,
+    work_path: str,
+    bam_infos_map: str
 ):
     """
-    :param reference_file:        reference genome
-    :param vcf_file:              vcf file
-    :param bam2bayestyper_file:   configuration file
-    :param work_path:             work path
-    :param bam_infos_map:         the informations of BAM
-    :return:
+    :param reference_file:             reference genome
+    :param vcf_file:                   vcf file
+    :param bam2bayestyper_file_list:   configuration file list (30 ways for each)
+    :param work_path:                  work path
+    :param bam_infos_map:              the informations of BAM
+    :return: stdout, stderr, log_out, "BayesTyper", "", bayestyper_vcf_file_list
     """
     logger.error(f"{flag} BayesTyper {flag}")
+
+    stdout = ""
+    stderr = ""
+    log_out = ""
 
     # Create folder and switch paths
     os.chdir(work_path)
@@ -417,17 +433,32 @@ def run_bayestyper(
     os.chdir(bayestyper_path)
 
     # genotype
-    stdout, stderr, log_out, bayestyper_vcf_file = BayesTyper.main(
-        reference_file,
-        vcf_file,
-        bam2bayestyper_file,
-        bam_infos_map, 
-        env_path, 
-        threads,
-        restart
-    )
+    num = 0
+    bayestyper_vcf_file_list = []
+    for bam2bayestyper_file in bam2bayestyper_file_list:
+        # Create folder and switch paths
+        os.chdir(bayestyper_path)
+        bayestyper_sample_path = os.path.join(bayestyper_path, str(num))
+        makedir(
+            bayestyper_sample_path,
+            force_tmp=force,
+            restart_tmp=restart
+        )
+        os.chdir(bayestyper_sample_path)
 
-    return stdout, stderr, log_out, "BayesTyper", "", bayestyper_vcf_file
+        stdout, stderr, log_out, bayestyper_vcf_file = BayesTyper.main(
+            reference_file,
+            vcf_file,
+            bam2bayestyper_file,
+            bam_infos_map, 
+            env_path, 
+            threads,
+            restart
+        )
+        bayestyper_vcf_file_list.append(bayestyper_vcf_file)
+        num += 1
+
+    return stdout, stderr, log_out, "BayesTyper", "", bayestyper_vcf_file_list
 
 
 # vg_map_giraffe
@@ -568,10 +599,12 @@ def run_pangenie(
 # Conversion of reference genome and vcf files
 def ref_vcf_convert(
     parser_map,
+    fastq_infos_map, 
     work_path
 ):
     """
     :param parser_map: get_parser(), Returned parameter dictionary
+    :param fastq_infos_map: the information of all reads
     :param work_path:  work path
     :return: stdout, stderr, log_out, convert_out_map = {
                 "reference_file": reference_file,
@@ -657,18 +690,21 @@ def ref_vcf_convert(
             return stdout, stderr, log_out, {}
 
     # ################################### Build vg graph and index ###################################
-    # First select the vg software
-    select_software_list = []
-    if isinstance(parser_map["software_list"], str):  # Program Automatic Judgment Software
-        if fasta_base > 200000000:  # If the genome is larger than 200Mb, use giraffe to run
-            select_software_list.append("giraffe")
-        else:  # Otherwise run with vg_map
-            select_software_list.append("map")
-    else:  # user-defined software
-        if "VG-MAP" in parser_map["software_list"]:
-            select_software_list.append("map")
-        if "VG-Giraffe" in parser_map["software_list"]:
-            select_software_list.append("giraffe")
+    # Minimum sequencing depth and sequencing length for obtaining sequencing data
+    depth_min = 1000
+    read_len_min = 100000
+    for key, value in fastq_infos_map.items():
+        depth_min = min(depth_min, value["real_depth"])
+        read_len_min = min(read_len_min, value["read_len"])
+
+    # run select_software
+    global select_software_list
+    if isinstance(select_software_list, str):  # Program Automatic Judgment Software
+        select_software_list = select_software.main(depth_min, read_len_min, fasta_base)
+
+    # The temporary list is used to determine whether to build an index
+    select_software_tmp_list = list(set(select_software_list) & {"VG-MAP", "VG-Giraffe"})
+    select_software_tmp_list = ["map" if x == "VG-MAP" else "giraffe" if x == "VG-Giraffe" else x for x in select_software_tmp_list]
 
     # multi-process process pool
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
@@ -678,9 +714,9 @@ def ref_vcf_convert(
         # save the index result
         to_do = []
 
-        if len(select_software_list) > 0:  # If the number of files is greater than 1, then build the index
+        if len(select_software_tmp_list) > 0:  # If the number of files is greater than 1, then build the index
             # Map and giraffe build indexes
-            for software in select_software_list:
+            for software in select_software_tmp_list:
                 # switch paths
                 os.chdir(work_path)
 
@@ -712,7 +748,7 @@ def ref_vcf_convert(
         os.chdir(work_path)
 
         # GraphAligner build index
-        if "GraphAligner" in parser_map["software_list"]:
+        if "GraphAligner" in select_software_list:
             # switch paths
             index_dir = os.path.join(work_path, "GraphAligner")
             makedir(
@@ -854,14 +890,12 @@ def read_convert(
 def run_genotype(
     main_path: str, 
     work_path: str,
-    parser_map,
     convert_out_map,
     bam_infos_map
 ):
     """
     :param main_path:        root path
     :param work_path:        work path
-    :param parser_map:       the return of get_parser
     :param convert_out_map:  Hash table after conversion of vcf, reference and sequencing files
     :param bam_infos_map:    run_bwa return value
     :return: stdout, stderr, log_out, vcf_merge_files_map
@@ -876,34 +910,23 @@ def run_genotype(
     # switch paths
     os.chdir(work_path)
 
-    # Minimum sequencing depth and sequencing length for obtaining sequencing data
-    depth_min = 1000
-    read_len_mix = 100000
-    for key, value in bam_infos_map.items():
-        depth_min = min(depth_min, value["real_depth"])
-        read_len_mix = min(read_len_mix, value["read_len"])
-
-    # run select_software
-    if isinstance(parser_map["software_list"], str):  # Program Automatic Judgment Software
-        select_software_list = select_software.main(depth_min, read_len_mix, convert_out_map["fasta_base"])
-    else:  # user-defined software
-        select_software_list = parser_map["software_list"]
-
     # ################################### config ###################################
     # Generate configuration files for GraphTyper2, BayesTyper and Paragraph
     bam2graphtyper_file = ""
-    bam2bayestyper_file = ""
-    bam2paragraph_file = ""
+    bam2bayestyper_samplename_list = []
+    bam2bayestyper_file_list = []
+    bam2paragraph_samplename_list = []
+    bam2paragraph_file_list = []
     if "GraphTyper2" in select_software_list:
         bam2graphtyper_file = bwa.bam2graphtyper(
             bam_infos_map
         )
     if "BayesTyper" in select_software_list:
-        bam2bayestyper_file = bwa.bam2bayestyper(
+        bam2bayestyper_samplename_list, bam2bayestyper_file_list = bwa.bam2bayestyper(
             bam_infos_map
         )
     if "Paragraph" in select_software_list:
-        bam2paragraph_file = bwa.bam2paragraph(
+        bam2paragraph_samplename_list, bam2paragraph_file_list = bwa.bam2paragraph(
             bam_infos_map
         )
 
@@ -1000,7 +1023,7 @@ def run_genotype(
             pool_out = pool.apply_async(run_paragraph, args=(
                 convert_out_map["reference_file"],
                 convert_out_map["vcf_sv_out_name"],
-                bam2paragraph_file,
+                bam2paragraph_file_list,
                 work_path,
             ), error_callback=throw_exception)
             # Save the return value of multiple threads
@@ -1010,7 +1033,7 @@ def run_genotype(
             pool_out = pool.apply_async(run_bayestyper, args=(
                 convert_out_map["reference_file"],
                 convert_out_map["vcf_out_name"],
-                bam2bayestyper_file,
+                bam2bayestyper_file_list,
                 work_path,
                 bam_infos_map
             ), error_callback=throw_exception)
@@ -1085,14 +1108,14 @@ def run_genotype(
         software_tmp_list = []  # Temporary list for submitting tasks
         for software in select_software_list:  # software not in results file
             if software not in genotype_outs_map.keys():
-                log = '[EVG.genotype] {}: {} results are missing, skipped.'.format(sample_name_tmp, software)
-                sys.stdout.write(log)
+                log = f"[EVG.genotype] Warning: '{sample_name_tmp}' -> '{software}' results are missing, skipped."
+                logger.error(log)
                 continue
             software_tmp_list.append(software)
             if isinstance(genotype_outs_map[software], dict):
                 if sample_name_tmp not in genotype_outs_map[software].keys():  # sample_name is not in the result file
-                    log = '[EVG.genotype] {}: {} results are missing, skipped.'.format(sample_name_tmp, software)
-                    sys.stdout.write(log)
+                    log = f"[EVG.genotype] Warning: '{sample_name_tmp}' -> '{software}' results are missing, skipped."
+                    logger.error(log)
                     continue
                 vcf_out_tmp_list.append(genotype_outs_map[software][sample_name_tmp])
             else:
@@ -1107,7 +1130,9 @@ def run_genotype(
                 sample_name_tmp,
                 merge_mode,
                 vcf_out_tmp_list,
-                software_tmp_list,
+                software_tmp_list, 
+                bam2bayestyper_samplename_list, 
+                bam2paragraph_samplename_list, 
                 env_path, 
                 restart,
             ), error_callback=throw_exception
@@ -1124,12 +1149,15 @@ def run_genotype(
 
         # Report an error if there is a problem with the exit code
         if log_out:
+            # Close the thread pool
+            pool.close()
+            pool.join()
             return stdout, stderr, log_out, {}
 
         # Assigned to the total hash table
         vcf_merge_files_map[sample_name] = merge_vcf_file
 
-        # Close the thread pool
+    # Close the thread pool
     pool.close()
     pool.join()
 
@@ -1140,9 +1168,7 @@ def run_genotype(
 def throw_exception(name):
     # print log
     log = '[EVG.genotype] %s' % name.__cause__
-    logger.error(log)
-    # os.killpg(os.getpgid(os.getpid()), signal.SIGKILL)
-    raise SystemExit(1)
+    raise SystemExit(log)
 
 
 def main():
@@ -1151,7 +1177,7 @@ def main():
 
     # ################################################ EVG convert ################################################
     # Return to the main working path
-    os.chdir(parser_map["path"])
+    os.chdir(base_work_dir)
     # multi-process process pool
     pool = Pool(processes=threads)
 
@@ -1165,15 +1191,16 @@ def main():
     samples_map = get_samples_path(parser_map["samples_file"])
 
     # reference and vcf, Convert storage paths and create folders
-    convert_dir = os.path.join(parser_map["path"], "convert")  # Conversion file storage path
+    convert_dir = os.path.join(base_work_dir, "convert")  # Conversion file storage path
     makedir(
         convert_dir,
         force_tmp=force,
         restart_tmp=restart
     )
 
+    # ## fastAQ count -i refgenome.fa
     # Return to the main working path
-    os.chdir(parser_map["path"])
+    os.chdir(base_work_dir)
     # Evaluate the fasta file
     stdout, stderr, log_out, fasta_base = convert.fasta_count(
         code_dir, 
@@ -1182,36 +1209,30 @@ def main():
     )
     # Report an error if there is a problem with the exit code
     if log_out:
-        logger.error(log_out.strip())
-        exit(1)
+        raise SystemExit(log_out.strip())
 
-    # Convert reference and vcf
-    # Multi-thread submission
-    pool_convert_out = pool.apply_async(
-        ref_vcf_convert, args=(
-            parser_map,
-            convert_dir,
-        ), error_callback=throw_exception
-    )
-
+    # ## fastAQ count/sample -i read_1.fa -i read_2.fa
     # convert read
     # Multi-thread submission
     for key, value in samples_map.items():
         # Return to the main working path
-        os.chdir(parser_map["path"])
+        os.chdir(base_work_dir)
 
         sample_name = key
         fastq_file1 = value[0]
         fastq_file2 = value[1]
 
         # Multi-threaded conversion of sequencing files
-        pool_out = pool.apply_async(read_convert, args=(
-            convert_dir,
-            sample_name,
-            fastq_file1,
-            fastq_file2,
-            fasta_base,
-        ), error_callback=throw_exception)
+        pool_out = pool.apply_async(
+            read_convert, 
+            args=(
+                convert_dir,
+                sample_name,
+                fastq_file1,
+                fastq_file2,
+                fasta_base,
+            ), error_callback=throw_exception
+        )
 
         # Save the return value of multiple threads
         pool_out_list.append(pool_out)
@@ -1219,18 +1240,11 @@ def main():
         # Multi-thread interval
         time.sleep(0.05)
 
-    # Get multithreaded return value
-    stdout, stderr, log_out, convert_out_map = pool_convert_out.get()  # the return of vcf and reference
-    # Report an error if there is a problem with the exit code
-    if log_out:
-        logger.error(log_out.strip())
-        exit(1)
     for pool_out in pool_out_list:  # The return value of read
         stdout, stderr, log_out, fastq_info_map = pool_out.get()
         # Report an error if there is a problem with the exit code
         if log_out:
-            logger.error(log_out.strip())
-            exit(1)
+            raise SystemExit(log_out.strip())
         # Assigned to the total hash table
         fastq_infos_map[fastq_info_map["sample_name"]] = {
             "fastq_file1": fastq_info_map["fastq_file1"],
@@ -1243,9 +1257,15 @@ def main():
     pool.close()
     pool.join()
 
+    # ## refgenome and VCF convert
+    stdout, stderr, log_out, convert_out_map = ref_vcf_convert(parser_map, fastq_infos_map, convert_dir)
+    # Report an error if there is a problem with the exit code
+    if log_out:
+        raise SystemExit(log_out.strip())
+
     # ################################################ bwa mem ################################################
     # Return to the main working path
-    os.chdir(parser_map["path"])
+    os.chdir(base_work_dir)
     # Reinitialize the thread pool
     pool = Pool(processes=jobs_num)
 
@@ -1256,7 +1276,7 @@ def main():
     bam_infos_map = {}
 
     # Sequence comparison storage path
-    bwa_dir = os.path.join(parser_map["path"], "bwa")  # the path of bwa mem
+    bwa_dir = os.path.join(base_work_dir, "bwa")  # the path of bwa mem
 
     # Create a directory
     makedir(
@@ -1296,8 +1316,7 @@ def main():
         stdout, stderr, log_out, bam_info_map = pool_out.get()
         # Report an error if there is a problem with the exit code
         if log_out:
-            logger.error(log_out.strip())
-            exit(1)
+            raise SystemExit(log_out.strip())
         # Assigned to the total hash table
         bam_infos_map[bam_info_map["sample_name"]] = {
             "fastq_file1": bam_info_map["fastq_file1"],
@@ -1313,10 +1332,10 @@ def main():
 
     # ################################################ genotype ################################################
     # Return to the main working path
-    os.chdir(parser_map["path"])
+    os.chdir(base_work_dir)
 
     # Genotyping result path
-    genotype_dir = os.path.join(parser_map["path"], "genotype")  # the path of bwa mem
+    genotype_dir = os.path.join(base_work_dir, "genotype")  # the path of bwa mem
     # Create a directory
     makedir(
         genotype_dir,
@@ -1325,16 +1344,14 @@ def main():
     )
     # genotyping
     stdout, stderr, log_out, vcf_merge_files_map = run_genotype(
-        parser_map["path"], 
+        base_work_dir, 
         genotype_dir,
-        parser_map,
         convert_out_map,
         bam_infos_map
     )
     # Report an error if there is a problem with the exit code
     if log_out:
-        logger.error(log_out.strip())
-        exit(1)
+        raise SystemExit(log_out.strip())
 
     # printout result
     print_merge(vcf_merge_files_map)

@@ -13,6 +13,10 @@
 #include <iomanip>
 #include <cstdlib>
 #include "zlib.h"
+#include <getopt.h>
+
+#include "vcf_open.hpp"
+#include "save.hpp"
 #include "strip_split_join.hpp"
 #include "sort_find.hpp"
 #include "get_time.hpp"
@@ -22,99 +26,105 @@
 using namespace std;
 
 
-// 全局变量
-// rocKey  
-extern string rocKey;  // (FORMAT.<name>/INFO.<name>) [FORMAT.DP]
-// rocType判断是用recall来计算roc，还是只用genotype计算roc  recall/genotype [genotype]
-extern string rocType;
-
 
 void help_recall(char** argv);
 int main_recall(int argc, char** argv);
 
 
-namespace RECALL
+struct vcfStructure
 {
-    struct vcfStructure
-    {
-        map<string,vector<int> > refStartVecMap;  // map<chr,vector<refStart> >
-        
-        map<string, map<int, tuple<int, vector<int>, string, int, vector<int> > > > chrStartLenInfoGtVecMap;  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen, gtVec> > >
-        
-        vector<int> allLengthList;  // 所有变异的长度
-    };
-
-
-    // 对变异长度进行统计的Bool函数
-    class f_mod
-    {
-    private:
-        int dv1;
-        int dv2;
-
-    public:
-        f_mod(int d1 = 1, int d2 = 2) : dv1(d1), dv2(d2) {}
+    map<string,vector<uint32_t> > refStartVecMap;  // map<chr,vector<refStart> >
     
-        bool operator() (int x) {return  dv1 <= x && x <= dv2;}
-    };
+    map<string, map<uint32_t, tuple<uint32_t, vector<uint32_t>, string, int32_t, vector<int> > > > chrStartLenInfoGtTupMap;  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen, gtVec> > >
+    
+    vector<uint32_t> allLengthList;  // 所有变异的长度
+};
+
+// 对变异长度进行统计的Bool函数
+class f_mod
+{
+private:
+    uint32_t dv1;
+    uint32_t dv2;
+
+public:
+    f_mod(uint32_t d1 = 1, uint32_t d2 = 2) : dv1(d1), dv2(d2) {}
+
+    bool operator() (uint32_t x) {return  dv1 <= x && x <= dv2;}
+};
 
 
+class VCFRecall
+{
+private:
+    // input
+    string trueVCFFileName_;
+    string evaluateFileName_;
+    string rocKey_;
+    string rocType_;
+
+    vcfStructure trueVCFStrcuture_;
+
+    // ROC -> save the number of DP or GQ
+    int rocColNum_;
+    vector<string> rocKeyVec_;
+
+    // Variable length range
+    vector<string> lengthVec_;
+
+    // output
+    int bufferSize_;
+    map<float, vector<uint32_t> > rocCallMap_;  // map<DP/GQ, vector<length>> The software identifies all variants
+    map<float, vector<uint32_t> > rocRecallMap_;  // map<DP/GQ, vector<length>> The software identifies the correct variants
+    
+public:
     /**
-	 * 对vcf文件进行排序并构建索引
+	 * init
 	 *
-	 * @param genotype_filename    输入文件
+	 * @param trueVCFFileName    true set
+     * @param evaluateFileName   evaluation set
+     * @param rocKey             Keywords used to extract roc score
+     * @param rocType            roc calculation rules (recall/genotype)
      * 
-     * 
-     * @return outStructure        vcfStructure
 	**/
-    vcfStructure build_index(
-        string genotype_filename
+    VCFRecall(
+        const string& trueVCFFileName, 
+        const string& evaluateFileName, 
+        const string& rocKey, 
+        const string& rocType
     );
 
 
     /**
-	 * 对gramtools的结果进行转换
-	 *
-	 * @param evaluateFilename    输入文件
+     * build the index of true VCF file
      * 
-     * 
-     * @return outFileName        输出文件
-	**/
-    string gramtools_convert(
-        string evaluateFilename
-    );
+     * @return void
+    **/
+    void build_true_index();
 
 
     /**
-	 * genotype评估函数
-	 *
-	 * @param evaluateFilename            输入文件（待评估）
-     * @param chrStartLenInfoGtVecMap     真集所有的vcf信息
-     * @param all_length_list             真集所有vcf长度
+	 * Convert the results of gramtools
      * 
-     * 
-     * @return int             0
+     * @return void
 	**/
-    int evulate_gt(
-        string evaluateFilename, 
-        map<string, map<int, tuple<int, vector<int>, string, int, vector<int> > > > & chrStartLenInfoGtVecMap, 
-        vector<int> & all_length_list
-    );
+    void gramtools_convert();
 
 
     /**
-	 * recall评估函数
-	 *
-	 * @param evaluateFilename            输入文件（待评估）
-     * @param trueVcfStructure            build_index()输出结果
+	 * genotype evaluation function
      * 
-     * 
-     * @return int             0
+     * @return void
 	**/
-    int evulate_recall(
-        const string & evaluateFilename, 
-        vcfStructure & trueVcfStructure
-    );
+    void evulate_gt();
+
+
+    /**
+	 * genotype evaluation function
+     * 
+     * @return void
+	**/
+    void evulate_recall();
 
 
     /**
@@ -133,6 +143,19 @@ namespace RECALL
 
 
     /**
+	 * 获取位点基因型列表.
+	 *
+     * @param INFOSTRUCTTMP    line information
+     * 
+     * 
+     * @return rocNum
+	**/
+    float get_roc(
+        const VCFINFOSTRUCT& INFOSTRUCTTMP
+    );
+
+
+    /**
 	 * 获取变异的长度信息
 	 *
      * @param refLen            ref长度
@@ -140,11 +163,11 @@ namespace RECALL
      * @param gtVec             基因型列表
      * 
      * 
-     * @return int              svLength
+     * @return int32_t              svLength
 	**/
-    int sv_length_select(
-        const int & refLen, 
-        const vector<int> & qryLenVec, 
+    int32_t sv_length_select(
+        const uint32_t & refLen, 
+        const vector<uint32_t> & qryLenVec, 
         const vector<int> & gtVec
     );
 
@@ -152,15 +175,13 @@ namespace RECALL
     /**
 	 * 统计变异长度信息
 	 *
-     * @param sv_length         划分的区间
-	 * @param length_list       长度列表
+	 * @param length_list         长度列表
      * 
      * 
-     * @return vector<int>      每个区间的长度
+     * @return vector<uint32_t>   每个区间的长度
 	**/
-    vector<int> count_num(
-        vector<string> sv_length, 
-        vector<int> length_list
+    vector<uint32_t> count_num(
+        vector<uint32_t> length_list
     );
 
 
@@ -176,7 +197,7 @@ namespace RECALL
      * 
      * @return tuple<int, vector<int> >      tuple<refLen, vector<qryLen> >
 	**/
-    tuple<int, vector<int> > get_hap_len(
+    tuple<uint32_t, vector<uint32_t> > get_hap_len(
         const string & svType, 
         const string & refSeq, 
         const string & qrySeqs, 
@@ -188,14 +209,14 @@ namespace RECALL
     /**
 	 * 保存recall中failCall的结果
 	 *
-	 * @param chrStartLenInfoGtVecMap     真集中用剩下的vcf信息
+	 * @param chrStartLenInfoGtTupMap     真集中用剩下的vcf信息
      * @param outFileName                 输出文件名
      * 
      * 
      * @return int             0
 	**/
     int saveFailCall(
-        map<string, map<int, tuple<int, vector<int>, string, int, vector<int> > > > & chrStartLenInfoGtVecMap, 
+        map<string, map<uint32_t, tuple<uint32_t, vector<uint32_t>, string, int32_t, vector<int> > > > & chrStartLenInfoGtTupMap, 
         const string & outFileName
     );
 
@@ -203,19 +224,14 @@ namespace RECALL
     /**
 	 * 保存recall中failCall的结果
 	 *
-	 * @param rocCallMap
-     * @param rocRecallMap
-     * @param all_length_list     所有变异长度
+     * @param allLengthList     所有变异长度
      * 
      * 
      * @return int             0
 	**/
     void roc_calculate(
-        const map<float, vector<int> > & rocCallMap, 
-        const map<float, vector<int> > & rocRecallMap, 
-        const vector<int> & all_length_list
+        const vector<uint32_t> & allLengthList
     );
-    
-} // namespace RECALL
+};
 
 #endif

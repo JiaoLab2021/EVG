@@ -6,73 +6,42 @@ int check_vcf_sort(string inputVcf)
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Checking sort: '"<< inputVcf << "'\n";
 
-    // 输入文件流
-    gzFile gzfp = gzopen(inputVcf.c_str(), "rb");
+    // input file stream
+    VCFINFOSTRUCT INFOSTRUCTTMP;
+    VCFOPEN VCFOPENCLASS(inputVcf);
 
-    // 检查是否是注释行
-    string::size_type idx;
-
-    // 记录上一个变异的start和染色体号
+    // Record the start and chromosome number of the last mutation
     string preChromosome;
-    long long int preRefStart = 0;
+    uint32_t preRefStart = 0;
 
-    if(!gzfp)
+    // If not traversed, continue
+    while (VCFOPENCLASS.read(INFOSTRUCTTMP))
     {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << inputVcf << "': No such file or directory." << endl;
-        exit(1);
-    }
-    else
-    {
-        string informations;
-        char line[1024]; // 一次只读1024字节的数据
-
-        while(gzgets(gzfp, line, 1024))
+        // empty or comment line, skip
+        if (INFOSTRUCTTMP.line.empty() || INFOSTRUCTTMP.line.find("#") != string::npos)
         {
-            informations += line;
-            if (informations.find("\n") != string::npos) // 一行结束
-            {
-                if(informations.empty())
-                {
-                    continue;
-                }
+            continue;
+        }
 
-                informations = strip(informations, '\n'); // 去掉换行符
+        // If it is a new chromosome, zero the starting position
+        if (INFOSTRUCTTMP.CHROM != preChromosome)
+        {
+            preChromosome = INFOSTRUCTTMP.CHROM;
+            preRefStart = 0;
+        }
 
-                idx = informations.find("#");
-                // 跳过注释行
-                if (idx == string::npos)
-                {
-                    vector<string> informationsVec = split(informations, "\t");
-                    string chromosome = informationsVec[0];
-                    long long int refStart = stol(informationsVec[1]);
-
-                    // 如果是新的染色体，则将起始位置归零
-                    if (chromosome != preChromosome)
-                    {
-                        preChromosome = chromosome;
-                        preRefStart = 0;
-                    }
-
-                    // 比上一个变异大或者等于
-                    if (refStart >= preRefStart)
-                    {
-                        preRefStart = refStart;
-                    }
-                    else // 比上一个变异小，代表vcf没排序，提醒用户进行排序
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: unsorted file -> "<< inputVcf << " " 
-                            << chromosome << " " << preRefStart << ">" << refStart << endl;
-                        exit(1);
-                    }
-                }
-                // 清空字符串
-                informations.clear();
-                string().swap(informations);
-            }
+        // greater than or equal to the previous variation
+        if (INFOSTRUCTTMP.POS >= preRefStart)
+        {
+            preRefStart = INFOSTRUCTTMP.POS;
+        }
+        else  // Smaller than the previous variation, it means that the vcf is not sorted, and the user is reminded to sort
+        {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: unsorted file -> "<< inputVcf << " " 
+                << INFOSTRUCTTMP.CHROM << " " << preRefStart << ">" << INFOSTRUCTTMP.POS << endl;
+            exit(1);
         }
     }
-    // 释放内存，关闭文件
-    gzclose(gzfp);
 
     return 0;
 }

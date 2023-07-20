@@ -133,8 +133,7 @@ int main_sample(int argc, char** argv)
     sample::sample(inputFastqFile1, inputFastqFile2, randVecSel, prefix);
 
     // log
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
     
     return 0;
 }

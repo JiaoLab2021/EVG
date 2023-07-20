@@ -9,7 +9,7 @@
 
 A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline
 
-![pipeline.jpf](fig/pipeline.jpf)
+![pipeline.jpg](fig/pipeline.jpg)
 
 ## Requirements
 
@@ -25,7 +25,7 @@ Please note the following requirements before building and running the software:
 * `Linux` operating system
 * cmake version `3.12` or higher
 * Python version `3.6` or higher
-* C++ compiler that supports `C++14` or higher, and the `zlib` library installed (we recommend using GCC version `"4.9"` or newer) for building `graphvcf` and `fastAQ`
+* C++ compiler that supports `C++17` or higher, and the `zlib` library installed (we recommend using GCC version `"7.3.0"` or newer) for building `graphvcf` and `fastAQ`
 * The following dependencies must also be installed: [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
 ## Installation
@@ -149,11 +149,21 @@ merge/
 * `--force`: If there are pre-existing files in the running directory of `EVG`, this parameter can be used to forcibly empty the folder. Otherwise, the software will encounter an error and exit.
 * `--restart`: This parameter allows the software to resume from where it left off if it unexpectedly stops, enabling a breakpoint restart. Note that software completion is determined by file existence. It's recommended to manually check for incomplete or empty files before using this parameter and delete them.
 
+**graphvcf**
+
+If you already have results from different genotyping software and do not need to use EVG, you can directly use `graphvcf` to merge your results.
+
+```shell
+graphvcf merge -v merged.vcf.gz --Paragraph xx.vcf.gz --BayesTyper xx.vcf.gz --VG-Giraffe xx.vcf.gz -n sample1 -o sample.vcf.gz
+```
+
 ## Citation
+
+[article_url]: https://www.biorxiv.org/content/10.1101/2023.07.19.549631v1
 
 Please cite:
 
-[article][article_url]
+[A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline][article_url]
 
 ## License
 

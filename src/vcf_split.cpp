@@ -25,7 +25,7 @@ int main_split(int argc, char** argv)
     string prefix = "split";
 
     // 是否根据FILTER列进行过滤
-    string filterBool = "true";
+    bool filterBool = false;
 
     // 输入参数
     int c;
@@ -38,7 +38,7 @@ int main_split(int argc, char** argv)
             {"length", required_argument, 0, 'l'},
             {"basevcf", required_argument, 0, 'V'},
             {"prefix", required_argument, 0, 'p'},
-            {"filter", required_argument, 0, 'f'},
+            {"filter", no_argument, 0, 'f'},
 
             {"help", no_argument, 0, 'h'},
             {0, 0, 0, 0}
@@ -46,7 +46,7 @@ int main_split(int argc, char** argv)
 
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "v:m:l:V:p:f:h", long_options, &option_index);
+        c = getopt_long (argc, argv, "v:m:l:V:p:fh", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -69,7 +69,7 @@ int main_split(int argc, char** argv)
             prefix = optarg;
             break;;
         case 'f':
-            filterBool = optarg;
+            filterBool = true;
             break;
         case 'h':
         case '?':
@@ -89,15 +89,18 @@ int main_split(int argc, char** argv)
         return 1;
     }
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
+
+    // init
+    VCFSplit VCFSplitClass(vcfFileName, baseVcfFileName, length, filterBool, prefix);
     
     if (mode == "type")
     {
-        VCFSPLIT::vcf_split_type(vcfFileName, prefix, filterBool);
+        VCFSplitClass.vcf_split_type();
     }
     else if (mode == "number")
     {
-        VCFSPLIT::vcf_split_number(vcfFileName, baseVcfFileName, length, prefix, filterBool);
+        VCFSplitClass.vcf_split_number();
     }
     else
     {
@@ -106,7 +109,7 @@ int main_split(int argc, char** argv)
         return 1;
     }
     
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
     return 0;
 }
@@ -115,7 +118,7 @@ int main_split(int argc, char** argv)
 void help_split(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
-       << "split variation by type or number of nearby SNP+Indels" << endl
+       << "split VCF files by type or number of nearby SNP+Indels." << endl
        << endl
        << "required arguments (Note: vcf files must be sorted):" << endl
        << "    -v, --vcf           FILE       vcf file to be converted" << endl
@@ -125,898 +128,397 @@ void help_split(char** argv)
        << "    -l, --length        INT        distance of snp and indel from sv [100]" << endl      
        << "    -V, --basevcf       INT        vcf file used to extract snp and indel locations [same as -v]" << endl      
        << "    -p, --prefix        STRING     output prefix [split]" << endl
-       << "    -f, --filter        BOOL       filter using the FILTER column (true/false) [true]" << endl
+       << "    -f, --filter        BOOL       filter using the FILTER column" << endl
        << endl
        << "    -h, --help                     print this help document" << endl;
 }
 
 
-// 对GT进行拆分
-vector<string> VCFSPLIT::gt_split(const string & gtTxt)
-{
-    // 临时gt列表
-    vector<string> gtVecTmp;
 
-    if (gtTxt.find("/") != string::npos)
-    {
-        gtVecTmp = split(gtTxt, "/");
-    }
-    else if (gtTxt.find("|") != string::npos)
-    {
-        gtVecTmp = split(gtTxt, "|");
-    }
-    else
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
+/**
+ * @brief Convert vcf to the format required by graph genome tools
+ * 
+ * @param vcfFileName      input VCF file name
+ * @param baseVcfFileName  VCF file for extracting snp and indel locations
+ * @param length           Count the number of SNPs and indels within the 'length' near the breakpoint
+ * @param filterBool       Whether to filter according to the 'FILTER' column
+ * @param prefix           output file prefix
+ * 
+**/
+VCFSplit::VCFSplit(
+    string vcfFileName,
+    string baseVcfFileName,
+    int length, 
+    bool filterBool,
+    string prefix
+) : vcfFileName_(vcfFileName), baseVcfFileName_(baseVcfFileName), length_(length), filterBool_(filterBool), prefix_(prefix) {}
+
+
+/**
+ * @brief Get the length information of variant
+ * 
+ * @param INFOSTRUCTTMP   variant information
+ * @param VCFOPENCLASS    VCFOPEN
+ * @param refLen          store the length of REF
+ * @param qryLen          store the length of ALT
+ * 
+**/
+bool VCFSplit::get_len(
+    const VCFINFOSTRUCT& INFOSTRUCTTMP, 
+    VCFOPEN& VCFOPENCLASS, 
+    uint32_t& refLen, 
+    uint32_t& qryLen
+)
+{
+    // 最后一列信息
+    vector<string> lastColVec = split(INFOSTRUCTTMP.lineVec[INFOSTRUCTTMP.lineVec.size()-1], ":");
+
+    // 找FORMAT字段中gt的位置
+    vector<string> formatVec = split(strip(INFOSTRUCTTMP.lineVec[8], '\n'), ":");
+    vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
+
+    string gt;
+    int gtIndex = 0;
+    if (gtItera != formatVec.end()) {  // FORMAT中有GT
+        // GT的index
+        gtIndex = distance(formatVec.begin(), gtItera);
+        gt = strip(lastColVec[gtIndex], '\n');
+    } else {  // 没有的话退出代码
+        cerr << "[" << __func__ << "::" << getTime() << "] "
+            << "Error: GT not in FORMAT column -> " 
+            << INFOSTRUCTTMP.line << endl;
         exit(1);
     }
 
-    // 对列表进行排序
-    sort(begin(gtVecTmp), end(gtVecTmp));
+    if (gt == "0/0" || gt == "." || gt == "./." || gt == ".|." || gt == "0|0") {  // 如果是(0/0, .)格式的则直接跳过，不计数。
+        return false;
+    }
 
-    return gtVecTmp;
+    // 根据FILTER字段进行过滤
+    if (INFOSTRUCTTMP.FILTER != "PASS" && filterBool_) {  // 如果不是(PASS)则直接跳过，如果不过滤，跳过该判断
+        return false;
+    }
+
+    // 软件的分型结果
+    vector<string> evaluate_gt;
+    if (filterBool_) {
+        evaluate_gt = VCFOPENCLASS.gt_split(gt);
+    }
+    else {  // 如果不过滤，则这里也不判断，因为gramtools的GT格式是1，没有分隔符
+        evaluate_gt = {"1", "1"};
+    }
+    
+    if (INFOSTRUCTTMP.ALT.find(">") != string::npos) {  // graphtyper软件的结果
+        // 使用正则表达式提取长度信息
+        std::regex reg("SVSIZE=(\\d+)");
+        std::smatch match;
+        // 检查qry序列中有没有长度信息，没有的话跳过该位点
+        if (!std::regex_search(INFOSTRUCTTMP.ALT, match, reg)) {  // <INS:SVSIZE=97:BREAKPOINT1>
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No length information in the fourth column, skip this site -> " << INFOSTRUCTTMP.line << endl; 
+            return false;
+        }
+
+        if (INFOSTRUCTTMP.ALT.find("<INS") != string::npos) {  // 字符段中包含插入的字段（graphtyper）<INS:SVSIZE=97:BREAKPOINT1>
+            refLen = INFOSTRUCTTMP.LEN;
+            qryLen = std::stoul(match[1].str());
+        } else if (INFOSTRUCTTMP.ALT.find("<DEL") != string::npos) {  // 字符段中包含缺失的字段（graphtyper） <DEL:SVSIZE=233:COVERAGE>
+            refLen = std::stoul(match[1].str());
+            qryLen = INFOSTRUCTTMP.LEN;
+        } else if (INFOSTRUCTTMP.ALT.find("<DUP") != string::npos) {  // 字符段中包含重复的字段（graphtyper）<DUP:SVSIZE=2806:BREAKPOINT1>
+            refLen = std::stoul(match[1].str());
+            qryLen = refLen * 2;
+        } else {  // 不认识的字段
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: unknown string -> ref_seq:" << INFOSTRUCTTMP.REF << " qey_seq:" << INFOSTRUCTTMP.ALT << endl;
+            refLen = INFOSTRUCTTMP.LEN;
+
+            qryLen = std::stoul(match[1].str());
+        }
+    } else {  // 正常的变异
+        refLen = INFOSTRUCTTMP.LEN;
+
+        string qrySeq;
+        
+        int maxGtNum = stoi(*max_element(evaluate_gt.begin(), evaluate_gt.end()));
+        if (maxGtNum > INFOSTRUCTTMP.ALTVec.size()) {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: genotyping and ALT sequence numbers do not match -> " << INFOSTRUCTTMP.line << endl;
+            exit(1);
+        } else {
+            qrySeq = INFOSTRUCTTMP.ALTVec[maxGtNum-1]; // GT号减去1是序列的索引
+        }
+
+        qryLen = qrySeq.size();
+    }
+
+    // 判断bayestyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
+    if ((INFOSTRUCTTMP.ID.find("Duplication") != string::npos) && (refLen <= 2)) {  // bayestyper会把duplication变成插入，所以重新计算长度
+        refLen = qryLen;
+        qryLen *= 2;
+    }
+
+    return true;
 }
 
-int VCFSPLIT::vcf_split_type(const string & vcfFileName, const string & prefix, const string & filterBool)
+
+void VCFSplit::vcf_split_type()
 {
     // 输入文件流
-    gzFile gzfpI = gzopen(vcfFileName.c_str(), "rb");
-    if(!gzfpI)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << vcfFileName << "': No such file or directory." << endl;
-        exit(1);
-    }
+    // 存储vcf信息
+    VCFINFOSTRUCT INFOSTRUCTTMP;
+    VCFOPEN VCFOPENCLASS(vcfFileName_);
 
     // 记录每种变异和注释行
     string simpleSVs, invSVs, dupSVs, otherSVs;
 
-    // 输出文件名
-    string simpleSVsFile = prefix + ".snp.indel.ins.del.vcf.gz";
-    string invSVsFile = prefix + ".inv.vcf.gz";
-    string dupSVsFile = prefix + ".dup.vcf.gz";
-    string otherSVsFile = prefix + ".other.vcf.gz";
-
     // 输出文件流
-    gzFile gzfpSimple = gzopen(simpleSVsFile.c_str(), "wb");
-    gzFile gzfpInv = gzopen(invSVsFile.c_str(), "wb");
-    gzFile gzfpDup = gzopen(dupSVsFile.c_str(), "wb");
-    gzFile gzfpOther = gzopen(otherSVsFile.c_str(), "wb");
-    if(!gzfpSimple || !gzfpInv || !gzfpDup || !gzfpOther)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-            << "'" << simpleSVsFile << "' or '" << invSVsFile << "' or '" << dupSVsFile << "' or '"  << otherSVsFile
-            << "': No such file or directory." 
-            << endl;
-        exit(1);
-    }
+    SAVE SimpleSave(prefix_ + ".snp.indel.ins.del.vcf.gz");
+    SAVE InvSave(prefix_ + ".inv.vcf.gz");
+    SAVE DupSave(prefix_ + ".dup.vcf.gz");
+    SAVE OtherSave(prefix_ + ".other.vcf.gz");
 
-    // 打开vcf文件进行转换
-    string information = ""; // 临时字符串
-    char line[1024]; // 一次只读1024字节的数据
+    // If not traversed, continue
+    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+        // empty line, skip
+        if (INFOSTRUCTTMP.line.empty()) {
+            continue;
+        }
 
-    while(gzgets(gzfpI, line, 1024))
-    {
-        information += line;
-        if (information.find("\n") != string::npos) // 一行结束
-        {
-            if(line != nullptr && line[0] == '\0')
-            {
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // 检查是否是注释行
+            string headLine = INFOSTRUCTTMP.line + "\n";
+            SimpleSave.save(headLine);
+            InvSave.save(headLine);
+            DupSave.save(headLine);
+            OtherSave.save(headLine);
+        } else {
+            // Get the length information of variant. If encountering an unrecognized string, continue to the next loop.
+            uint32_t refLen, qryLen;
+            if (!get_len(INFOSTRUCTTMP, VCFOPENCLASS, refLen, qryLen)) {
                 continue;
             }
 
-            information = strip(information, '\n'); // 去掉换行符
-
-            if (information.find("#") != string::npos) // 检查是否是注释行
-            {
-                string headLine = information + "\n";
-                gzwrite(gzfpSimple, headLine.c_str(), headLine.length());
-                gzwrite(gzfpInv, headLine.c_str(), headLine.length());
-                gzwrite(gzfpDup, headLine.c_str(), headLine.length());
-                gzwrite(gzfpOther, headLine.c_str(), headLine.length());
-            }
-            else
-            {
-                vector<string> informationVec = split(information, "\t");
-
-
-                // 最后一列信息
-                vector<string> lastColVec = split(informationVec[informationVec.size()-1], ":");
-
-                // 找FORMAT字段中gt的位置
-                vector<string> formatVec = split(strip(informationVec[8], '\n'), ":");
-                vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
-
-                string gt;
-                int gtIndex = 0;
-                if (gtItera != formatVec.end()) // FORMAT中有GT
-                {
-                    // GT的index
-                    gtIndex = distance(formatVec.begin(), gtItera);
-                    gt = strip(lastColVec[gtIndex], '\n');
+            // 判断变异类型，并保存到字符串中
+            if ((refLen < 50 && qryLen < 50) || (refLen >= 50 && qryLen < 50) || (refLen < 50 && qryLen >= 50)) {  // snp+indel+del+ins
+                simpleSVs += INFOSTRUCTTMP.line + "\n";
+            } else if (refLen >= 50 && qryLen >= 50) {
+                if (refLen*2 <= qryLen+10 && refLen*2 >= qryLen-10) {  // dup
+                    dupSVs += INFOSTRUCTTMP.line + "\n";
+                } else if (refLen <= qryLen+10 && refLen >= qryLen-10) {  // inv
+                    invSVs += INFOSTRUCTTMP.line + "\n";
+                } else {
+                    otherSVs += INFOSTRUCTTMP.line + "\n";
                 }
-                else // 没有的话退出代码
-                {
-                    cerr << "[" << __func__ << "::" << getTime() << "] "
-                            << "Error: GT not in FORMAT column -> " 
-                            << " (" << strip(information, '\n') << ")"
-                            << endl;
-                    exit(1);
-                }
-
-                if (gt == "0/0" || gt == "." || gt == "./." || gt == ".|." || gt == "0|0") // 如果是(0/0, .)格式的则直接跳过，不计数。
-                {
-                    // 清空字符串
-                    information.clear();
-                    string().swap(information);
-                    continue;
-                }
-
-                // 根据FILTER字段进行过滤
-                string filter = informationVec[6];
-                if (filter != "PASS" && filterBool == "true") // 如果不是(PASS)则直接跳过，如果不过滤，跳过该判断
-                {
-                    // 清空字符串
-                    information.clear();
-                    string().swap(information);
-                    continue;
-                }
-
-                // 软件的分型结果
-                vector<string> evaluate_gt;
-                if (filterBool == "true")
-                {
-                    evaluate_gt = gt_split(gt);
-                }
-                else // 如果不过滤，则这里也不判断，因为gramtools的GT格式是1，没有分隔符
-                {
-                    evaluate_gt = {"1", "1"};
-                }
-                
-
-                uint32_t refLen, qryLen;
-
-                string svType = informationVec[2];
-                string refSeq = informationVec[3];
-                string qrySeq = informationVec[4];
-
-                if (qrySeq.find(">") != string::npos) // graphtyper软件的结果
-                {
-                    if (qrySeq.find("<INS") != string::npos) // 字符段中包含插入的字段（graphtyper）<INS:SVSIZE=97:BREAKPOINT1>
-                    {   
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = refSeq.size();
-                        qryLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                    }
-                    else if (qrySeq.find("<DEL") != string::npos) // 字符段中包含缺失的字段（graphtyper） <DEL:SVSIZE=233:COVERAGE>
-                    {
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                        qryLen = refSeq.size();
-                    }
-                    else if (qrySeq.find("<DUP") != string::npos) // 字符段中包含重复的字段（graphtyper）<DUP:SVSIZE=2806:BREAKPOINT1>
-                    {
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                        qryLen = refLen * 2;
-                    }
-                    else // 不认识的字段
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: unknown string -> ref_seq:" << refSeq << " qey_seq:" << qrySeq << endl;
-                        refLen = refSeq.size();
-
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-                        
-                        qryLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                    }
-                }
-                else // 正常的变异
-                {
-                    refLen = refSeq.size();
-                    
-                    int maxGtNum = stoi(*max_element(evaluate_gt.begin(), evaluate_gt.end()));
-                    if (maxGtNum > split(informationVec[4], ",").size())
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: genotyping and query sequence numbers do not match -> " << information << endl;
-                        exit(1);
-                    }
-                    else
-                    {
-                        qrySeq = split(informationVec[4], ",")[maxGtNum-1]; // GT号减去1是序列的索引
-                    }
-
-                    qryLen = qrySeq.size();
-                }
-
-                // 判断bayestyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
-                if ((svType.find("Duplication") != string::npos) && (refLen <= 2)) // bayestyper会把duplication变成插入，所以重新计算长度
-                {
-                    refLen = qryLen;
-                    qryLen *= 2;
-                }
-
-                // 判断变异类型，并保存到字符串中
-                if ((refLen < 50 && qryLen < 50) || (refLen >= 50 && qryLen < 50) || (refLen < 50 && qryLen >= 50)) // snp+indel+del+ins
-                {
-                    simpleSVs += information + "\n";
-                }
-                else if (refLen >= 50 && qryLen >= 50)
-                {
-                    if (refLen*2 <= qryLen+10 && refLen*2 >= qryLen-10) // dup
-                    {
-                        dupSVs += information + "\n";
-                    }
-                    else if (refLen <= qryLen+10 && refLen >= qryLen-10) // inv
-                    {
-                        invSVs += information + "\n";
-                    }
-                    else
-                    {
-                        otherSVs += information + "\n";
-                    }
-                }
-                else
-                {
-                    otherSVs += information + "\n";
-                }
-
-                // save result
-                if (simpleSVs.size() > 10000000) // 每10Mb写入一次
-                {
-                    gzwrite(gzfpSimple, simpleSVs.c_str(), simpleSVs.length());
-                    gzwrite(gzfpInv, invSVs.c_str(), invSVs.length());
-                    gzwrite(gzfpDup, dupSVs.c_str(), dupSVs.length());
-                    gzwrite(gzfpOther, otherSVs.c_str(), otherSVs.length());
-
-                    // 清空字符串
-                    simpleSVs.clear();
-                    invSVs.clear();
-                    dupSVs.clear();
-                    otherSVs.clear();
-                    string().swap(simpleSVs);
-                    string().swap(invSVs);
-                    string().swap(dupSVs);
-                    string().swap(otherSVs);
-                }
+            } else {
+                otherSVs += INFOSTRUCTTMP.line + "\n";
             }
 
-            // 清空字符串
-            information.clear();
-            string().swap(information);
+            // save result
+            if (simpleSVs.size() > 10 * 1024 * 1024) {  // 每10Mb写入一次
+                SimpleSave.save(simpleSVs);
+                InvSave.save(invSVs);
+                DupSave.save(dupSVs);
+                OtherSave.save(otherSVs);
+
+                // 清空字符串
+                simpleSVs.clear();
+                invSVs.clear();
+                dupSVs.clear();
+                otherSVs.clear();
+            }
         }
     }
-    // 关闭文件
-    gzclose(gzfpI);
 
     // 最后写入一次
-    gzwrite(gzfpSimple, simpleSVs.c_str(), simpleSVs.length());
-    gzwrite(gzfpInv, invSVs.c_str(), invSVs.length());
-    gzwrite(gzfpDup, dupSVs.c_str(), dupSVs.length());
-    gzwrite(gzfpOther, otherSVs.c_str(), otherSVs.length());
+    SimpleSave.save(simpleSVs);
+    InvSave.save(invSVs);
+    DupSave.save(dupSVs);
+    OtherSave.save(otherSVs);
 
     // 清空字符串
     simpleSVs.clear();
     invSVs.clear();
     dupSVs.clear();
     otherSVs.clear();
-    string().swap(simpleSVs);
-    string().swap(invSVs);
-    string().swap(dupSVs);
-    string().swap(otherSVs);
-
-
-    gzclose(gzfpSimple);
-    gzclose(gzfpInv);
-    gzclose(gzfpDup);
-    gzclose(gzfpOther);
-
-    return 0;
 }
 
-int VCFSPLIT::vcf_split_number(
-    const string & vcfFileName, 
-    string & baseVcfFileName, 
-    const int & length, 
-    const string & prefix, 
-    const string & filterBool
-)
+
+// Classified by the number of nearby SNPs and indels
+void VCFSplit::vcf_split_number()
 {
-    if (baseVcfFileName.empty())
-    {
-        baseVcfFileName = vcfFileName;
-    }
-    
-    // 输入文件流
-    gzFile gzfpI1 = gzopen(baseVcfFileName.c_str(), "rb");
-    if(!gzfpI1)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'" << baseVcfFileName 
-                << "': No such file or directory." << endl;
-        exit(1);
+    if (baseVcfFileName_.empty()) {
+        baseVcfFileName_ = vcfFileName_;
     }
 
     // 记录sv拆分的结果
     string SVs0, SVs1, SVs2, SVs4, SVs6, SVs8, SVsMore;
 
-    // 输出文件名
-    string SVs0FileName = prefix + ".0.vcf.gz";
-    string SVs1FileName = prefix + ".1.vcf.gz";
-    string SVs2FileName = prefix + ".2.vcf.gz";
-    string SVs4FileName = prefix + ".4.vcf.gz";
-    string SVs6FileName = prefix + ".6.vcf.gz";
-    string SVs8FileName = prefix + ".8.vcf.gz";
-    string SVsMoreFileName = prefix + ".more.vcf.gz";
-
     // 输出文件流
-    gzFile SVs0File = gzopen(SVs0FileName.c_str(), "wb");
-    gzFile SVs1File = gzopen(SVs1FileName.c_str(), "wb");
-    gzFile SVs2File = gzopen(SVs2FileName.c_str(), "wb");
-    gzFile SVs4File = gzopen(SVs4FileName.c_str(), "wb");
-    gzFile SVs6File = gzopen(SVs6FileName.c_str(), "wb");
-    gzFile SVs8File = gzopen(SVs8FileName.c_str(), "wb");
-    gzFile SVsMoreFile = gzopen(SVsMoreFileName.c_str(), "wb");
-
-    if(!SVs0File || !SVs1File || !SVs2File || !SVs4File || !SVs6File || !SVs8File || !SVsMoreFile)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-            << "'" << SVs0FileName << "' or '" 
-            << SVs1FileName << "' or '" 
-            << SVs2FileName << "' or '" 
-            << SVs4FileName << "' or '" 
-            << SVs6FileName << "' or '" 
-            << SVs8FileName << "' or '" 
-            << SVsMoreFileName << "' or '" 
-            << "': No such file or directory." 
-            << endl;
-        exit(1);
-    }
-
+    SAVE SVs0Save(prefix_ + ".0.vcf.gz");
+    SAVE SVs1Save(prefix_ + ".1.vcf.gz");
+    SAVE SVs2Save(prefix_ + ".2.vcf.gz");
+    SAVE SVs4Save(prefix_ + ".4.vcf.gz");
+    SAVE SVs6Save(prefix_ + ".6.vcf.gz");
+    SAVE SVs8Save(prefix_ + ".8.vcf.gz");
+    SAVE SVsMoreSave(prefix_ + ".more.vcf.gz");
 
     // snp+indel的索引
-    // 打开vcf文件构建索引
-    string information = ""; // 临时字符串
+    VCFINFOSTRUCT INFOSTRUCTBase;
+    VCFOPEN VCFOPENCLASSBase(baseVcfFileName_);
 
-    // 构建哈希表 （snp+indel）
-    unordered_map<string, snpIndelInfo> snpIndelInfoMap; // unordered_map<chromosome, snpIndelInfo>
+    // Record the location information of snp and indel
+    unordered_map<string, snpIndelInfo> snpIndelInfoMap;  // unordered_map<chromosome, snpIndelInfo>
 
-    char line[1024]; // 一次只读1024字节的数据
+    // If not traversed, continue
+    while (VCFOPENCLASSBase.read(INFOSTRUCTBase)) {
+        // empty line, skip
+        if (INFOSTRUCTBase.line.empty()) {
+            continue;
+        }
 
-    while(gzgets(gzfpI1, line, 1024))
-    {
-        information += line;
-        if (information.find("\n") != string::npos) // 一行结束
-        {
-            if(line != nullptr && line[0] == '\0')
-            {
+        if (INFOSTRUCTBase.line.find("#") == string::npos) {
+            // Get the length information of variant. If encountering an unrecognized string, continue to the next loop.
+            uint32_t refLen, qryLen;
+            if (!get_len(INFOSTRUCTBase, VCFOPENCLASSBase, refLen, qryLen)) {
                 continue;
             }
 
-            information = strip(information, '\n'); // 去掉换行符
+            uint32_t refEnd;
+            refEnd = INFOSTRUCTBase.POS + refLen - 1;
 
-            if (information.find("#") == string::npos)
-            {
-                vector<string> informationVec = split(information, "\t");
-
-                // 最后一列信息
-                vector<string> lastColVec = split(informationVec[informationVec.size()-1], ":");
-
-                // 找FORMAT字段中gt的位置
-                vector<string> formatVec = split(strip(informationVec[8], '\n'), ":");
-                vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
-
-                string gt;
-                int gtIndex = 0;
-                if (gtItera != formatVec.end()) // FORMAT中有GT
-                {
-                    // GT的index
-                    gtIndex = distance(formatVec.begin(), gtItera);
-                    gt = strip(lastColVec[gtIndex], '\n');
-                }
-                else // 没有的话退出代码
-                {
-                    cerr << "[" << __func__ << "::" << getTime() << "] "
-                        << "Error: GT not in FORMAT column -> " 
-                        << " (" << strip(information, '\n') << ")"
-                        << endl;
-                    exit(1);
-                }
-
-                if (gt == "0/0" || gt == "." || gt == "./." || gt == ".|." || gt == "0|0") // 如果是(0/0, .)格式的则直接跳过，不计数。
-                {
-                    // 清空字符串
-                    information.clear();
-                    string().swap(information);
-                    continue;
-                }
-
-                // 根据FILTER字段进行过滤
-                string filter = informationVec[6];
-                if (filter != "PASS" && filterBool == "true") // 如果不是(PASS)则直接跳过，如果不过滤，跳过该判断
-                {
-                    // 清空字符串
-                    information.clear();
-                    string().swap(information);
-                    continue;
-                }
-
-                // 软件的分型结果
-                vector<string> evaluate_gt;
-                if (filterBool == "true")
-                {
-                    evaluate_gt = gt_split(gt);
-                }
-                else // 如果不过滤，则这里也不判断，因为gramtools的GT格式是1，没有分隔符
-                {
-                    evaluate_gt = {"1", "1"};
-                }
-                
-                uint32_t refLen, qryLen;
-
-                string chromosome = informationVec[0];
-                uint32_t refStart = stol(informationVec[1]);
-                string svType = informationVec[2];
-                string refSeq = informationVec[3];
-                string qrySeq = informationVec[4];
-
-                if (qrySeq.find(">") != string::npos) // graphtyper软件的结果
-                {
-                    if (qrySeq.find("<INS") != string::npos) // 字符段中包含插入的字段（graphtyper）<INS:SVSIZE=97:BREAKPOINT1>
-                    {   
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = refSeq.size();
-                        qryLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                    }
-                    else if (qrySeq.find("<DEL") != string::npos) // 字符段中包含缺失的字段（graphtyper） <DEL:SVSIZE=233:COVERAGE>
-                    {
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                        qryLen = refSeq.size();
-                    }
-                    else if (qrySeq.find("<DUP") != string::npos) // 字符段中包含重复的字段（graphtyper）<DUP:SVSIZE=2806:BREAKPOINT1>
-                    {
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                        qryLen = refLen * 2;
-                    }
-                    else // 不认识的字段
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: unknown string -> ref_seq:" << refSeq << " qey_seq:" << qrySeq << endl;
-                        refLen = refSeq.size();
-
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-                        
-                        qryLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                    }
-                }
-                else // 正常的变异
-                {
-                    refLen = refSeq.size();
-                    
-                    int maxGtNum = stoi(*max_element(evaluate_gt.begin(), evaluate_gt.end()));
-                    if (maxGtNum > split(informationVec[4], ",").size())
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: genotyping and query sequence numbers do not match -> " << information << endl;
-                        exit(1);
-                    }
-                    else
-                    {
-                        qrySeq = split(informationVec[4], ",")[maxGtNum-1]; // GT号减去1是序列的索引
-                    }
-
-                    qryLen = qrySeq.size();
-                }
-
-                // 判断bayestyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
-                if ((svType.find("Duplication") != string::npos) && (refLen <= 2)) // bayestyper会把duplication变成插入，所以重新计算长度
-                {
-                    refLen = qryLen;
-                    qryLen *= 2;
-                }
-
-                uint32_t refEnd;
-                refEnd = refStart + refLen - 1;
-
-                // 判断变异类型，并保存到哈希表中
-                if ((refLen < 50 && qryLen < 50)) // 保存snp+indel的起始和终止位置
-                {
-                    snpIndelInfoMap[chromosome].refStartVec.push_back(refStart);
-                    snpIndelInfoMap[chromosome].refEndVec.push_back(refEnd);
-                }
+            // 判断变异类型，并保存到哈希表中
+            if ((refLen < 50 && qryLen < 50)) {  // 保存snp+indel的起始和终止位置
+                snpIndelInfoMap[INFOSTRUCTBase.CHROM].refStartVec.push_back(INFOSTRUCTBase.POS);
+                snpIndelInfoMap[INFOSTRUCTBase.CHROM].refEndVec.push_back(refEnd);
             }
-
-            // 清空字符串
-            information.clear();
-            string().swap(information);
         }
     }
-    // 关闭文件
-    gzclose(gzfpI1);
+
 
     // 输入文件流
-    gzFile gzfpI2 = gzopen(vcfFileName.c_str(), "rb");
-    if(!gzfpI2)
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "'" << vcfFileName 
-                << "': No such file or directory." << endl;
-        exit(1);
-    }
-
-    // sv的索引
-    // 打开vcf文件构建索引
-    information = ""; // 临时字符串
+    // 存储vcf信息
+    VCFINFOSTRUCT INFOSTRUCTTMP;
+    VCFOPEN VCFOPENCLASS(vcfFileName_);
 
     // 构建哈希表 （结构变异）
-    map<string, map<uint32_t, svInfo>> svInfoMap; // map<chromosome, map<refStart, svInfo>>
+    map<string, map<uint32_t, svInfo> > svInfoMap; // map<chromosome, map<refStart, svInfo>>
 
-    while(gzgets(gzfpI2, line, 1024))
-    {
-        information += line;
-        if (information.find("\n") != string::npos) // 一行结束
-        {
-            if(line != nullptr && line[0] == '\0')
-            {
+    // If not traversed, continue
+    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+        // empty line, skip
+        if (INFOSTRUCTTMP.line.empty()) {
+            continue;
+        }
+
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // 检查是否是注释行
+            string headLine = INFOSTRUCTTMP.line + "\n";
+            SVs0Save.save(headLine);
+            SVs1Save.save(headLine);
+            SVs2Save.save(headLine);
+            SVs4Save.save(headLine);
+            SVs6Save.save(headLine);
+            SVs8Save.save(headLine);
+            SVsMoreSave.save(headLine);
+        } else {
+            // Get the length information of variant. If encountering an unrecognized string, continue to the next loop.
+            uint32_t refLen, qryLen;
+            if (!get_len(INFOSTRUCTTMP, VCFOPENCLASS, refLen, qryLen)) {
                 continue;
             }
 
-            information = strip(information, '\n'); // 去掉换行符
+            uint32_t refEnd;
+            refEnd = INFOSTRUCTTMP.POS + refLen - 1;
 
-            if (information.find("#") != string::npos) // 检查是否是注释行
-            {
-                string headLine = information + "\n";
-                gzwrite(SVs0File, headLine.c_str(), headLine.length());
-                gzwrite(SVs1File, headLine.c_str(), headLine.length());
-                gzwrite(SVs2File, headLine.c_str(), headLine.length());
-                gzwrite(SVs4File, headLine.c_str(), headLine.length());
-                gzwrite(SVs6File, headLine.c_str(), headLine.length());
-                gzwrite(SVs8File, headLine.c_str(), headLine.length());
-                gzwrite(SVsMoreFile, headLine.c_str(), headLine.length());
+            // 判断变异类型，并保存到哈希表中
+            if (refLen >= 50 || qryLen >= 50) {  // 保存sv的终止和变异信息
+                svInfoMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS].information = INFOSTRUCTTMP.line;
+                svInfoMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS].refEnd = refEnd;
             }
-            else
-            {
-                vector<string> informationVec = split(information, "\t");
-
-                // 最后一列信息
-                vector<string> lastColVec = split(informationVec[informationVec.size()-1], ":");
-
-                // 找FORMAT字段中gt的位置
-                vector<string> formatVec = split(strip(informationVec[8], '\n'), ":");
-                vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
-
-                string gt;
-                int gtIndex = 0;
-                if (gtItera != formatVec.end()) // FORMAT中有GT
-                {
-                    // GT的index
-                    gtIndex = distance(formatVec.begin(), gtItera);
-                    gt = strip(lastColVec[gtIndex], '\n');
-                }
-                else // 没有的话退出代码
-                {
-                    cerr << "[" << __func__ << "::" << getTime() << "] "
-                        << "Error: GT not in FORMAT column -> " 
-                        << " (" << strip(information, '\n') << ")"
-                        << endl;
-                    exit(1);
-                }
-
-                if (gt == "0/0" || gt == "." || gt == "./." || gt == ".|." || gt == "0|0") // 如果是(0/0, .)格式的则直接跳过，不计数。
-                {
-                    // 清空字符串
-                    information.clear();
-                    string().swap(information);
-                    continue;
-                }
-
-                // 根据FILTER字段进行过滤
-                string filter = informationVec[6];
-                if (filter != "PASS" && filterBool == "true") // 如果不是(PASS)则直接跳过，如果不过滤，跳过该判断
-                {
-                    // 清空字符串
-                    information.clear();
-                    string().swap(information);
-                    continue;
-                }
-
-                // 软件的分型结果
-                vector<string> evaluate_gt;
-                if (filterBool == "true")
-                {
-                    evaluate_gt = gt_split(gt);
-                }
-                else // 如果不过滤，则这里也不判断，因为gramtools的GT格式是1，没有分隔符
-                {
-                    evaluate_gt = {"1", "1"};
-                }
-                
-                uint32_t refLen, qryLen;
-
-                string chromosome = informationVec[0];
-                uint32_t refStart = stol(informationVec[1]);
-                string svType = informationVec[2];
-                string refSeq = informationVec[3];
-                string qrySeq = informationVec[4];
-
-                if (qrySeq.find(">") != string::npos) // graphtyper软件的结果
-                {
-                    if (qrySeq.find("<INS") != string::npos) // 字符段中包含插入的字段（graphtyper）<INS:SVSIZE=97:BREAKPOINT1>
-                    {   
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = refSeq.size();
-                        qryLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                    }
-                    else if (qrySeq.find("<DEL") != string::npos) // 字符段中包含缺失的字段（graphtyper） <DEL:SVSIZE=233:COVERAGE>
-                    {
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                        qryLen = refSeq.size();
-                    }
-                    else if (qrySeq.find("<DUP") != string::npos) // 字符段中包含重复的字段（graphtyper）<DUP:SVSIZE=2806:BREAKPOINT1>
-                    {
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-
-                        refLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                        qryLen = refLen * 2;
-                    }
-                    else // 不认识的字段
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: unknown string -> ref_seq:" << refSeq << " qey_seq:" << qrySeq << endl;
-                        refLen = refSeq.size();
-
-                        // 检查qry序列中有没有长度信息，没有的话退出代码并报错
-                        if (qrySeq.find("=") == string::npos)
-                        {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no length information in the fourth column -> " << information << endl; 
-                            exit(1);
-                        }
-                        
-                        qryLen = stoi(split(split(qrySeq, "=")[1], ":")[0]);
-                    }
-                }
-                else // 正常的变异
-                {
-                    refLen = refSeq.size();
-                    
-                    int maxGtNum = stoi(*max_element(evaluate_gt.begin(), evaluate_gt.end()));
-                    if (maxGtNum > split(informationVec[4], ",").size())
-                    {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: genotyping and query sequence numbers do not match -> " << information << endl;
-                        exit(1);
-                    }
-                    else
-                    {
-                        qrySeq = split(informationVec[4], ",")[maxGtNum-1]; // GT号减去1是序列的索引
-                    }
-
-                    qryLen = qrySeq.size();
-                }
-
-                // 判断bayestyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
-                if ((svType.find("Duplication") != string::npos) && (refLen <= 2)) // bayestyper会把duplication变成插入，所以重新计算长度
-                {
-                    refLen = qryLen;
-                    qryLen *= 2;
-                }
-
-                uint32_t refEnd;
-                refEnd = refStart + refLen - 1;
-
-                // 判断变异类型，并保存到哈希表中
-                if (refLen >= 50 || qryLen >= 50) // 保存sv的终止和变异信息
-                {
-                    svInfoMap[chromosome][refStart].information = information;
-                    svInfoMap[chromosome][refStart].refEnd = refEnd;
-                }
-            }
-
-            // 清空字符串
-            information.clear();
-            string().swap(information);
         }
     }
-    // 关闭文件
-    gzclose(gzfpI2);
 
 
     // 找sv附近的snp和indel数量并进行拆分
     // 对sv哈希表进行循环
-    for (auto iter1 : svInfoMap)
-    {
-        string chromosome = iter1.first;
-
+    for (const auto& [chromosome, refStartInfoMap] : svInfoMap) {
         // snp+indel起始和终止的列表
-        vector<uint32_t> snpIndelRefStartVec = snpIndelInfoMap[chromosome].refStartVec;
-        vector<uint32_t> snpIndelRefEndVec = snpIndelInfoMap[chromosome].refEndVec;
+        const vector<uint32_t>& snpIndelRefStartVec = snpIndelInfoMap[chromosome].refStartVec;
+        const vector<uint32_t>& snpIndelRefEndVec = snpIndelInfoMap[chromosome].refEndVec;
 
-        for (auto iter2 : iter1.second)
-        {
-            uint32_t refStart = iter2.first;
-            uint32_t refEnd = iter2.second.refEnd;
-            string information = iter2.second.information;
-
+        for (const auto& [refStart, Info] : refStartInfoMap) {
             // 二分查找法找起始和终止200bp内的snp和indel数量
             // 寻找左右索引
-            int32_t startLeftIdxTmp = search_Binary_right(snpIndelRefEndVec, refStart - length);
+            int32_t startLeftIdxTmp = search_Binary_right(snpIndelRefEndVec, refStart - length_);
             int32_t startRightIdxTmp = search_Binary_left(snpIndelRefEndVec, refStart);
-            int32_t endLeftIdxTmp = search_Binary_right(snpIndelRefStartVec, refEnd);
-            int32_t endRightIdxTmp = search_Binary_left(snpIndelRefStartVec, refEnd + length);
+            int32_t endLeftIdxTmp = search_Binary_right(snpIndelRefStartVec, Info.refEnd);
+            int32_t endRightIdxTmp = search_Binary_left(snpIndelRefStartVec, Info.refEnd + length_);
 
             // sv两端snp+indel的数量
             int32_t leftSnpIndelNum = startRightIdxTmp - startLeftIdxTmp;
-            if (leftSnpIndelNum < 0) // 没有
-            {
+            if (leftSnpIndelNum < 0) {  // 没有
                 leftSnpIndelNum = 0;
-            }
-            else // 有一个或多个
-            {
+            } else {  // 有一个或多个
                 leftSnpIndelNum++;
             }
             
             int32_t rightSnpIndelNum = endRightIdxTmp - endLeftIdxTmp;
-            if (rightSnpIndelNum < 0) // 没有
-            {
+            if (rightSnpIndelNum < 0) {  // 没有
                 rightSnpIndelNum = 0;
-            }
-            else // 有一个或多个
-            {
+            } else {  // 有一个或多个
                 rightSnpIndelNum++;
             }
 
             int32_t snpIndelNum = leftSnpIndelNum + rightSnpIndelNum;
-            if (snpIndelNum == 0)
-            {
-                SVs0 += information + "\n";
-            }
-            else if (snpIndelNum == 1)
-            {
-                SVs1 += information + "\n";
-            }
-            else if (snpIndelNum == 2)
-            {
-                SVs2 += information + "\n";
-            }
-            else if (snpIndelNum == 4)
-            {
-                SVs4 += information + "\n";
-            }
-            else if (snpIndelNum == 6)
-            {
-                SVs6 += information + "\n";
-            }
-            else if (snpIndelNum == 8)
-            {
-                SVs8 += information + "\n";
-            }
-            else
-            {
-                SVsMore += information + "\n";
+            if (snpIndelNum == 0) {
+                SVs0 += Info.information + "\n";
+            } else if (snpIndelNum == 1) {
+                SVs1 += Info.information + "\n";
+            } else if (snpIndelNum == 2) {
+                SVs2 += Info.information + "\n";
+            } else if (snpIndelNum == 4) {
+                SVs4 += Info.information + "\n";
+            } else if (snpIndelNum == 6) {
+                SVs6 += Info.information + "\n";
+            } else if (snpIndelNum == 8) {
+                SVs8 += Info.information + "\n";
+            } else {
+                SVsMore += Info.information + "\n";
             }
             
             // save result
-            if (SVs0.size() > 10000000) // 每10Mb写入一次
+            if (SVs0.size() > 10 * 1024 * 1024) // 每10Mb写入一次
             {
-                gzwrite(SVs0File, SVs0.c_str(), SVs0.length());
-                gzwrite(SVs1File, SVs1.c_str(), SVs1.length());
-                gzwrite(SVs2File, SVs2.c_str(), SVs2.length());
-                gzwrite(SVs4File, SVs4.c_str(), SVs4.length());
-                gzwrite(SVs6File, SVs6.c_str(), SVs6.length());
-                gzwrite(SVs8File, SVs8.c_str(), SVs8.length());
-                gzwrite(SVsMoreFile, SVsMore.c_str(), SVsMore.length());
+                SVs0Save.save(SVs0);
+                SVs1Save.save(SVs1);
+                SVs2Save.save(SVs2);
+                SVs4Save.save(SVs4);
+                SVs6Save.save(SVs6);
+                SVs8Save.save(SVs8);
+                SVsMoreSave.save(SVsMore);
 
                 // 清空字符串
                 SVs0.clear();
-                string().swap(SVs0);
                 SVs1.clear();
-                string().swap(SVs1);
                 SVs2.clear();
-                string().swap(SVs2);
                 SVs4.clear();
-                string().swap(SVs4);
                 SVs6.clear();
-                string().swap(SVs6);
                 SVs8.clear();
-                string().swap(SVs8);
                 SVsMore.clear();
-                string().swap(SVsMore);
             }
         }
     }
     
-    gzwrite(SVs0File, SVs0.c_str(), SVs0.length());
-    gzwrite(SVs1File, SVs1.c_str(), SVs1.length());
-    gzwrite(SVs2File, SVs2.c_str(), SVs2.length());
-    gzwrite(SVs4File, SVs4.c_str(), SVs4.length());
-    gzwrite(SVs6File, SVs6.c_str(), SVs6.length());
-    gzwrite(SVs8File, SVs8.c_str(), SVs8.length());
-    gzwrite(SVsMoreFile, SVsMore.c_str(), SVsMore.length());
+    SVs0Save.save(SVs0);
+    SVs1Save.save(SVs1);
+    SVs2Save.save(SVs2);
+    SVs4Save.save(SVs4);
+    SVs6Save.save(SVs6);
+    SVs8Save.save(SVs8);
+    SVsMoreSave.save(SVsMore);
 
     // 清空字符串
     SVs0.clear();
-    string().swap(SVs0);
     SVs1.clear();
-    string().swap(SVs1);
     SVs2.clear();
-    string().swap(SVs2);
     SVs4.clear();
-    string().swap(SVs4);
     SVs6.clear();
-    string().swap(SVs6);
     SVs8.clear();
-    string().swap(SVs8);
     SVsMore.clear();
-    string().swap(SVsMore);
-
-
-    gzclose(SVs0File);
-    gzclose(SVs1File);
-    gzclose(SVs2File);
-    gzclose(SVs4File);
-    gzclose(SVs6File);
-    gzclose(SVs8File);
-    gzclose(SVsMoreFile);
-
-    return 0;
 }

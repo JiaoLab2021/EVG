@@ -61,14 +61,15 @@ int main_convert(int argc, char** argv)
     }
 
     // log
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Running.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
 
-    convert::convert(&fastaFilename, &outputFilename);
+    // init
+    Convert ConvertClass(fastaFilename, outputFilename);
+    // convert
+    ConvertClass.convert();
 
     // log
-    cerr << "[" << __func__ << "::" << getTime() << "] " 
-         << "Done.\n";
+    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
     
     return 0;
 }
@@ -89,10 +90,15 @@ void help_convert(char** argv)
 }
 
 
-int convert::convert(string * fastaFilename, string * outputFilename)
+Convert::Convert(
+    const string& fastaFilename, 
+    const string& outputFilename
+) : fastaFilename_(fastaFilename), outputFilename_(outputFilename) {}
+
+void Convert::convert()
 {
     ifstream fastaFile;
-    fastaFile.open(*fastaFilename, ios::in);
+    fastaFile.open(fastaFilename_, ios::in);
 
     string informations;
     string outTxt;
@@ -100,7 +106,7 @@ int convert::convert(string * fastaFilename, string * outputFilename)
     if(!fastaFile.is_open())
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
-            << "'" << *fastaFilename << "': No such file or directory.\n";
+            << "'" << fastaFilename_ << "': No such file or directory.\n";
             exit(1);
     }
     else
@@ -129,13 +135,7 @@ int convert::convert(string * fastaFilename, string * outputFilename)
     // 关闭文件
     fastaFile.close();
 
-    ofstream outputFile;
-    outputFile.open(*outputFilename);
-
-    outputFile << strip(outTxt, '\n') << "\n";
-
-    // 关闭文件
-    outputFile.close();
-
-    return 0;
+    // save the result
+    SAVE saveClass(outputFilename_);
+    saveClass.save(outTxt);
 }
