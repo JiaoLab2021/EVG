@@ -20,8 +20,8 @@ int main_count(int argc, char** argv);
 
 struct countStruct
 {
-    uint32_t readNum;
-    uint32_t readBase;
+    uint64_t readNum;
+    uint64_t readBase;
 
     countStruct() : readNum(0), readBase(0) {}
 };

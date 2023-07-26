@@ -178,9 +178,9 @@ public:
 	 * @param length_list         长度列表
      * 
      * 
-     * @return vector<uint32_t>   每个区间的长度
+     * @return vector<uint64_t>   每个区间的长度
 	**/
-    vector<uint32_t> count_num(
+    vector<uint64_t> count_num(
         vector<uint32_t> length_list
     );
 

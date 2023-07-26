@@ -90,13 +90,13 @@ VCFCount::VCFCount(
 void VCFCount::count()
 {
     // 记录各种变异的数量
-    uint32_t snpNum = 0;
-    uint32_t indelNum = 0;
-    uint32_t insNum = 0;
-    uint32_t delNum = 0;
-    uint32_t invNum = 0;
-    uint32_t dupNum = 0;
-    uint32_t otherNum = 0;
+    uint64_t snpNum = 0;
+    uint64_t indelNum = 0;
+    uint64_t insNum = 0;
+    uint64_t delNum = 0;
+    uint64_t invNum = 0;
+    uint64_t dupNum = 0;
+    uint64_t otherNum = 0;
 
     // 存储vcf信息
     VCFINFOSTRUCT INFOSTRUCTTMP;
