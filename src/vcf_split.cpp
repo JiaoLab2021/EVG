@@ -238,7 +238,7 @@ bool VCFSplit::get_len(
 
         string qrySeq;
         
-        int maxGtNum = stoi(*max_element(evaluate_gt.begin(), evaluate_gt.end()));
+        uint32_t maxGtNum = stoi(*max_element(evaluate_gt.begin(), evaluate_gt.end()));
         if (maxGtNum > INFOSTRUCTTMP.ALTVec.size()) {
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: genotyping and ALT sequence numbers do not match -> " << INFOSTRUCTTMP.line << endl;
             exit(1);
@@ -445,27 +445,27 @@ void VCFSplit::vcf_split_number()
         for (const auto& [refStart, Info] : refStartInfoMap) {
             // 二分查找法找起始和终止200bp内的snp和indel数量
             // 寻找左右索引
-            int32_t startLeftIdxTmp = search_Binary_right(snpIndelRefEndVec, refStart - length_);
-            int32_t startRightIdxTmp = search_Binary_left(snpIndelRefEndVec, refStart);
-            int32_t endLeftIdxTmp = search_Binary_right(snpIndelRefStartVec, Info.refEnd);
-            int32_t endRightIdxTmp = search_Binary_left(snpIndelRefStartVec, Info.refEnd + length_);
+            int64_t startLeftIdxTmp = search_Binary_right(snpIndelRefEndVec, refStart - length_);
+            int64_t startRightIdxTmp = search_Binary_left(snpIndelRefEndVec, refStart);
+            int64_t endLeftIdxTmp = search_Binary_right(snpIndelRefStartVec, Info.refEnd);
+            int64_t endRightIdxTmp = search_Binary_left(snpIndelRefStartVec, Info.refEnd + length_);
 
             // sv两端snp+indel的数量
-            int32_t leftSnpIndelNum = startRightIdxTmp - startLeftIdxTmp;
+            int64_t leftSnpIndelNum = startRightIdxTmp - startLeftIdxTmp;
             if (leftSnpIndelNum < 0) {  // 没有
                 leftSnpIndelNum = 0;
             } else {  // 有一个或多个
                 leftSnpIndelNum++;
             }
             
-            int32_t rightSnpIndelNum = endRightIdxTmp - endLeftIdxTmp;
+            int64_t rightSnpIndelNum = endRightIdxTmp - endLeftIdxTmp;
             if (rightSnpIndelNum < 0) {  // 没有
                 rightSnpIndelNum = 0;
             } else {  // 有一个或多个
                 rightSnpIndelNum++;
             }
 
-            int32_t snpIndelNum = leftSnpIndelNum + rightSnpIndelNum;
+            int64_t snpIndelNum = leftSnpIndelNum + rightSnpIndelNum;
             if (snpIndelNum == 0) {
                 SVs0 += Info.information + "\n";
             } else if (snpIndelNum == 1) {

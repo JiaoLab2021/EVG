@@ -147,7 +147,7 @@ private:
 	**/
     vector<float> get_depth(
         const vector<string> & informationsVec, 
-        const int & sampleIdx
+        const uint32_t& sampleIdx
     );
 
 
@@ -162,7 +162,7 @@ private:
 	**/
     vector<int> get_gt(
         const vector<string> & informationsVec, 
-        int sampleIdx
+        uint32_t sampleIdx
     );
 
 
@@ -196,11 +196,11 @@ private:
         const vector<int> gtVec, 
         const int gt, 
         const float depth, 
-        int j, 
-        int k,
-        int l,
-        int & indexLeft, 
-        int & indexRight
+        uint32_t j, 
+        uint32_t k,
+        uint32_t l,
+        int64_t & indexLeft, 
+        int64_t & indexRight
     );
 
 
@@ -226,9 +226,9 @@ private:
      * @param gtVec             基因型列表
      * 
      * 
-     * @return int              svLength
+     * @return int64_t          svLength
 	**/
-    int sv_length_select(
+    int64_t sv_length_select(
         const string & vcfInfo, 
         const vector<int> & gtVec
     );

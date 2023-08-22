@@ -297,13 +297,13 @@ void VCFWin::window_len_count()
 
         // 把qry序列按','拆分并循环加入到qryLenList中
         vector<uint32_t> qryLenList;
-        for (int i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
+        for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
             qryLenList.push_back(INFOSTRUCTTMP.ALTVec[i].size());
         }
 
         // vcf从第10列后开始是基因型信息，所以从i=9，也就是第10列开始循环
         // 不同的vcf文件格式可能不同，需要检查
-        for (int i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
+        for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
             vector<int> gtVec = get_gt(
                 INFOSTRUCTTMP.lineVec, 
                 i
@@ -316,7 +316,6 @@ void VCFWin::window_len_count()
                 continue;
             }
 
-            uint32_t gtLen = qryLenList[gtVec[0]];
             vector<string> stepsVectorKey;
 
             // 在步长字典中的索引， 先检查染色体在不在字典中，不在的话报错
@@ -459,7 +458,7 @@ vector<int> VCFWin::get_gt(
     // FORMAT字符拆分
     vector<string> formatVec = split(lineVec[formatIndex], ":");
 
-    int gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
 
     if (gtIndex == formatVec.size()) {  // 判断index是否存在，不存在的话返回基因型都为0。
     

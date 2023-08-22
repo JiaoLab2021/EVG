@@ -28,7 +28,6 @@ int main_win(int argc, char** argv);
 class VCFWin
 {
 private:
-    string mode_;
     uint32_t windowSize_, stepSize_; 
 
     string chrLenFilename_;
@@ -36,6 +35,8 @@ private:
     string waysFilename_;
 
     string outputFileName_;
+    
+    string mode_;
 
     map<string, uint32_t> chrLenMap_;  // map<chr, length>
     vector<string> vcfFileVec_;

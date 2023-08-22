@@ -12,7 +12,7 @@ int main_breakpoint(int argc, char** argv)
     string prefix = "breakpoint";
 
     // 断点误差大小
-    int breakpointErrorSize_ = 1;
+    int32_t breakpointErrorSize_ = 1;
 
     // 输入参数
     int c;
@@ -44,7 +44,7 @@ int main_breakpoint(int argc, char** argv)
             prefix = optarg;
             break;;
         case 's':
-            breakpointErrorSize_ = stoi(optarg);
+            breakpointErrorSize_ = stol(optarg);
             break;
         case 'h':
         case '?':
@@ -105,7 +105,7 @@ void help_breakpoint(char** argv)
 VCFBreakpoint::VCFBreakpoint(
     const string & vcfFileName, 
     const string & prefix, 
-    const int & breakpointErrorSize
+    const int32_t & breakpointErrorSize
 ) : vcfFileName_(vcfFileName), prefix_(prefix), breakpointErrorSize_(breakpointErrorSize) {}
 
 
@@ -130,7 +130,7 @@ void VCFBreakpoint::vcf_breakpoint()
             std::regex reg("END=(\\d+)");
             
             // 添加误差
-            INFOSTRUCTTMP.lineVec[1] = (INFOSTRUCTTMP.POS > breakpointErrorSize_) ? to_string(INFOSTRUCTTMP.POS - breakpointErrorSize_) : "1";
+            INFOSTRUCTTMP.lineVec[1] = (static_cast<int32_t>(INFOSTRUCTTMP.POS) > breakpointErrorSize_) ? to_string(static_cast<int32_t>(INFOSTRUCTTMP.POS) - breakpointErrorSize_) : "1";
 
             // end position
             uint32_t refEnd = stoul(INFOSTRUCTTMP.lineVec[1]) + INFOSTRUCTTMP.LEN - 1;

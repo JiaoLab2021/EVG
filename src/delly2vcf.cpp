@@ -186,7 +186,7 @@ void Delly2VCF::vcf_convert()
                 informations = regex_replace(string(informations), regex(reg2), string(""));
                 
                 chromosome = split(informations, "\t")[0];
-                start = stoi(split(informations, "\t")[1]);
+                start = stoul(split(informations, "\t")[1]);
                 refSeq = split(informations, "\t")[3];
                 qrySeq = split(informations, "\t")[4];
 
@@ -198,9 +198,10 @@ void Delly2VCF::vcf_convert()
                 // 找INFO字段中的END位置
                 if (regex_search(informations, end_search, end_reg)) {
                     // end = stoi(end_search.format("$1")) - 1;
-                    end = stoi(end_search.str(1)) - 1;
+                    end = stoul(end_search.str(1)) - 1;
                 } else {
                     cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: skip ->" << informations << endl;
+                    continue;
                 }
 
                 // delly找的结构变异有的会很大很大，将该变异缩小。

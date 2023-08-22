@@ -312,7 +312,7 @@ tuple<uint32_t, vector<uint32_t> > VCFMerge::get_hap_len(
     if (lenType == "hap") {
         int maxGtNum = *max_element(gtVec.begin(), gtVec.end());
         // 先检查是否数组是否越界
-        if (maxGtNum > qrySeqVec.size()) {
+        if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "Error: number of genotyping and ALT sequences do not match -> " 
                 << qrySeqs << endl;
@@ -468,7 +468,7 @@ void VCFMerge::build_softwarefile_index(
 
     softvcfStructure.software = software;  // 软件名
 
-    int sampleIdx = 0;  // 记录sample在vcf文件的第几列
+    uint32_t sampleIdx = 0;  // 记录sample在vcf文件的第几列
 
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Building index: " << software << endl;  // print log
 
@@ -588,14 +588,14 @@ void VCFMerge::build_softwarefile_index(
 **/
 vector<float> VCFMerge::get_depth(
     const vector<string> & informationsVec, 
-    const int & sampleIdx
+    const uint32_t & sampleIdx
 ) {
     vector<float> depthVec;  // 位点覆盖度的vector
 
     // FORMAT字段拆分
     vector<string> formatVec = split(informationsVec[8], ":");
 
-    int depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "DP"));  // 获取depth的索引位置
+    uint32_t depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "DP"));  // 获取depth的索引位置
 
     // BayesTyper软件没有DP字段，所以用MAC字段来代替
     if (depthIndex == formatVec.size()) {
@@ -653,14 +653,14 @@ vector<float> VCFMerge::get_depth(
 **/
 vector<int> VCFMerge::get_gt(
     const vector<string> & informationsVec, 
-    int sampleIdx
+    uint32_t sampleIdx
 ) {
-    vector <int> gtVec;  // 位点分型的vector
+    vector<int> gtVec;  // 位点分型的vector
 
     // FORMAT字符拆分
     vector<string> formatVec = split(informationsVec[8], ":");
 
-    int gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
 
     // // 判断index是否存在，不存在的话返回基因型都为0。
     if (gtIndex == formatVec.size()) {
@@ -747,11 +747,11 @@ tuple<int, int> VCFMerge::recall_push(
     const vector<int> gtVec, 
     const int gt, 
     const float depth, 
-    int j, 
-    int k,
-    int l,
-    int & indexLeft, 
-    int & indexRight
+    uint32_t j, 
+    uint32_t k,
+    uint32_t l,
+    int64_t & indexLeft, 
+    int64_t & indexRight
 )
 {
     // 先初始化recall哈希表
@@ -828,7 +828,7 @@ void VCFMerge::vcf_merge(
             const vector<uint32_t>& mergeRefLenVec = mergeVcfStruct_.refLenMap[chromosome];
             const vector<vector<uint32_t> >& mergeQryLenVecVec = mergeVcfStruct_.qryLenVecMap[chromosome];  // vector<vector<qryLen>>
 
-            for (int i = 0; i < startVec.size(); i++) {  // 循环软件的vcf（位置）
+            for (size_t i = 0; i < startVec.size(); i++) {  // 循环软件的vcf（位置）
                 uint32_t refStart = startVec[i];
                 uint32_t refLen = refLenVec[i];
                 vector<uint32_t> qryLenVec = qryLenVecVec[i];  // 位点分型对应的等位基因序列长度
@@ -836,8 +836,8 @@ void VCFMerge::vcf_merge(
                 vector<float> depthVec = depthVecVec[i];  // 位点分型对应的等位基因深度
 
                 // 记录二分查找法的索引，多个等位基因用同一个refStart
-                int indexLeft = -1;
-                int indexRight = -1;
+                int64_t indexLeft = -1;
+                int64_t indexRight = -1;
 
                 // 对多个等位基因遍历
                 for (size_t j = 0; j < qryLenVec.size(); j++) {
@@ -861,7 +861,7 @@ void VCFMerge::vcf_merge(
                         }
                     }
 
-                    for (int k = indexLeft; k <= indexRight; k++) {
+                    for (int64_t k = indexLeft; k <= indexRight; k++) {
                         // true变异的信息
                         vector<uint32_t> mergeQryLenVec = mergeQryLenVecVec[k];  // 多个等位基因的长度
                         uint32_t trueRefLen = mergeRefLenVec[k];
@@ -1118,16 +1118,16 @@ void VCFMerge::vcf_merge(
  * 
  * @return int              svLength
 **/
-int VCFMerge::sv_length_select(
+int64_t VCFMerge::sv_length_select(
     const string & vcfInfo, 
     const vector<int> & gtVec
 ) {
-    int svLength;
+    int64_t svLength = 0;
 
     vector<string> vcfInfoVec = split(vcfInfo, "\t");
 
     // 获取ref和单倍型的长度
-    int refLen;
+    uint32_t refLen;
     vector<uint32_t> qryLenVec;
     tie(refLen, qryLenVec) = this->get_hap_len(
         vcfInfoVec[2], 
@@ -1142,7 +1142,7 @@ int VCFMerge::sv_length_select(
             continue;
         }
         else {
-            svLength = qryLenVec[i] - refLen;
+            svLength = static_cast<int64_t>(qryLenVec[i] - refLen);
         }
     }
     
@@ -1170,13 +1170,13 @@ string VCFMerge::filter_rule(
     // 结果过滤
     vector<string> bestSoftwareVec{};  // 出现频率最高的软件vector
     string selectSoftware;  // 根据sv的长度进行筛选后的软件vector
-    int svLength{};
+    int64_t svLength{};
     int gtFrequency = 0;
 
     // 标准化后的深度最接近0的索引
     float selectDepth = 10000.0;
     int selectDepthIdx = -1;
-    for (int i = 0; i < depthNorVec.size(); i++) {
+    for (size_t i = 0; i < depthNorVec.size(); i++) {
         if (abs(depthNorVec[i]) < selectDepth) {
             selectDepth = abs(depthNorVec[i]);  // 更新深度
             selectDepthIdx = i;  // 更新索引

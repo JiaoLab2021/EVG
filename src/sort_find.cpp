@@ -4,7 +4,7 @@ using namespace std;
 
 
 // 向量索引
-int findPosVector(vector <int> input, int number)
+int64_t findPosVector(vector <int> input, int number)
 {
     vector<int>::iterator iter=std::find(input.begin(),input.end(),number);//返回的是一个迭代器指针
     if(iter == input.end())

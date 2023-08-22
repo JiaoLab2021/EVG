@@ -10,10 +10,10 @@ using namespace std;
 
 template<typename T>
 // Êı×éË÷Òı
-int findPosArray(T ar[], int n, T element)  //²éÕÒÔªËØ²¢·µ»ØÎ»ÖÃÏÂ±ê£¬find(Êı×é£¬³¤¶È£¬ÔªËØ)
+int64_t findPosArray(T ar[], int n, T element)  //²éÕÒÔªËØ²¢·µ»ØÎ»ÖÃÏÂ±ê£¬find(Êı×é£¬³¤¶È£¬ÔªËØ)
 {
-	int i = 0;
-	int index=-1;//Ô­Ê¼ÏÂ±ê£¬Ã»ÕÒµ½ÔªËØ·µ»Ø-1
+	int64_t i = 0;
+	int64_t index=-1;//Ô­Ê¼ÏÂ±ê£¬Ã»ÕÒµ½ÔªËØ·µ»Ø-1
 	for (i = 0; i <n; i++)
 	{
 		if (element ==ar[i])
@@ -25,36 +25,30 @@ int findPosArray(T ar[], int n, T element)  //²éÕÒÔªËØ²¢·µ»ØÎ»ÖÃÏÂ±ê£¬find(Êı×é£
 }
 
 // ÏòÁ¿Ë÷Òı
-int findPosVector(vector<int> input, int number);
+int64_t findPosVector(vector<int> input, int number);
 
 // ÄæĞò
 bool Reverse(int a, int b);
 
 template<typename T>
 // ¶ş·Ö²éÕÒ
-int search_Binary_left(const vector<T>& v, T value, int low = 0, int high = INT_MAX) // search_Binary_left(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
+int64_t search_Binary_left(const vector<T>& v, T value, int64_t low = 0, int64_t high = INT64_MAX) // search_Binary_left(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
 {
-	int vectorSize = v.size()-1;
-	high = min(vectorSize, INT_MAX);
-	int mid = (low + high) / 2;
-	while (low <= high)
-	{
-		if (v[mid] == value)
-		{
+	int64_t vectorSize = v.size()-1;
+	high = min(vectorSize, INT64_MAX);
+	int64_t mid = (low + high) / 2;
+	while (low <= high) {
+		if (v[mid] == value) {
 			return mid;
-		}
-		else if (value < v[mid])
-		{
+		} else if (value < v[mid]) {
 			high = mid-1;
-		}
-		else
-		{
+		} else {
 			low = mid + 1;
 		}
 		mid= (low + high) / 2;
 	}
-	if (high < 0)
-	{
+
+	if (high < 0) {
 		high = 0;
 	}
 	
@@ -62,29 +56,23 @@ int search_Binary_left(const vector<T>& v, T value, int low = 0, int high = INT_
 }
 
 template<typename T>
-int search_Binary_right(const vector<T>& v, T value,  int low = 0, int high = INT_MAX) // search_Binary_right(ÏòÁ¿, ÒªÕÒµÄÊı£¬×óË÷Òı)
+int64_t search_Binary_right(const vector<T>& v, T value,  int64_t low = 0, int64_t high = INT64_MAX)  // search_Binary_right(vector, number to find, left index)
 {
-	int vectorSize = v.size()-1;
-	high = min(vectorSize, INT_MAX);
-	int mid = (low + high) / 2;
-	while (low <= high)
-	{
-		if (v[mid] == value)
-		{
+	int64_t vectorSize = v.size()-1;
+	high = min(vectorSize, INT64_MAX);
+	int64_t mid = (low + high) / 2;
+	while (low <= high) {
+		if (v[mid] == value) {
 			return mid;
-		}
-		else if (value < v[mid])
-		{
+		} else if (value < v[mid]) {
 			high = mid-1;
-		}
-		else
-		{
+		} else {
 			low = mid + 1;
 		}
 		mid= (low + high) / 2;
 	}
-	if (low > (v.size() - 1))
-	{
+
+	if (low > static_cast<int64_t>(v.size() - 1)) {
 		low = (v.size() - 1);
 	}
 	

@@ -229,15 +229,12 @@ map<int, vector<string> > VCFOPEN::get_gt(
     // FORMAT所在列
     vector<string> formatVec = split(lineTmpVec[8], ":");  // FORMAT字符拆分
 
-    int gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
 
-    if (gtIndex == formatVec.size())  // 判断index是否存在，不存在的话返回基因型都为0。
-    {
+    if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineTmpVec[0] << ":" << lineTmpVec[1] << endl;
         return GTVecMap;
-    }
-    else  // 如果存在，则进行保存
-    {
+    } else {  // If it exists, save it
         string GTString;  // 存储基因型字段
 
         for (size_t i = 9; i < lineTmpVec.size(); i++)  // 从第九列开始循环

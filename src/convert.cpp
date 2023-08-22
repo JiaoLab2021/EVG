@@ -19,7 +19,7 @@ int main_convert(int argc, char** argv)
             {"input", required_argument, 0, 'i'},
             {"out", required_argument, 0, 'o'},
             {"help", no_argument, 0, 'h'},
-            {0, 0, 0}
+            {0, 0, 0, 0}
         };
 
         int option_index = 0;

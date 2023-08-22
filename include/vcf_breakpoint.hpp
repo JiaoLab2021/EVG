@@ -28,7 +28,7 @@ class VCFBreakpoint
 private:
     string vcfFileName_;
     string prefix_;
-    int breakpointErrorSize_;
+    int32_t breakpointErrorSize_;
 
 public:
     /**
@@ -42,7 +42,7 @@ public:
     VCFBreakpoint(
         const string & vcfFileName, 
         const string & prefix, 
-        const int & breakpointErrorSize
+        const int32_t & breakpointErrorSize
     );
 
     void vcf_breakpoint();

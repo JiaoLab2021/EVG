@@ -37,20 +37,20 @@ struct vcfStructure
     
     map<string, map<uint32_t, tuple<uint32_t, vector<uint32_t>, string, int32_t, vector<int> > > > chrStartLenInfoGtTupMap;  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen, gtVec> > >
     
-    vector<uint32_t> allLengthList;  // 所有变异的长度
+    vector<int64_t> allLengthList;  // 所有变异的长度
 };
 
 // 对变异长度进行统计的Bool函数
 class f_mod
 {
 private:
-    uint32_t dv1;
-    uint32_t dv2;
+    int64_t dv1;
+    int64_t dv2;
 
 public:
-    f_mod(uint32_t d1 = 1, uint32_t d2 = 2) : dv1(d1), dv2(d2) {}
+    f_mod(int64_t d1 = 1, int64_t d2 = 2) : dv1(d1), dv2(d2) {}
 
-    bool operator() (uint32_t x) {return  dv1 <= x && x <= dv2;}
+    bool operator() (int64_t x) {return  dv1 <= x && x <= dv2;}
 };
 
 
@@ -73,9 +73,9 @@ private:
     vector<string> lengthVec_;
 
     // output
-    int bufferSize_;
-    map<float, vector<uint32_t> > rocCallMap_;  // map<DP/GQ, vector<length>> The software identifies all variants
-    map<float, vector<uint32_t> > rocRecallMap_;  // map<DP/GQ, vector<length>> The software identifies the correct variants
+    uint32_t bufferSize_;
+    map<float, vector<int32_t> > rocCallMap_;  // map<DP/GQ, vector<length>> The software identifies all variants
+    map<float, vector<int32_t> > rocRecallMap_;  // map<DP/GQ, vector<length>> The software identifies the correct variants
     
 public:
     /**
@@ -178,10 +178,10 @@ public:
 	 * @param length_list         长度列表
      * 
      * 
-     * @return vector<uint64_t>   每个区间的长度
+     * @return vector<int64_t>   每个区间的长度
 	**/
-    vector<uint64_t> count_num(
-        vector<uint32_t> length_list
+    vector<int64_t> count_num(
+        vector<int64_t> length_list
     );
 
 
@@ -230,7 +230,7 @@ public:
      * @return int             0
 	**/
     void roc_calculate(
-        const vector<uint32_t> & allLengthList
+        const vector<int64_t> & allLengthList
     );
 };
 

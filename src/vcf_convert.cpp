@@ -333,7 +333,7 @@ void Convert::vcf_convert()
         
 
         // 3. First mutation should be greater than read length
-        if (readLen_ > INFOSTRUCTTMP.POS) // paragraph的要求
+        if (static_cast<uint32_t>(readLen_) > INFOSTRUCTTMP.POS) // paragraph的要求
         {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: Start of variation is less than read length, skip this site -> "
@@ -374,7 +374,7 @@ void Convert::vcf_convert()
 
 
         // 6. Different padding base for REF and ALT. (paragraph要求SV的ALT第一个字母要和REF一样)
-        for (int i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++)
+        for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++)
         {
             string qrySeq = INFOSTRUCTTMP.ALTVec[i];
 
@@ -459,18 +459,17 @@ void Convert::vcf_convert()
         // 找FORMAT字段中gt的位置
         vector<string> formatVec = split(INFOSTRUCTTMP.FORMAT, ":");
         vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
-        int maxGT = 0; // 记录最大的GT，看是否比qry的序列还多，多的话跳过该位点
+        uint32_t maxGT = 0; // 记录最大的GT，看是否比qry的序列还多，多的话跳过该位点
         // 只要GT字段
         INFOSTRUCTTMP.lineVec[8] = "GT";
 
         if (gtItera != formatVec.end()) // FORMAT中有GT
         {
             // GT的index
-            int gtIndex = distance(formatVec.begin(), gtItera);
+            uint32_t gtIndex = distance(formatVec.begin(), gtItera);
             
             // 对GT列进行循环
-            for (int i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++)
-            {
+            for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
                 // 找到基因型
                 string gt = split(INFOSTRUCTTMP.lineVec[i], ":")[gtIndex];
 
@@ -494,17 +493,12 @@ void Convert::vcf_convert()
 
                 // 循环找最大的GT
                 vector<string> gtVec = VCFOPENCLASS.gt_split(gt);
-                for (auto it1 : gtVec)
-                {
-                    try
-                    {
-                        if (stoi(it1) > maxGT)
-                        {
+                for (auto it1 : gtVec) {
+                    try {
+                        if (stoul(it1) > maxGT) {
                             maxGT = stoi(it1);
                         }
-                    }
-                    catch(const std::invalid_argument& e)
-                    {
+                    } catch(const std::invalid_argument& e) {
                         continue;
                     }
                 }
