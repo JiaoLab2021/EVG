@@ -3,10 +3,10 @@
 using namespace std;
 
 
-// 向量索引
+// Vector index
 int64_t findPosVector(vector <int> input, int number)
 {
-    vector<int>::iterator iter=std::find(input.begin(),input.end(),number);//返回的是一个迭代器指针
+    vector<int>::iterator iter=std::find(input.begin(),input.end(),number);  // Returns an iterator pointer
     if(iter == input.end())
     {
         return -1;
@@ -16,8 +16,8 @@ int64_t findPosVector(vector <int> input, int number)
     }
 }
 
-// 逆序
+// Reverse sequence
 bool Reverse(int a, int b)
 {
-    return a > b; //升序排列，如果改为return a<b，则为降序
+    return a > b; // In ascending order, if return a<b is changed, it is in descending order
 }

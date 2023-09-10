@@ -7,10 +7,10 @@ using namespace std;
 
 int main_count(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
     string vcfFileName;
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -43,7 +43,7 @@ int main_count(int argc, char** argv)
         }
     }
 
-    // 检查参数是否正确
+    // Check whether the parameters are correct
     if (vcfFileName.empty())
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Parameter error.\n";
@@ -63,7 +63,7 @@ int main_count(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_count(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
@@ -89,7 +89,7 @@ VCFCount::VCFCount(
 
 void VCFCount::count()
 {
-    // 记录各种变异的数量
+    // Record the number of variations
     uint64_t snpNum = 0;
     uint64_t indelNum = 0;
     uint64_t insNum = 0;
@@ -98,20 +98,20 @@ void VCFCount::count()
     uint64_t dupNum = 0;
     uint64_t otherNum = 0;
 
-    // 存储vcf信息
+    // Store vcf information
     VCFINFOSTRUCT INFOSTRUCTTMP;
 
-    // 初始化
+    // initialize
     VCFOPEN VCFOPENCLASS(vcfFileName_);
 
-    // 如果没有遍历完，继续
+    // If not, continue
     while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
         // empty or comment line, skip
         if (INFOSTRUCTTMP.line.empty() || INFOSTRUCTTMP.line.find("#") != string::npos) {
             continue;
         }
         
-        // 遍历qry序列列表
+        // Traverse the qry sequence list
         for (const auto& qrySeq : INFOSTRUCTTMP.ALTVec) {
             // Record the amount of variation
             uint32_t qryLen = qrySeq.size();
@@ -136,7 +136,7 @@ void VCFCount::count()
         }
     }
 
-    // 打印结果
+    // Print result
     cout << "           - SNP: " << snpNum << endl
         << "           - InDels: " << indelNum << endl
         << "           - Insertion: " << insNum << endl

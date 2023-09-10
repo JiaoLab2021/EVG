@@ -30,22 +30,22 @@ int main_merge(int argc, char** argv);
 
  struct baseVcfStruct
 {
-    string headInfo; // vcf的注释行
+    string headInfo; // Comment lines of the vcf
 
     map<string, vector<uint32_t> > startMap;  // map<chromosome, vector<start>>
     map<string, vector<uint32_t> > refLenMap;  // map<chromosome, vector<refLen>>
-    map<string, vector<vector<uint32_t> > > qryLenVecMap;  // map<chromosome, vector<vector<qryLen> > >, 一个位点有多个等位基因的时候，用这个来保存qry的长度
+    map<string, vector<vector<uint32_t> > > qryLenVecMap;  // map<chromosome, vector<vector<qryLen> > >, When a locus has multiple alleles, this is used to preserve the length of the qry
 
-    // 存储baseVcf的vcfInfo
+    // Store the vcfInfo of baseVcf
     map<string, map<uint32_t, string> > BaseInfoMap;  // map<chromosome, map<start, vcfInfo>>
 
-    // 存储二分查找法后的结果，保存软件名字和对应的分型结果
+    // Store the results after binary search method, save the software name and the corresponding typing results
     map<string, map<uint32_t, map<string, tuple<vector<float>, vector<int> > > > > recallSoftwareGtDepVecMap;  // map<chr, map<start, map<software, tuple<vector<depth>, vector<gt> > > > >
     
-    map<string, tuple<float, float, float>> depthMap;  // map<software, pair<aveDepth, variance, sd>>  最后两个为方差和标准差
-    map<string, int> softwateSampleIdx;  // map<software, index>, 软件文件对应的sample的索引
+    map<string, tuple<float, float, float>> depthMap;  // map<software, pair<aveDepth, variance, sd>> The last two are the variance and the standard deviation
+    map<string, int> softwateSampleIdx;  // map<software, index>, Index of the sample corresponding to the software file
 
-    // 记录列数，用于Paragraph提取时，从该列之后找元素
+    // Records the number of columns used to find elements after that column when Paragraph is extracted
     int colNum;
 
     baseVcfStruct() : colNum(0) {}
@@ -53,11 +53,11 @@ int main_merge(int argc, char** argv);
 
 struct softwareVcfStruct
 {
-    string software;  // 软件名字
+    string software;  // Software name
 
     map<string, vector<uint32_t> > startMap;  // map<chromosome, vector<start>>
     map<string, vector<uint32_t> > refLenMap;  // map<chromosome, vector<refLen>>
-    map<string, vector<vector<uint32_t> > > qryLenVecMap;  // map<chromosome, vector<vector<qryLen> > >，可能是1/2等情况，因此要存储每个等位基因的长度，如果长度为1代表为纯合变异
+    map<string, vector<vector<uint32_t> > > qryLenVecMap;  // map<chromosome, vector<vector<qryLen> > >, probably 1/2, etc. Therefore, the length of each allele should be stored. If the length was 1, it represented homozygous variation
     map<string, vector<vector<int> > > gtVecMap;  // map<chromosome, vector<vector<genotype>>>
     map<string, vector<vector<float> > > depthVecMap;  // map<chromosome, vector<vector<depth>>>
 
@@ -69,7 +69,7 @@ struct softwareVcfStruct
 class VCFMerge
 {
 private:
-    // EVG的运行模式
+    // EVG running mode
     string mode_;
 
     string trueVcf_;
@@ -84,7 +84,7 @@ private:
 
     string sampleName_;
 
-    uint16_t softwareNum_;  // 记录软件的数量，用于对结果过滤
+    uint16_t softwareNum_;  // Records the amount of software used to filter the results
 
     map<string, map<int, string > > outChrStartInfoMap_;  // outMap<chromosome, map<refStart, vcfInfo> >
 
@@ -94,13 +94,13 @@ private:
 
 
     /**
-     * 获取单倍型对应的长度信息.
+     * Get the length of the haplotype.
      *
-     * @param svType                         变异类型
-     * @param refSeq                         ref列信息
-     * @param qrySeqs                        qry列信息
-     * @param gtVec                          位点的分型信息
-     * @param lenType                        只取单倍型对应的长度还是所有的长度(hap/all)
+     * @param svType                         Variation type
+     * @param refSeq                         ref column information
+     * @param qrySeqs                        qry Column information
+     * @param gtVec                          Typing information of loci
+     * @param lenType                        Take only the length corresponding to the haplotype or all the lengths (hap/all)
      * 
      * 
      * @return tuple<uint32_t, vector<uint32_t> >      tuple<refLen, vector<qryLen> >
@@ -115,16 +115,16 @@ private:
 
 
     /**
-	 * 对软件的结果进行过滤并构建索引，文件为软件的输出文件。
-	 *
+     * The results of the software are filtered and indexed, and the files are the output files of the software.
+     *
      * @date 2023/07/09
      * 
-	 * @param vcfFileName        软件输出的vcf文件
-     * @param software           软件名
+     * @param vcfFileName        Software output vcf file
+     * @param software           Software name
      * 
      * 
      * @return void
-	**/
+    **/
     void build_softwarefile_index(
         const string & vcfFileName, 
         const string & software
@@ -137,14 +137,14 @@ private:
     // graphtyper DP -> 6
     // pangenie KC -> 4
     /**
-	 * 获取位点DP.
-	 *
-	 * @param informationsVec     vcfInfoVec
-     * @param sampleIdx           sample对应的列
+     * Get site DP.
+     *
+     * @param informationsVec     vcfInfoVec
+     * @param sampleIdx           sample corresponding column
      * 
      * 
      * @return depthVec        vector<depth>
-	**/
+    **/
     vector<float> get_depth(
         const vector<string> & informationsVec, 
         const uint32_t& sampleIdx
@@ -152,14 +152,14 @@ private:
 
 
     /**
-	 * 获取位点基因型列表.
-	 *
-	 * @param informationsVec  vcfInfoList
-     * @param sampleIdx        sample基因型的索引,默认值0代表最后一列
+     * Get a list of loci genotypes.
+     *
+     * @param informationsVec  vcfInfoList
+     * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
      * 
      * 
      * @return gtVec           vector <int>
-	**/
+    **/
     vector<int> get_gt(
         const vector<string> & informationsVec, 
         uint32_t sampleIdx
@@ -168,26 +168,26 @@ private:
 
 
     /**
-	 * vcf_merge中recall后添加到总图中函数
-	 *
+     * vcf_merge Function added to the total map after recall
+     *
      * @date 2023/07/09
      * 
-	 * @param chromosome         染色体号
-     * @param trueRefStart       真实的ref起始位置
-     * @param software           软件
-     * @param qryLenVec          软件分型的单倍型对应长度
-     * @param gtVec              软件的分型gt列表
-     * @param gt                 当前循环的gt
-     * @param depth              位点对应的深度
-     * @param j                  软件多个单倍型循环的索引
-     * @param k                  二分查找法两个坐标循环的索引
-     * @param l                  真实位点单倍型的循环索引
-     * @param indexLeft          二分查找法的左索引
-     * @param indexRight         二分查找法的右索引
+     * @param chromosome         Chromosome number
+     * @param trueRefStart       The actual ref starting position
+     * @param software           software
+     * @param qryLenVec          The haplotype of software typing corresponds to the length
+     * @param gtVec              Classification gt list of software
+     * @param gt                 The current cycle of gt
+     * @param depth              The depth corresponding to the site
+     * @param j                  Index of multiple haplotype loops of software
+     * @param k                  Binary search method index of two coordinate loops
+     * @param l                  Cyclic index of true site haplotype
+     * @param indexLeft          Left index of binary search method
+     * @param indexRight         Right index of binary search method
      * 
      * 
-     * @return tuple<int, int>   tuple<state, j>  0 -> 正确添加；-1 -> 需要进行下一个循环
-	**/
+     * @return tuple<int, int>   tuple<state, j>  0 -> Add correctly; -1 -> The next loop is required
+    **/
     tuple<int, int> recall_push(
         const string chromosome, 
         const uint32_t trueRefStart, 
@@ -205,45 +205,44 @@ private:
 
 
     /**
-	 * 对软件的结果进行过滤并构建索引，文件为软件的输出文件。
-	 *
+     * The results of the software are filtered and indexed, and the files are the output files of the software.
+     *
      * @date 2023/07/09
      * 
-	 * @param softvcfStructure   build_softwarefile_index构建的软件vcf索引
-     * 
+     * @param softvcfStructure   build_softwarefile_index Indicates the index of the built software vcf
      * 
      * @return void
-	**/
+    **/
     void vcf_merge(
         softwareVcfStruct & softvcfStructure
     );
 
 
     /**
-	 * 获取变异的长度信息
-	 *
+     * Get the length information of the variation
+     *
      * @param vcfInfo           vcfInfo
-     * @param gtVec             基因型列表
+     * @param gtVec             Genotype list
      * 
      * 
-     * @return int64_t          svLength
-	**/
+     * @return int              svLength
+    **/
     int64_t sv_length_select(
         const string & vcfInfo, 
         const vector<int> & gtVec
     );
 
 
-	/**
-	 * Filter result according to the depth and number of variants.
-	 *
-	 * @param gtAllVec        位点所有的gt的vector
-	 * @param softwareVec     位点所有的software的vector
-	 * @param depthNorVec     位点所有标准化后的depth的vector
-     * @param vcfInfo         位点的变异信息
+    /**
+     * Filter result according to the depth and number of variants.
+     *
+     * @param gtAllVec        vector of all gt sites
+     * @param softwareVec     Locus vector of all software
+     * @param depthNorVec     The vector of all normalized depths at the site
+     * @param vcfInfo         Variation information at the site
      * 
      * @return software
-	**/
+    **/
     string filter_rule(
         vector<vector<int>> & gtAllVec, 
         vector<string> & softwareVec, 
@@ -253,12 +252,12 @@ private:
 
 
     /**
-	 * 计算方差和标准差
-	 *
-	 * @param data     含有位点深度的列表
+     * Calculate the variance and standard deviation
+     *
+     * @param data     List with site depth
      * 
      * @return tuple   make_tuple(mean, variance, std_deviation)
-	**/
+    **/
     tuple<float, float, float> cal_var_sd(const vector<float>& data);
 public:
     /**
@@ -293,11 +292,11 @@ public:
 
 
     /**
-	 * 构件base文件索引，不对vcf进行过滤，用于创建基准index。文件为真实的vcf文件
-	 *
+     * The base file index is built without filtering the vcf and is used to create the base index. The file is a real vcf file
      * 
-     * @return outStruct
-	**/
+     * 
+     * @return void
+    **/
     void build_basefile_index();
 
 
@@ -310,25 +309,27 @@ public:
     void run_index_merge();
 
 
-    /*
-        vcf过滤
-        mergeVcfStruct -> 软件合并后的struct
-    */
+    /**
+     * Select software with coverage close to 0
+     * mergeVcfStruct_ -> struct after software merger
+    **/
 
     /**
-	 * Filter and merge result according to the depth and number of variants.
+     * Filter and merge result according to the depth and number of variants.
+     *
+     * @param mode_               EVG running mode
      * 
      * @return void
-	**/
+    **/
    void vcf_merge_filter();
 
 
-    /*
-        save result
-        mergeVcfStruct -> 软件合并后的struct
-        outMap -> vcf_merge_filter输出结果   outMap[chromosome][refStart][refLen][qryLen]
-        prefix -> 输出文件名前缀
-    */
+    /**
+     * save result
+     * mergeVcfStruct_ -> struct after software merger
+     * outChrStartInfoMap_ -> vcf_merge_filter Output result   outChrStartInfoMap_[chromosome][refStart][refLen][qryLen]
+     * prefix -> Output file name prefix
+    **/
 
     /**
 	 * save result

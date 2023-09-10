@@ -4,7 +4,7 @@ using namespace std;
 
 
 /**
- * @brief 初始化
+ * @brief initialize
  * 
  * @param vcfFileName   the output of vcf file
  * 
@@ -15,7 +15,7 @@ VCFOPEN::VCFOPEN(
 {
     vcfFileName_ = vcfFileName;
 
-    // 输入文件流
+    // Input file stream
     gzfpI = gzopen(vcfFileName_.c_str(), "rb");
     if(!gzfpI)
     {
@@ -26,18 +26,18 @@ VCFOPEN::VCFOPEN(
 }
 
 /**
- * @brief 关闭文件
+ * @brief Close file
  * 
  * @return 0
 **/
 VCFOPEN::~VCFOPEN()
 {
-    // 关闭文件
+    // Close file
     gzclose(gzfpI);
 }
 
 
-// 清空结构体
+// Empty structure
 void VCFINFOSTRUCT::clear()
 {
     // general information
@@ -224,43 +224,43 @@ map<int, vector<string> > VCFOPEN::get_gt(
     const vector<string> & lineTmpVec
 )
 {
-    map<int, vector<string> > GTVecMap;  // 所有Line分型的map,  map<idx, vector<GTString> >
+    map<int, vector<string> > GTVecMap;  // map of all Line types, map<idx, vector<GTString> >
 
-    // FORMAT所在列
-    vector<string> formatVec = split(lineTmpVec[8], ":");  // FORMAT字符拆分
+    // FORMAT column
+    vector<string> formatVec = split(lineTmpVec[8], ":");  // FORMAT character split
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
 
     if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineTmpVec[0] << ":" << lineTmpVec[1] << endl;
         return GTVecMap;
     } else {  // If it exists, save it
-        string GTString;  // 存储基因型字段
+        string GTString;  // Store the genotype field
 
-        for (size_t i = 9; i < lineTmpVec.size(); i++)  // 从第九列开始循环
+        for (size_t i = 9; i < lineTmpVec.size(); i++)  // Start the loop in the ninth column
         {
-            GTString = split(lineTmpVec[i], ":")[gtIndex];  // gt字段
+            GTString = split(lineTmpVec[i], ":")[gtIndex];  // gt field
 
-            // 含有 '.' 的位点直接跳过
+            // Sites with '.' are skipped
             if (GTString.find(".") != string::npos)
             {
                 continue;
             }
             
-            string splitStr;  // gt中的分隔符
-            if (GTString.find("/") != string::npos)  // 判断‘/’分隔符
+            string splitStr;  // Delimiter in gt
+            if (GTString.find("/") != string::npos)  // Determine the '/' separator
             {
                 splitStr = "/";
             }
-            else if (GTString.find("|") != string::npos)  // 判断‘|’为分隔符
+            else if (GTString.find("|") != string::npos)  // Determine that '|' is the separator
             {
                 splitStr = "|";
             }
             
-            // 如果知道分割符再赋值
+            // If you know the separator then assign it
             if (splitStr.size() > 0)
             {
-                GTVecMap[i - 9] = split(GTString, splitStr);  // 赋值
+                GTVecMap[i - 9] = split(GTString, splitStr);  // Assign
             }
         }
     }
@@ -279,7 +279,7 @@ map<int, vector<string> > VCFOPEN::get_gt(
 **/
 vector<string> VCFOPEN::gt_split(const string & gtTxt)
 {
-    // 临时gt列表
+    // Temporary gt list
     vector<string> gtVecTmp;
 
     if (gtTxt.find("/") != string::npos)
@@ -314,27 +314,27 @@ tuple<double, double> VCFOPEN::calculate(
     uint32_t sampleNum
 )
 {
-    double MAFTMP;  // 最小等位基因频率
-    double MISSRATETMP;  // 缺失率
+    double MAFTMP;  // Minimum allele frequency
+    double MISSRATETMP;  // Miss rate
 
-    /* ******************************** 计算 MAF ******************************** */ 
-    map<string, uint32_t> GTFreMapTmp;  // 记录基因型频率  map<gt, fre>
-    uint16_t ploidy = 1;  // 记录倍型
+    /* ******************************** Calculate MAF ******************************** */ 
+    map<string, uint32_t> GTFreMapTmp;  // Genotype frequency map<gt, fre>
+    uint16_t ploidy = 1;  // Record ploidy
 
     for (const auto& it1 : GTVecMap)  // map<idx, vector<GTString> >
     {
         for (const auto& it2 : it1.second)  // vector<GTString>
         {
-            GTFreMapTmp[it2]++;  // 基因型对应的频率加1
+            GTFreMapTmp[it2]++;  // Add 1 to the frequency corresponding to the genotype
         }
-        // 如果是1再计算
+        // If it is 1 then calculate again
         if (ploidy == 1)
         {
-            ploidy = it1.second.size();  //记录倍型
+            ploidy = it1.second.size();  // Record ploidy
         }
     }
 
-    map<uint32_t, string> GTFreMapTmpTmp;  // map转换, map<fre, gt>
+    map<uint32_t, string> GTFreMapTmpTmp;  // map conversion, map<fre, gt>
     for (const auto& it1 : GTFreMapTmp)  // map<gt, fre>
     {
         GTFreMapTmpTmp[it1.second] = it1.first;
@@ -342,14 +342,14 @@ tuple<double, double> VCFOPEN::calculate(
 
     if (GTFreMapTmpTmp.size() > 1)
     {
-        // 倒数第二是次等位基因
+        // The second-to-last is the suballele
         auto iter1 = GTFreMapTmpTmp.end();
         iter1--; iter1--;
         // frequence/(ploidy*N)
         MAFTMP = iter1->first/(double)(ploidy*sampleNum);
     }
     
-    /* ******************************** 计算 MISSRATE ******************************** */ 
+    /* ******************************** Calculate MISSRATE ******************************** */ 
     // 1- number/allNumber
     MISSRATETMP = 1 - (GTVecMap.size()/(double)sampleNum);
 

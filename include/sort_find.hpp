@@ -9,30 +9,29 @@
 using namespace std;
 
 template<typename T>
-// 数组索引
-int64_t findPosArray(T ar[], int n, T element)  //查找元素并返回位置下标，find(数组，长度，元素)
+// Array index
+int64_t findPosArray(T ar[], int n, T element)  // Finds the element and returns the position subscript, find(array, length, element)
 {
 	int64_t i = 0;
-	int64_t index=-1;//原始下标，没找到元素返回-1
+	int64_t index=-1;  // Original subscript, no element found returns -1
 	for (i = 0; i <n; i++)
 	{
 		if (element ==ar[i])
 		{
-			index=i;//记录元素下标
+			index=i;  // Record element subscript
 		}
 	}
-	return index;//返回下标
+	return index;  // Returns the subscript
 }
 
-// 向量索引
+// Vector index
 int64_t findPosVector(vector<int> input, int number);
 
-// 逆序
+// Reverse order
 bool Reverse(int a, int b);
 
 template<typename T>
-// 二分查找
-int64_t search_Binary_left(const vector<T>& v, T value, int64_t low = 0, int64_t high = INT64_MAX) // search_Binary_left(向量, 要找的数，左索引)
+int64_t search_Binary_left(const vector<T>& v, T value, int64_t low = 0, int64_t high = INT64_MAX)  // search_Binary_left(vector, number to find, left index)
 {
 	int64_t vectorSize = v.size()-1;
 	high = min(vectorSize, INT64_MAX);

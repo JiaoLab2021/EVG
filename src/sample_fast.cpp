@@ -15,10 +15,10 @@ void help_sample(char** argv);
 
 int main_sample(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
 	string imputFileName;
 
-    // 下采样的比例
+    // The proportion of subsampling
     double frac = 0;
 
     // seedNum
@@ -27,7 +27,7 @@ int main_sample(int argc, char** argv)
     // mode
     string mode = "2";
 
-    // 输入参数
+    // Input parameter
     int c;
     
     while (true)
@@ -86,7 +86,7 @@ int main_sample(int argc, char** argv)
     cerr << "[" << __func__ << "::" << getTime() << "] " 
          << "Running.\n";
 
-    // 判断frc是否为0
+    // Check whether the frc is 0
     if (frac == 0 || frac == 1)
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
@@ -107,7 +107,7 @@ int main_sample(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_sample(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -i -f [options]" << endl

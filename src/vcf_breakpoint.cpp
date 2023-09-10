@@ -5,16 +5,16 @@ using namespace std;
 
 int main_breakpoint(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
     string vcfFileName;
     
-    // 输出文件前缀
+    // Output file prefix
     string prefix = "breakpoint";
 
-    // 断点误差大小
+    // Breakpoint error magnitude
     int32_t breakpointErrorSize_ = 1;
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -56,7 +56,7 @@ int main_breakpoint(int argc, char** argv)
         }
     }
 
-    // 检查参数是否正确
+    // Check whether the parameters are correct
     if (vcfFileName.empty())
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
@@ -77,7 +77,7 @@ int main_breakpoint(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_breakpoint(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
@@ -115,43 +115,43 @@ void VCFBreakpoint::vcf_breakpoint()
     VCFINFOSTRUCT INFOSTRUCTTMP;
     VCFOPEN VCFOPENCLASS(vcfFileName_);
 
-    // 记录转换后的结果
+    // Record the result of the conversion
     string outTxt;
 
     // ouyput file stream
     SAVE outFile(prefix_ + ".vcf.gz");
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // 检查是否是注释行
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // Check for comment lines
             string headLine = INFOSTRUCTTMP.line + "\n";
             outFile.save(headLine);
         } else {
-            // 使用正则表达式提取长度信息
+            // Use regular expressions to extract length information
             std::regex reg("END=(\\d+)");
             
-            // 添加误差
+            // Additive error
             INFOSTRUCTTMP.lineVec[1] = (static_cast<int32_t>(INFOSTRUCTTMP.POS) > breakpointErrorSize_) ? to_string(static_cast<int32_t>(INFOSTRUCTTMP.POS) - breakpointErrorSize_) : "1";
 
             // end position
             uint32_t refEnd = stoul(INFOSTRUCTTMP.lineVec[1]) + INFOSTRUCTTMP.LEN - 1;
             INFOSTRUCTTMP.lineVec[7] = regex_replace(string(INFOSTRUCTTMP.lineVec[7]), regex(reg), string("END=" + to_string(refEnd)));
 
-            // 添加到输出字符串中
+            // Adds to the output string
             outTxt += join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
 
             // save result
-            if (outTxt.size() > 10 * 1024 * 1024) {  // 每10Mb写入一次
+            if (outTxt.size() > 10 * 1024 * 1024) {  // It is written every 10Mb
                 outFile.save(outTxt);
 
-                // 清空字符串
+                // Empty string
                 outTxt.clear();
             }
         }
     }
 
-    // 最后写入一次
+    // Last write
     outFile.save(outTxt);
 
-    // 清空字符串
+    // Empty string
     string().swap(outTxt);
 }

@@ -4,15 +4,15 @@ using namespace std;
 
 int main_count(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
     string FileName1 = "";
     string FileName2 = "";
     string fastaFileName = "";
 
-    // 输出文件
+    // Output file
     string outputFileName_ = "";
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -102,15 +102,15 @@ Count::Count(
 ) : inputFileName1_(inputFileName1), inputFileName2_(inputFileName2), outputFileName_(outputFileName) {}
 
 
-// 打开fastq/a.gz文件
+// Open the fastq/a.g file
 void Count::fastq_a_count()
 {
-    if (inputFileName1_.length() > 0 && inputFileName2_.length() > 0) {  // 双端测序
-        // 输入文件流
+    if (inputFileName1_.length() > 0 && inputFileName2_.length() > 0) {  // Double-ended sequencing
+        // Input file stream
         gzFile gzfp1 = gzopen(inputFileName1_.c_str(), "rb");
         gzFile gzfp2 = gzopen(inputFileName2_.c_str(), "rb");
 
-        // 打开文件
+        // Open file
         if(!gzfp1 || !gzfp2) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "'" << inputFileName1_ << "' or '" << inputFileName2_
@@ -129,17 +129,17 @@ void Count::fastq_a_count()
                 countOut_.readNum += 2;
             }
 
-            // 释放内存，关闭文件
+            // Free the memory and close the file
             kseq_destroy(ks1);
             kseq_destroy(ks2);
             gzclose(gzfp1);
             gzclose(gzfp2);
         }
-    } else if (inputFileName1_.length() > 0 && inputFileName2_.length() == 0) {  // 单端测序
-        // 输入文件流
+    } else if (inputFileName1_.length() > 0 && inputFileName2_.length() == 0) {  // Single-ended sequencing
+        // Input file stream
         gzFile gzfp = gzopen(inputFileName1_.c_str(), "rb");
 
-        // 打开文件
+        // Open file
         if(!gzfp) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << inputFileName1_
@@ -154,7 +154,7 @@ void Count::fastq_a_count()
                 countOut_.readNum++;
             }
 
-            // 释放内存，关闭文件
+            // Free the memory and close the file
             kseq_destroy(ks);
             gzclose(gzfp);
         }
@@ -163,7 +163,7 @@ void Count::fastq_a_count()
 
 void Count::save_result()
 {
-    // 输出结果
+    // Output result
     string outTxt = "readBase:" + to_string(countOut_.readBase) + "\n" + 
                     "readNum:" + to_string(countOut_.readNum) + "\n" + 
                     "readLen:" + to_string(countOut_.readBase/countOut_.readNum) + "\n";

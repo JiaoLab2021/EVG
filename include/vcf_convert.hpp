@@ -73,19 +73,19 @@ public:
     void build_reference_index();
 
     /*
-     a. 表头加染色体长度
-     b. 第一个变异要大于read length
-     c. 序列必须与reference对应
-     d. 对vcf的第八列 'END=' 进行替换
-     e. refSeq的第一个碱基要和qrySeq的第一个碱基一样
-     f. 检查ref和qry序列是否一样，一样的位点跳过
-     g. 检查refSeq和qrySeq中是否含有atgcnATGCN外的字符，含有的话跳过该位点
-     h. 检查替换后的qry有没有相同的，有的话跳过该位点 --> e.
-     i. 检查是否有位置重复的变异
-     j. 将基因型中的.转为.|.
-     k. 将基因型中的/转为|
-     l. 只保留基因型中的二倍体变异
-     m. 检查GT是不是比qry的序列还多
+     a. Head plus chromosome length
+     b. The first variation is greater than the read length
+     c. The sequence must correspond to reference
+     d. Replace 'END=' in the eighth column of vcf
+     e. The first base of e. refSeq is the same as the first base of qrySeq
+     f. Check whether ref and qry sequences are the same and the same sites are skipped
+     g. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site
+     h. Check whether the qry after replacement is the same. If yes, skip this site --> e.
+     i. Check for mutations that duplicate positions
+     j. Combine the genotypes. Convert to.|.
+     k. Change the/in genotype to |
+     l. Retain only the diploid variation in the genotype
+     m. Check if GT has more sequences than qry
     */
     /**
      * @brief Convert vcf to the format required by graph genome tools

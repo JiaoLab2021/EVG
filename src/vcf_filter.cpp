@@ -5,17 +5,17 @@ using namespace std;
 
 int main_filter(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
     string vcfFileName;
 
-    // 过滤阈值
-    double MAF = 0.01;  // 最小等位基因频率
-    double MISSRATE = 0.1;  // 缺失率
+    // Filtering threshold
+    double MAF = 0.01;  // Minimum allele frequency
+    double MISSRATE = 0.1;  // Miss rate
 
-    // 输出文件名
+    // Output file name
     string outputFileName = "";
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -60,7 +60,7 @@ int main_filter(int argc, char** argv)
         }
     }
 
-    // 检查参数是否正确
+    // Check whether the parameters are correct
     if (vcfFileName.empty())
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Parameter error.\n";
@@ -84,7 +84,7 @@ int main_filter(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_filter(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v FILE [options]" << endl
@@ -131,74 +131,74 @@ void VCFFilter::vcf_filter()
     SAVE SAVECLASS(outputFileName_);
 
 
-    // 临时存储输出字符串
+    // Temporarily stores the output string
     string outTxt = "";
 
-    // 如果没有遍历完，继续
+    // If not, continue
     while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
         // empty line, skip
         if (INFOSTRUCTTMP.line.empty()) {
             continue;
         }
         
-        // 如果注释行，直接保存
+        // If comment lines, save them directly
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             outTxt += INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
-        // 获取变异类型
+        // Acquire variant type
         INFOSTRUCTTMP.ID = VCFOPENCLASS.get_TYPE(
             INFOSTRUCTTMP.LEN, 
             INFOSTRUCTTMP.ALTVec
         );
 
-        if (INFOSTRUCTTMP.ID == "SNP") {  // SNP时再判断是否过滤
-            double MAFTMP;  // 最小等位基因频率
-            double MISSRATETMP;  // 缺失率
+        if (INFOSTRUCTTMP.ID == "SNP") {  // Determine whether to filter when SNP is displayed
+            double MAFTMP;  // Minimum allele frequency
+            double MISSRATETMP;  // Miss rate
 
-            // 获取所有的基因型   map<idx, vector<gtString>>
+            // Get all genotypes   map<idx, vector<gtString>>
             map<int, vector<string> > GTVecMapTmp = VCFOPENCLASS.get_gt(
                 INFOSTRUCTTMP.lineVec
             );
 
-            // 如果只有一个基因型，跳过。
+            // If there is only one genotype, skip.
             if (GTVecMapTmp.size() <= 1) {
                 continue;
             }
             
-            // 计算最小等位基因频率和缺失率
+            // The minimum allele frequency and deletion rate were calculated
             tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
                 GTVecMapTmp, 
                 INFOSTRUCTTMP.lineVec.size() - 9
             );
 
-            // 通过阈值了直接保存
+            // Saved directly through the threshold
             if (MAFTMP >= MAF_ && MISSRATETMP <= MISSRATE_) {
                 outTxt += INFOSTRUCTTMP.line + "\n";
             }
-        } else {  // 其它类型的变异直接保存
+        } else {  // Other types of variation are saved directly
             outTxt += INFOSTRUCTTMP.line + "\n";
         }
 
-        if (outTxt.size() >= 10 * 1024 * 1024) {  // 每10m写一次
-            // 输出文件流
+        if (outTxt.size() >= 10 * 1024 * 1024) {  // Other types of variation are saved directly
+            // Output file stream
             SAVECLASS.save(
                 outTxt
             );
 
-            // 清空
+            // Clear
             outTxt.clear();
         }
     }
 
-    if (outTxt.size() > 0) {  // 最后写一次
-        // 其它类型的变异直接保存
+    if (outTxt.size() > 0) {  // Write for the last time
+        // Other types of variation are saved directly
         SAVECLASS.save(
             outTxt
         );
 
-        // 清空
+        // Clear
         string().swap(outTxt);
     }
 }

@@ -16,20 +16,20 @@ void help_sample(char** argv);
 
 int main_sample(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
 	string inputFastqFile1;
     string inputFastqFile2;
 
-    // 输出文件前缀
+    // Output file prefix
     string prefix = "sample";
 
-    // 下采样的比例
+    // The proportion of subsampling
     float proportion = 0;
 
-    // read数量
+    // read count
     unsigned long long int raedNumber = 0;
 
-    // 输入参数
+    // Input parameter
     int c;
     
     while (true)
@@ -95,7 +95,7 @@ int main_sample(int argc, char** argv)
     cerr << "[" << __func__ << "::" << getTime() << "] " 
          << "Running.\n";
 
-    // 判断proportion是否为0
+    // Determine whether the proportion is 0
     if (proportion == 0 || proportion >= 1)
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
@@ -103,23 +103,25 @@ int main_sample(int argc, char** argv)
         exit(0);
     }
 
-    // 计算raed数量，先判断参数给了没，给了的话直接跳过
+    // Calculate the number of raed, first determine whether the parameter is given, if it is skipped directly
     if (raedNumber == 0)
     {
         count::countStruct countOut;
-        count::fastq_a_count(inputFastqFile1, 
-                             "", 
-                             countOut, 
-                             "", 
-                             10, 
-                             500);
+        count::fastq_a_count(
+            inputFastqFile1, 
+            "", 
+            countOut, 
+            "", 
+            10, 
+            500
+        );
         raedNumber = countOut.readNum;
     }
     
-    // 产生随机数
+    // Generate random numbers
     vector<long long int> randVec = sample::randVector(raedNumber);
 
-    // 生成取样的随机数
+    // Generate random numbers for the sample
     vector<long long int> randVecSel;
     long long int selNum = raedNumber*proportion;
     for (long long int i = 0; i < selNum; i++)
@@ -127,7 +129,7 @@ int main_sample(int argc, char** argv)
         randVecSel.push_back(randVec[i]);
     }
 
-    // vector排序
+    // vector sorting
     sort(begin(randVecSel), end(randVecSel));
     
     sample::sample(inputFastqFile1, inputFastqFile2, randVecSel, prefix);
@@ -138,7 +140,7 @@ int main_sample(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_sample(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -p -i [options]" << endl

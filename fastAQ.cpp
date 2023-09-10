@@ -11,9 +11,9 @@
 #include "include/convert.hpp"
 
 // define data
-#define PROGRAM_DATA "2023/08/22"
+#define PROGRAM_DATA "2023/09/10"
 // define version
-#define PROGRAM_VERSION "1.0.4"
+#define PROGRAM_VERSION "1.0.5"
 // define author
 #define PROGRAM_AUTHOR "Zezhen Du"
 // define E-mail
@@ -24,7 +24,7 @@ void help(char** argv);
 
 int main(int argc, char** argv)
 {
-	// 打印帮助文档
+	// Print help document
 	if (argc == 1) {
         help(argv);
         return 1;
@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 
 	cerr << "[" << __func__ << "::" << getTime() << "] " << "You are using fastAQ (v" << PROGRAM_VERSION << ")\n\n";
 
-	// 选择的子功能
+	// Select the subfunction
 	string subcommand = argv[1];
 
 	if (subcommand == "-h" || subcommand == "--help")
@@ -62,7 +62,7 @@ int main(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help(char** argv)
 {
   cerr << "usage: " << argv[0] << " <command> [options]" << endl
@@ -72,9 +72,9 @@ void help(char** argv)
        << "author: " << PROGRAM_AUTHOR << endl
 	   << endl
        << "subcommands:" << endl
-       << "  -- count       calculate the number of bases and reads of fasta/q" << endl
-	   << "  -- sample      sample sequences by frac" << endl
-	   << "  -- convert     arrange fasta sequence into one line" << endl
+       << "  count       calculate the number of bases and reads of fasta/q" << endl
+	   << "  sample      sample sequences by frac" << endl
+	   << "  convert     arrange fasta sequence into one line" << endl
        << endl
        << "  -h, --help     print this help document" << endl
        << endl

@@ -6,7 +6,7 @@ using namespace std;
 
 int main_merge(int argc, char** argv)
 {
-    // EVG的运行模式
+    // EVG running mode
     string mode = "specific";
 
     string trueVcf;
@@ -18,13 +18,13 @@ int main_merge(int argc, char** argv)
     string GraphAlignerVcf;
     string PanGenieVcf;
 
-    // 样本名称
+    // Sample name
     string sampleName = "";
 
-    // 输出文件名字
+    // Output file name
     string outputFileName = "";
 
-    // 输入参数
+    // Input parameter
     int c;
     
     while (true)
@@ -105,7 +105,7 @@ int main_merge(int argc, char** argv)
 
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
 
-    // 检查参数
+    // Check parameter
     if (mode != "specific" && mode != "all")
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Mode error: specific/all." << endl;
@@ -153,7 +153,7 @@ int main_merge(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_merge(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
@@ -219,7 +219,7 @@ VCFMerge::VCFMerge(
 
 
 /**
- * 构件base文件索引，不对vcf进行过滤，用于创建基准index。文件为真实的vcf文件
+ * The base file index is built without filtering the vcf and is used to create the base index. The file is a real vcf file
  * 
  * 
  * @return void
@@ -236,15 +236,15 @@ void VCFMerge::build_basefile_index()
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP))
     {
-        if (INFOSTRUCTTMP.line.find("#") != string::npos)  // 注释行
+        if (INFOSTRUCTTMP.line.find("#") != string::npos)  // Comment line
         {
-            // #CHROM注释行索引
+            // #CHROM comment line index
             if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos)
             {
-                vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+9};  // 将FORMAT后边的信息全部去掉，然后改为 sampleName_
+                vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+9};  // Remove all the information after FORMAT and then change to sampleName_
                 mergeVcfStruct_.headInfo += join(informationsVecTmp, "\t") + "\t" + sampleName_ + "\n";
 
-                // 记录baseVcf的列数
+                // Record the number of baseVcf columns
                 mergeVcfStruct_.colNum = INFOSTRUCTTMP.lineVec.size();
             }
             else
@@ -254,12 +254,12 @@ void VCFMerge::build_basefile_index()
         }
         else
         {
-            mergeVcfStruct_.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);  // 保存变异起始位置
+            mergeVcfStruct_.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);  // Save the mutation origin location
 
-            vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+8};  // 将FORMAT改成GT，后边的信息全部去掉
-            mergeVcfStruct_.BaseInfoMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS] = join(informationsVecTmp, "\t") + "\tGT:SO:DP:ADP:NDP";  // 保存变异informationsVecTmp信息 GT:software:depth:averageDepth:normalDepth
+            vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+8};  // Change FORMAT to GT and remove all the following information
+            mergeVcfStruct_.BaseInfoMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS] = join(informationsVecTmp, "\t") + "\tGT:SO:DP:ADP:NDP";  // Save the mutation informationsVecTmp information GT:software:depth:averageDepth:normalDepth
 
-            // 获取长度信息
+            // Get length information
             uint32_t refLen;
             vector<uint32_t> qryLenVec;
             tie(refLen, qryLenVec) = this->get_hap_len(
@@ -270,7 +270,7 @@ void VCFMerge::build_basefile_index()
                 "all"
             );
 
-            // 保存变异的ref长度和qry长度。qry为vector，因为有多个等位基因。
+            // Save the ref length and qry length of the variation. qry is vector because there are multiple alleles.
             mergeVcfStruct_.refLenMap[INFOSTRUCTTMP.CHROM].push_back(refLen);
             mergeVcfStruct_.qryLenVecMap[INFOSTRUCTTMP.CHROM].push_back(qryLenVec);
         }
@@ -279,13 +279,13 @@ void VCFMerge::build_basefile_index()
 
 
 /**
- * 获取单倍型对应的长度信息.
+ * Get the length of the haplotype.
  *
- * @param svType                         变异类型
- * @param refSeq                         ref列信息
- * @param qrySeqs                        qry列信息
- * @param gtVec                          位点的分型信息
- * @param lenType                        只取单倍型对应的长度还是所有的长度(hap/all)
+ * @param svType                         Variation type
+ * @param refSeq                         ref column information
+ * @param qrySeqs                        qry Column information
+ * @param gtVec                          Typing information of loci
+ * @param lenType                        Take only the length corresponding to the haplotype or all the lengths (hap/all)
  * 
  * 
  * @return tuple<uint32_t, vector<uint32_t> >      tuple<refLen, vector<qryLen> >
@@ -298,20 +298,20 @@ tuple<uint32_t, vector<uint32_t> > VCFMerge::get_hap_len(
     const string & lenType
 )
 {
-    // 检查模式是否正确，不正确退出代码
+    // Check that the mode is correct and exit the code incorrectly
     if (lenType != "hap" && lenType != "all") {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
             << "Error: lenType -> " << lenType << endl;
         exit(1);
     }
     
-    uint32_t refLen = refSeq.size();  // ref序列长度
-    vector<string> qrySeqVec = split(qrySeqs, ",");  // qry的序列列表
+    uint32_t refLen = refSeq.size();  // ref sequence length
+    vector<string> qrySeqVec = split(qrySeqs, ",");  // qry sequence list
     
-    // 检查索引是否越界，如果只要hap的长度时候再检查
+    // Check whether the index is out of bounds. If only hap length is needed, check again
     if (lenType == "hap") {
         int maxGtNum = *max_element(gtVec.begin(), gtVec.end());
-        // 先检查是否数组是否越界
+        // First check whether the array is out of bounds
         if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "Error: number of genotyping and ALT sequences do not match -> " 
@@ -320,39 +320,39 @@ tuple<uint32_t, vector<uint32_t> > VCFMerge::get_hap_len(
         }
     }
 
-    // 构造ref和qry共同的长度索引
+    // Construct the length index common to ref and qry
     vector<uint32_t> seqLenVec;
     seqLenVec.push_back(refLen);
 
-    // 遍历等位基因列表
+    // Traverse the allele list
     for (size_t i = 0; i < qrySeqVec.size(); i++) {
         const string& qrySeq = qrySeqVec[i];
 
-        // 临时存储长度
+        // Temporary storage length
         uint32_t refLenTmp = refLen;
         uint32_t qryLenTmp = qrySeq.size();
 
-        // GraphTyper2的结果
+        // GraphTyper2 results
         if (qrySeq.find(">") != string::npos) {
-            // 使用正则表达式提取长度信息
+            // Use regular expressions to extract length information
             std::regex reg("SVSIZE=(\\d+)");
             std::smatch match;
-            // 检查qry序列中有没有长度信息，没有的话跳过该位点
+            // Check whether there is any length information in the qry sequence. If there is no length information, skip this site
             // <INS:SVSIZE=97:BREAKPOINT1>
             if (std::regex_search(qrySeq, match, reg)) {
-                // 字符段中包含插入
+                // The character segment contains inserts
                 // <INS:SVSIZE=90:BREAKPOINT1>
                 if (qrySeq.find("<INS") != string::npos && qrySeq.find("<DEL") == string::npos) {
                     refLenTmp = refLen;
                     qryLenTmp = std::stoul(match[1].str());;
                 }
-                // 字符段中包含缺失
+                // The character segment contains missing characters
                 // <DEL:SVSIZE=1720:BREAKPOINT>
                 else if (qrySeq.find("<INS") == string::npos && qrySeq.find("<DEL") != string::npos) {
                     refLenTmp = std::stoul(match[1].str());;
                     qryLenTmp = refLen;
                 }
-                // 字符段中包含重复的字段（GraphTyper2）<DUP:SVSIZE=2806:BREAKPOINT1>
+                // Character segment contains duplicate fields (GraphTyper2) <DUP:SVSIZE=2806:BREAKPOINT1>
                 // <DUP:SVSIZE=10001:COVERAGE>
                 else if (qrySeq.find("<DUP") != string::npos) {
                     refLenTmp = std::stoul(match[1].str());;
@@ -364,37 +364,37 @@ tuple<uint32_t, vector<uint32_t> > VCFMerge::get_hap_len(
                 qryLenTmp = qrySeq.size();
             }
 
-            seqLenVec[0] = refLenTmp; // 重置ref的长度
+            seqLenVec[0] = refLenTmp; // Reset the length of the ref
         }
 
-        // 判断BayesTyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
-        // BayesTyper会把duplication变成插入，所以重新计算长度
+        // The result of BayesTyper was judged to be duplication, ref_len was 1-2, and qry_seq was very long
+        // BayesTyper will change duplication into insertion, so recalculate the length
         if (svType.find("Duplication") != string::npos && refLenTmp <= 2) {
             refLenTmp = qryLenTmp;
             qryLenTmp *= 2;
         }
 
-        // 添加qry的长度
-        // 判断单倍型确实在自己的位置上，
+        // Add the length of qry
+        // Judging that the haplotype is indeed in its place,
         if (seqLenVec.size() == (i + 1)) {
-            // 添加qry的长度
+            // Add the length of qry
             seqLenVec.push_back(qryLenTmp);
-        } else { // 索引和列表长度不符合时报错
+        } else { // Index and list length do not match The Times error
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "Error: wrong index for haplotype length -> " << qrySeqs << endl;
             exit(1);
         }
     }
 
-    // 找基因型对应的qry长度
+    // Find the qry length corresponding to the genotype
     vector<uint32_t> qryLenVec;
-    // 只取单倍型的序列长度
+    // Take only the sequence length of the haplotype
     if (lenType == "hap") {
-        // gt只有一个，代表为纯合的变异，两个单倍型添加一样的长度
+        // There is only one gt, representing homozygous variants, and the two haplotypes add the same length
         if (gtVec.size() == 1) {
-            // 如果基因型为0，跳过该位点
+            // If genotype 0, skip this locus
             if (gtVec[0] == 0) {
-                // 返回 '0/0'
+                // Back '0/0'
                 vector<uint32_t> qryLenVecTmp(seqLenVec[0], qrySeqVec.size());
                 return make_tuple(seqLenVec[0], qryLenVecTmp);
             } else {
@@ -407,7 +407,7 @@ tuple<uint32_t, vector<uint32_t> > VCFMerge::get_hap_len(
             }
         }
     }
-    // 取所有的长度
+    // Take all the lengths
     else {
         for (size_t i = 1; i < seqLenVec.size(); i++) {
             qryLenVec.push_back(seqLenVec[i]);
@@ -434,27 +434,27 @@ void VCFMerge::run_index_merge()
     {
         if (softwareVec[i].length() > 0)
         {
-            check_vcf_sort(softwareVec[i]);  // 检查vcf文件是否排序
+            check_vcf_sort(softwareVec[i]);  // Check whether the vcf file is sorted
             
-            // 为软件输出特异的索引
+            // Output specific indexes for software
             build_softwarefile_index(
                 softwareVec[i], 
                 softwareNameVec[i]
             );
 
-            softwareNum_++;  // 软件数量加1
+            softwareNum_++;  // Number of software plus 1
         }
     }
 }
 
 
 /**
- * 对软件的结果进行过滤并构建索引，文件为软件的输出文件。
+ * The results of the software are filtered and indexed, and the files are the output files of the software.
  *
  * @date 2023/07/09
  * 
- * @param vcfFileName        软件输出的vcf文件
- * @param software           软件名
+ * @param vcfFileName        Software output vcf file
+ * @param software           Software name
  * 
  * 
  * @return void
@@ -464,11 +464,11 @@ void VCFMerge::build_softwarefile_index(
     const string & software
 )
 {
-    softwareVcfStruct softvcfStructure;  // 输出struct
+    softwareVcfStruct softvcfStructure;  // Output struct
 
-    softvcfStructure.software = software;  // 软件名
+    softvcfStructure.software = software;  // Software name
 
-    uint32_t sampleIdx = 0;  // 记录sample在vcf文件的第几列
+    uint32_t sampleIdx = 0;  // Record which column the sample is in the vcf file
 
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Building index: " << software << endl;  // print log
 
@@ -477,18 +477,18 @@ void VCFMerge::build_softwarefile_index(
     VCFOPEN VCFOPENCLASS(vcfFileName);
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // 注释行
+        // Comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
-            // 如果是的话找sample_name索引
+            // If so, find the sample_name index
             if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
-                // 获取sample对应的列数
-                if (software == "Paragraph") {  // 因为paragraph会保留原始的列，所以从原始列之后找sample  mergeVcfStruct_.colNum
-                    sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+mergeVcfStruct_.colNum, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // 获取sample的索引位置
-                } else {  // 其它软件都从第10列后找 FORMAT在第9列 
-                    sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+9, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // 获取sample的索引位置
+                // Gets the number of columns corresponding to sample
+                if (software == "Paragraph") {  // Because paragraph keeps the original column, find sample after the original column  mergeVcfStruct_.colNum
+                    sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+mergeVcfStruct_.colNum, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // Gets the index location of the sample
+                } else {  // All the other programs start from column 10 and find FORMAT in column 9
+                    sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+9, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // Gets the index location of the sample
                 }
                 
-                // 如果没找到，报错并退出代码
+                // If not, report an error and exit the code
                 if (sampleIdx == INFOSTRUCTTMP.lineVec.size()) {
                     cerr << "[" << __func__ << "::" << getTime() << "] " 
                         << "Error: '" << sampleName_ << "' is not in the output file of '" 
@@ -497,10 +497,10 @@ void VCFMerge::build_softwarefile_index(
                     exit(1);
                 }
 
-                mergeVcfStruct_.softwateSampleIdx[software] = sampleIdx; // 软件对应的sample索引添加
+                mergeVcfStruct_.softwateSampleIdx[software] = sampleIdx; // Add the sample index corresponding to the software
             }
-        } else {  // 非注释行
-            // 判断sample_name找到没有
+        } else {  // Uncommented line
+            // Check whether sample_name is found
             if (sampleIdx == 0) {
                 cerr << "[" << __func__ << "::" << getTime() << "] " 
                     << "Error: '" << sampleName_ << "' is not in the output file of '" << software << "'"
@@ -508,13 +508,13 @@ void VCFMerge::build_softwarefile_index(
                 exit(1);
             }
             
-            // 获取位点的覆盖度信息
+            // Obtain the coverage information of the site
             vector<float> depthVec = get_depth(
                 INFOSTRUCTTMP.lineVec, 
                 sampleIdx
             );
-            float depSum = accumulate(depthVec.begin(), depthVec.end(), 0);  // 计算所有等位基因的深度和
-            softvcfStructure.depthVec.push_back(depSum);  // 软件对应的vcf深度列表添加
+            float depSum = accumulate(depthVec.begin(), depthVec.end(), 0);  // Calculate the depth sum of all alleles
+            softvcfStructure.depthVec.push_back(depSum);  // Add the vcf depth list corresponding to the software
             
             vector<int> gtVec = get_gt(
                 INFOSTRUCTTMP.lineVec, 
@@ -522,8 +522,8 @@ void VCFMerge::build_softwarefile_index(
             );
             string gt = join(gtVec, "/");
 
-            // 根据基因型进行过滤
-            if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  //如果是(0/0, .)格式的则直接跳过，或者返回了空列表，不构建索引
+            // Filter by genotype
+            if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
                 cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: The genotype of the variant is empty, skip this site -> "
                     << INFOSTRUCTTMP.CHROM << "\t" 
@@ -531,12 +531,12 @@ void VCFMerge::build_softwarefile_index(
                 continue;
             }
 
-            // 根据FILTER字段进行过滤
-            if (INFOSTRUCTTMP.FILTER != "PASS") {  //如果不是(PASS)则直接跳过，不构建索引
+            // According to the FILTER field
+            if (INFOSTRUCTTMP.FILTER != "PASS") {  // If it is not (PASS), it is skipped and no index is built
                 continue;
             }
 
-            // 获取单倍型的长度信息
+            // If it is not (PASS), it is skipped and no index is built
             int refLen;
             vector<uint32_t> qryLenVec;
             tie(refLen, qryLenVec) = this->get_hap_len(
@@ -547,18 +547,18 @@ void VCFMerge::build_softwarefile_index(
                 "hap"
             );
 
-            // 保存变异的起始和分型信息
+            // Save mutation initiation and typing information
             softvcfStructure.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
             softvcfStructure.gtVecMap[INFOSTRUCTTMP.CHROM].push_back(gtVec);
-            softvcfStructure.depthVecMap[INFOSTRUCTTMP.CHROM].push_back(depthVec);  // 软件对应的vcf深度（每个等位基因的）
+            softvcfStructure.depthVecMap[INFOSTRUCTTMP.CHROM].push_back(depthVec);  // Software corresponding vcf depth (per allele)
 
-            // 保存变异的refLen和qryLenVec
+            // Save the mutated refLen and qryLenVec
             softvcfStructure.refLenMap[INFOSTRUCTTMP.CHROM].push_back(refLen);
             softvcfStructure.qryLenVecMap[INFOSTRUCTTMP.CHROM].push_back(qryLenVec);
         }
     }
 
-    // 计算软件的平均覆盖度，方差和标准差
+    // Calculate the average coverage, variance, and standard deviation of the software
     float aveDepth;
     float variance;
     float sd;
@@ -567,7 +567,7 @@ void VCFMerge::build_softwarefile_index(
     get<1>(mergeVcfStruct_.depthMap[software]) = variance;
     get<2>(mergeVcfStruct_.depthMap[software]) = sd;
 
-    // 将软件的结果加到图中
+    // Add the results of the software to the diagram
     vcf_merge(softvcfStructure);
 }
 
@@ -578,10 +578,10 @@ void VCFMerge::build_softwarefile_index(
 // graphtyper DP -> 6
 // pangenie KC -> 4
 /**
- * 获取位点DP.
+ * Get site DP.
  *
  * @param informationsVec     vcfInfoVec
- * @param sampleIdx           sample对应的列
+ * @param sampleIdx           sample corresponding column
  * 
  * 
  * @return depthVec        vector<depth>
@@ -590,28 +590,28 @@ vector<float> VCFMerge::get_depth(
     const vector<string> & informationsVec, 
     const uint32_t & sampleIdx
 ) {
-    vector<float> depthVec;  // 位点覆盖度的vector
+    vector<float> depthVec;  // vector of site coverage
 
-    // FORMAT字段拆分
+    // FORMAT field split
     vector<string> formatVec = split(informationsVec[8], ":");
 
-    uint32_t depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "DP"));  // 获取depth的索引位置
+    uint32_t depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "DP"));  // Gets the index position of depth
 
-    // BayesTyper软件没有DP字段，所以用MAC字段来代替
+    // BayesTyper software does not have DP fields, so it uses MAC fields instead
     if (depthIndex == formatVec.size()) {
         depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "MAC"));
     }
-    // PanGenie软件没有DP字段，所以用KC字段来代替
+    // PanGenie software does not have a DP field, so the KC field is used instead
     if (depthIndex == formatVec.size()) {
         depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "KC"));
     }
     
-    // 判断index是不是存在，不存在的话返回深度都为0。
+    // Check whether index exists. If it does not exist, return depth 0.
     if (depthIndex == formatVec.size()) {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [DP,MAC,KC] information in FORMAT -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
         depthVec = {0, 0};
     }
-    // 如果存在，则进行保存
+    // If it exists, save it
     else {
         vector<string> splitResult = split(informationsVec[sampleIdx], ":");
 
@@ -643,10 +643,10 @@ vector<float> VCFMerge::get_depth(
 
 
 /**
- * 获取位点基因型列表.
+ * Get a list of loci genotypes.
  *
  * @param informationsVec  vcfInfoList
- * @param sampleIdx        sample基因型的索引,默认值0代表最后一列
+ * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
  * 
  * 
  * @return gtVec           vector <int>
@@ -655,56 +655,56 @@ vector<int> VCFMerge::get_gt(
     const vector<string> & informationsVec, 
     uint32_t sampleIdx
 ) {
-    vector<int> gtVec;  // 位点分型的vector
+    vector<int> gtVec;  // Locus typing vector
 
-    // FORMAT字符拆分
+    // FORMAT character split
     vector<string> formatVec = split(informationsVec[8], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
 
-    // // 判断index是否存在，不存在的话返回基因型都为0。
+    // // Determine whether the index exists. If it does not exist, the genotypes are all 0.
     if (gtIndex == formatVec.size()) {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
         gtVec = {0, 0};
     }
-    // 如果存在，则进行保存
+    // If it exists, save it
     else {
-        string gt;  // 存储基因型字段
+        string gt;  // Store the genotype field
 
-        // 没有指定列数就是最后一列
+        // The number of columns not specified is the last column
         if (sampleIdx == 0) {
-            gt = split(informationsVec.back(), ":")[gtIndex];  // gt字段
+            gt = split(informationsVec.back(), ":")[gtIndex];  // gt field
         }
         else {
-            gt = split(informationsVec[sampleIdx], ":")[gtIndex];  // gt字段
+            gt = split(informationsVec[sampleIdx], ":")[gtIndex];  // gt field
         }
         
-        string splitStr;  // gt中的分隔符
-        // 判断‘/’分隔符
+        string splitStr;  // Delimiter in gt
+        // Determine the '/' separator
         if (gt.find("/") != string::npos) {
             splitStr = "/";
         }
-        // 判断‘|’为分隔符
+        // Determine that '|' is the separator
         else if (gt.find("|") != string::npos) {
             splitStr = "|";
         }
-        // 不知道的时候为返回空值
+        // Return a null value if you do not know
         else {
             gtVec = {0, 0};
             return gtVec;
         }
         
-        // 找到gt后，对其按splitStr拆分并循环
+        // Once you find gt, split it by splitStr and loop
         auto splitResult = split(gt, splitStr);
         for (auto it : splitResult) {
-            // 如果为'.'，跳过该位点
+            // If it is '.', skip this site
             if (it == ".") {
                 gtVec = {0, 0};
                 return gtVec;
             }
             // Prevent error in stof(it) conversion
             try {
-                gtVec.push_back(stoi(it));  // 添加到vector中
+                gtVec.push_back(stoi(it));  // If it is '.', skip this site
             } catch (const std::exception& e) {
                 cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: stof(it) conversion failed. Replaced with {0,0} -> " << it << endl;
                 gtVec = {0, 0};
@@ -719,25 +719,25 @@ vector<int> VCFMerge::get_gt(
 
 
 /**
- * vcf_merge中recall后添加到总图中函数
+ * vcf_merge Function added to the total map after recall
  *
  * @date 2023/07/09
  * 
- * @param chromosome         染色体号
- * @param trueRefStart       真实的ref起始位置
- * @param software           软件
- * @param qryLenVec          软件分型的单倍型对应长度
- * @param gtVec              软件的分型gt列表
- * @param gt                 当前循环的gt
- * @param depth              位点对应的深度
- * @param j                  软件多个单倍型循环的索引
- * @param k                  二分查找法两个坐标循环的索引
- * @param l                  真实位点单倍型的循环索引
- * @param indexLeft          二分查找法的左索引
- * @param indexRight         二分查找法的右索引
+ * @param chromosome         Chromosome number
+ * @param trueRefStart       The actual ref starting position
+ * @param software           software
+ * @param qryLenVec          The haplotype of software typing corresponds to the length
+ * @param gtVec              Classification gt list of software
+ * @param gt                 The current cycle of gt
+ * @param depth              The depth corresponding to the site
+ * @param j                  Index of multiple haplotype loops of software
+ * @param k                  Binary search method index of two coordinate loops
+ * @param l                  Cyclic index of true site haplotype
+ * @param indexLeft          Left index of binary search method
+ * @param indexRight         Right index of binary search method
  * 
  * 
- * @return tuple<int, int>   tuple<state, j>  0 -> 正确添加；-1 -> 需要进行下一个循环
+ * @return tuple<int, int>   tuple<state, j>  0 -> Add correctly; -1 -> The next loop is required
 **/
 tuple<int, int> VCFMerge::recall_push(
     const string chromosome, 
@@ -754,32 +754,32 @@ tuple<int, int> VCFMerge::recall_push(
     int64_t & indexRight
 )
 {
-    // 先初始化recall哈希表
-    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].find(trueRefStart) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].end()) {  // 如果起始位置第一次见，则初始化
+    // First initialize the recall hash table
+    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].find(trueRefStart) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].end()) {  // Initialize if the starting position is first seen
         mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart];
     }
-    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].find(software) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].end()) {  // 如果软件第一次见，则初始化
+    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].find(software) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].end()) {  // If the software is first seen, it is initialized
         vector<float> depthVecTmp(qryLenVec.size());
         vector<int> gtVecTmp(qryLenVec.size());
         mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software] = make_tuple(depthVecTmp, gtVecTmp);
     }
 
-    // gt和l中有一个时0，但另一个不是，则下一个循环，防止SNP判断时候出错
+    // If one of gt and l is 0, but the other is not, the next loop will be performed to prevent SNP from making an error in its judgment
     if ((gt != 0 && l == 0) || (gt == 0 && l != 0)) {
         return make_tuple(-1, j);
     } else {
-        // 每个单倍型单独添加
-        get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;  // 对应单倍型位置深度
-        get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;  // 对应单倍型位置基因型
+        // Each haplotype is added separately
+        get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;  // Corresponding haplotype position depth
+        get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;  // Corresponding haplotype location genotype
 
-        // 更改二分查找的坐标，下一个等位基因就直接添加到该refStart上
+        // Change the coordinates of the binary search, and the next allele is added directly to the refStart
         indexLeft = k; 
         indexRight = k;
 
-        if (j == 0 && gt == gtVec[1]) {  // 如果两个单倍型是一样的，直接赋值，然后跳过下一个循环
+        if (j == 0 && gt == gtVec[1]) {  // If the two haplotypes are the same, assign the value directly and skip the next loop
             j++;
-            get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;  // 对应单倍型位置深度
-            get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;  // 对应单倍型位置基因型
+            get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;  // Corresponding haplotype position depth
+            get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;  // Corresponding haplotype location genotype
         }
     }
 
@@ -788,11 +788,11 @@ tuple<int, int> VCFMerge::recall_push(
 
 
 /**
- * 对软件的结果进行过滤并构建索引，文件为软件的输出文件。
+ * The results of the software are filtered and indexed, and the files are the output files of the software.
  *
  * @date 2023/07/09
  * 
- * @param softvcfStructure   build_softwarefile_index构建的软件vcf索引
+ * @param softvcfStructure   build_softwarefile_index Indicates the index of the built software vcf
  * 
  * @return void
 **/
@@ -808,45 +808,45 @@ void VCFMerge::vcf_merge(
         chromosomeVec.push_back(iter->first);
     }
 
-    // for (auto iter = softvcfStructure.startMap.begin(); iter != softvcfStructure.startMap.end(); iter++) {  // 循环软件的vcf（染色体）
-    for (const auto& [chromosome, startVec] : softvcfStructure.startMap) {  // 循环软件的vcf（染色体）
+    // for (auto iter = softvcfStructure.startMap.begin(); iter != softvcfStructure.startMap.end(); iter++) {  // Loop software vcf (Chromosome)
+    for (const auto& [chromosome, startVec] : softvcfStructure.startMap) {  // Loop software vcf (Chromosome)
         const vector<uint32_t>& refLenVec = softvcfStructure.refLenMap[chromosome];
         const vector<vector<uint32_t> >& qryLenVecVec = softvcfStructure.qryLenVecMap[chromosome];
         const vector<vector<int> >& gtVecVec = softvcfStructure.gtVecMap[chromosome];
         const vector<vector<float> >& depthVecVec = softvcfStructure.depthVecMap[chromosome];
 
-        // 先初始化recall哈希表
-        if (mergeVcfStruct_.recallSoftwareGtDepVecMap.find(chromosome) == mergeVcfStruct_.recallSoftwareGtDepVecMap.end()) {  // 如果染色体第一次见，则初始化
+        // First initialize the recall hash table
+        if (mergeVcfStruct_.recallSoftwareGtDepVecMap.find(chromosome) == mergeVcfStruct_.recallSoftwareGtDepVecMap.end()) {  // If the chromosome is first seen, it is initialized
             mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome];
         }
 
-        if (find(chromosomeVec.begin(), chromosomeVec.end(), chromosome) == chromosomeVec.end()) {  // 先看mergeVcfStructure中有没有该染色体，没有的话报错并退出代码
+        if (find(chromosomeVec.begin(), chromosomeVec.end(), chromosome) == chromosomeVec.end()) {  // First check if there is this chromosome in mergeVcfStructure, if not, report an error and exit the code
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: chromosome is not present in '"<< trueVcf_ << "' -> " << chromosome << endl;
             exit(1);
-        } else {  // 如果存在的话，则用二分查找法找最近的变异，判断它们是不是同一个，是的话push，不是的话添加一个新的
+        } else {  // If it exists, use binary search to find the most recent variation and determine whether they are the same, push if they are, and add a new one if they are not
             const vector<uint32_t>& mergeRefStartVec = mergeVcfStruct_.startMap[chromosome];
             const vector<uint32_t>& mergeRefLenVec = mergeVcfStruct_.refLenMap[chromosome];
             const vector<vector<uint32_t> >& mergeQryLenVecVec = mergeVcfStruct_.qryLenVecMap[chromosome];  // vector<vector<qryLen>>
 
-            for (size_t i = 0; i < startVec.size(); i++) {  // 循环软件的vcf（位置）
+            for (size_t i = 0; i < startVec.size(); i++) {  // Loop software vcf (location)
                 uint32_t refStart = startVec[i];
                 uint32_t refLen = refLenVec[i];
-                vector<uint32_t> qryLenVec = qryLenVecVec[i];  // 位点分型对应的等位基因序列长度
-                vector<int> gtVec = gtVecVec[i];  // 位点分型对应的分型
-                vector<float> depthVec = depthVecVec[i];  // 位点分型对应的等位基因深度
+                vector<uint32_t> qryLenVec = qryLenVecVec[i];  // Allele sequence length corresponding to locus typing
+                vector<int> gtVec = gtVecVec[i];  // Locus typing corresponding to typing
+                vector<float> depthVec = depthVecVec[i];  // Allelic depth corresponding to locus typing
 
-                // 记录二分查找法的索引，多个等位基因用同一个refStart
+                // Record binary search index, multiple alleles with the same refStart
                 int64_t indexLeft = -1;
                 int64_t indexRight = -1;
 
-                // 对多个等位基因遍历
+                // Traversal of multiple alleles
                 for (size_t j = 0; j < qryLenVec.size(); j++) {
                     uint32_t qryLen = qryLenVec[j];
                     int gt = gtVec[j];
                     float depth = depthVec[j];
 
-                    // 二分查找法找200/10bp内的变异索引。
-                    if (indexLeft == -1 && indexRight == -1) {  // 新的等位基因再查找
+                    // Binary search method to find the variation index within 200/10bp.
+                    if (indexLeft == -1 && indexRight == -1) {  // New alleles were searched again
                         if (refLen <= 49 && qryLen <= 49) {
                             indexLeft = search_Binary_left(mergeRefStartVec, (refStart-10));
                             indexRight = search_Binary_right(mergeRefStartVec, (refStart+10));
@@ -862,17 +862,17 @@ void VCFMerge::vcf_merge(
                     }
 
                     for (int64_t k = indexLeft; k <= indexRight; k++) {
-                        // true变异的信息
-                        vector<uint32_t> mergeQryLenVec = mergeQryLenVecVec[k];  // 多个等位基因的长度
+                        // true Indicates the mutation information
+                        vector<uint32_t> mergeQryLenVec = mergeQryLenVecVec[k];  // The length of multiple alleles
                         uint32_t trueRefLen = mergeRefLenVec[k];
                         uint32_t trueRefStart = mergeRefStartVec[k];
 
-                        // 构造ref和qry共同的长度索引
+                        // Construct the length index common to ref and qry
                         vector<uint32_t> trueSeqLenVec;
-                        trueSeqLenVec.push_back(trueRefLen);  // 先添加reference genome的长度
-                        trueSeqLenVec.insert(trueSeqLenVec.end(), mergeQryLenVec.begin(), mergeQryLenVec.end());  // 再添加
+                        trueSeqLenVec.push_back(trueRefLen);  // Start by adding the length of the reference genome
+                        trueSeqLenVec.insert(trueSeqLenVec.end(), mergeQryLenVec.begin(), mergeQryLenVec.end());  // readd
 
-                        // 如果长度为0，则报错，并退出代码。
+                        // If the length is 0, an error is reported and the code exits.
                         if (mergeQryLenVec.size() == 0) {
                             cerr << "[" << __func__ << "::" << getTime() << "] " 
                                 << "Error: mergeQryLenVec.size() == 0 -> " << chromosome 
@@ -880,16 +880,16 @@ void VCFMerge::vcf_merge(
                             exit(1);
                         }
 
-                        for (size_t l = 0; l < trueSeqLenVec.size(); l++) {  // 一个位点有多个等位基因的时候，trueSeqLenVec存储了各个等位基因的长度，因此遍历它看该位点的变异是否和merge里边的一致，包含0
+                        for (size_t l = 0; l < trueSeqLenVec.size(); l++) {  // When a locus has multiple alleles, trueSeqLenVec stores the length of each allele, so it iterates over it to see if the mutation at that locus is the same as the one in the merge, which contains 0
                             uint32_t trueQryLen = trueSeqLenVec[l];
 
-                            // 缺失
+                            // deletion
                             if (refLen >= 50 && qryLen < 50) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart)) <= 200) &&
                                     (abs((static_cast<int32_t>(refStart + refLen) - static_cast<int32_t>(trueRefStart + trueRefLen)) <= 200)) &&
                                     ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / (float)trueRefLen) <= 0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -906,7 +906,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -914,12 +914,12 @@ void VCFMerge::vcf_merge(
                                     
                                     goto stop;
                                 }
-                            } else if (refLen < 50 && qryLen >= 50) {  // 插入
+                            } else if (refLen < 50 && qryLen >= 50) {  // ins
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=200) &&
                                     (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=200) &&
                                     ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -936,7 +936,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -945,13 +945,13 @@ void VCFMerge::vcf_merge(
                                     goto stop;
                                 }
                             }
-                            else if (refLen >= 50 && qryLen >= 50) {  // 替换
+                            else if (refLen >= 50 && qryLen >= 50) {  // Replace
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=200) &&
                                     (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=200) &&
                                     ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) && 
                                     ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -968,7 +968,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -982,7 +982,7 @@ void VCFMerge::vcf_merge(
                                     ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) && 
                                     ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -999,7 +999,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -1012,7 +1012,7 @@ void VCFMerge::vcf_merge(
                                 (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=10) &&
                                 ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -1029,7 +1029,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -1042,7 +1042,7 @@ void VCFMerge::vcf_merge(
                                 (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=10) &&
                                 ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -1059,7 +1059,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -1073,7 +1073,7 @@ void VCFMerge::vcf_merge(
                                 ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) && 
                                 ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // 添加到总图中
+                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
                                         chromosome, 
@@ -1090,7 +1090,7 @@ void VCFMerge::vcf_merge(
                                         indexRight
                                     );
 
-                                    // 没有添加则下一个循环
+                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -1101,7 +1101,7 @@ void VCFMerge::vcf_merge(
                             }
                         }
                     }
-                    stop:; // 如果找到了，则退出嵌套循环。结束该单倍型的循环，继续下一个单倍型
+                    stop:; // If found, exit the nested loop. End the cycle of this haplotype and proceed to the next haplotype
                 }
             }
         }
@@ -1110,10 +1110,10 @@ void VCFMerge::vcf_merge(
 
 
 /**
- * 获取变异的长度信息
+ * Get the length information of the variation
  *
  * @param vcfInfo           vcfInfo
- * @param gtVec             基因型列表
+ * @param gtVec             Genotype list
  * 
  * 
  * @return int              svLength
@@ -1126,7 +1126,7 @@ int64_t VCFMerge::sv_length_select(
 
     vector<string> vcfInfoVec = split(vcfInfo, "\t");
 
-    // 获取ref和单倍型的长度
+    // Gets the length of the ref and haplotype
     uint32_t refLen;
     vector<uint32_t> qryLenVec;
     tie(refLen, qryLenVec) = this->get_hap_len(
@@ -1138,7 +1138,7 @@ int64_t VCFMerge::sv_length_select(
     );
 
     for (size_t i = 0; i < gtVec.size(); i++) {
-        if (gtVec[i] == 0) {  // 如果基因型是0，跳过
+        if (gtVec[i] == 0) {  // If genotype is 0, skip
             continue;
         }
         else {
@@ -1154,10 +1154,10 @@ int64_t VCFMerge::sv_length_select(
 /**
  * Filter result according to the depth and number of variants.
  *
- * @param gtAllVec        位点所有的gt的vector
- * @param softwareVec     位点所有的software的vector
- * @param depthNorVec     位点所有标准化后的depth的vector
- * @param vcfInfo         位点的变异信息
+ * @param gtAllVec        vector of all gt sites
+ * @param softwareVec     Locus vector of all software
+ * @param depthNorVec     The vector of all normalized depths at the site
+ * @param vcfInfo         Variation information at the site
  * 
  * @return software
 **/
@@ -1167,24 +1167,24 @@ string VCFMerge::filter_rule(
     vector<float> & depthNorVec, 
     const string & vcfInfo
 ) {
-    // 结果过滤
-    vector<string> bestSoftwareVec{};  // 出现频率最高的软件vector
-    string selectSoftware;  // 根据sv的长度进行筛选后的软件vector
+    // Result filtering
+    vector<string> bestSoftwareVec{};  // The most frequently appearing software vector
+    string selectSoftware;  // Software vector after filtering according to the length of sv
     int64_t svLength{};
     int gtFrequency = 0;
 
-    // 标准化后的深度最接近0的索引
+    // The index whose depth is closest to 0 after standardization
     float selectDepth = 10000.0;
     int selectDepthIdx = -1;
     for (size_t i = 0; i < depthNorVec.size(); i++) {
         if (abs(depthNorVec[i]) < selectDepth) {
-            selectDepth = abs(depthNorVec[i]);  // 更新深度
-            selectDepthIdx = i;  // 更新索引
+            selectDepth = abs(depthNorVec[i]);  // Renewal depth
+            selectDepthIdx = i;  // Update index
         }
     }
 
-    // 计算每一种基因型出现的频率
-    // 先找频率最大的gt
+    // Calculate the frequency of occurrence of each genotype
+    // Find the gt with the highest frequency first
     for (size_t i = 0; i < gtAllVec.size(); i++) {
         svLength = sv_length_select(
             vcfInfo, 
@@ -1196,38 +1196,38 @@ string VCFMerge::filter_rule(
         }
     }
 
-    // 把频率最大的gt对应软件找出来
+    // Find out the gt corresponding software with the highest frequency
     for (size_t i = 0; i < gtAllVec.size(); i++) {
         if (count(gtAllVec.begin(), gtAllVec.end(), gtAllVec[i]) == gtFrequency) {
             bestSoftwareVec.push_back(softwareVec[i]);
         }
     }
 
-    // 过滤规则
+    // Filter rule
     if (-49 <= svLength && svLength <= 49) {  // snp+indel
-        if (mode_ == "specific") {  // 为株系特异的vcf文件
-            if (gtFrequency < 2) {  // 支持的软件数量小于2，选取深度最接近于0的基因型
-                selectSoftware = softwareVec[selectDepthIdx];  // 选取覆盖度接近于0的软件
-            } else {  // 结果有两个以上软件支持的话，则选择该基因型。
-                selectSoftware = bestSoftwareVec[0]; // 选择出现频率最高的分型结果
+        if (mode_ == "specific") {  // Is a strain specific vcf file
+            if (gtFrequency < 2) {  // The number of supported software is less than 2, and the genotype whose depth is closest to 0 is selected
+                selectSoftware = softwareVec[selectDepthIdx];  // Select software with coverage close to 0
+            } else {  // Results If there are more than two software support, select this genotype.
+                selectSoftware = bestSoftwareVec[0]; // Select the most frequent results
             }
-        } else {  // 为构图用的vcf
+        } else {  // vcf for composition
         
-            if (gtFrequency < 2) {  // 结果必须有两个以上的软件支持，否则跳过该位点
+            if (gtFrequency < 2) {  // The result must be supported by more than two software, otherwise the site is skipped
                 selectSoftware.clear();
-            } else {  // 结果有两个以上软件支持的话，则选择该基因型。
-                selectSoftware = bestSoftwareVec[0]; // 选择出现频率最高的分型结果
+            } else {  // Results If there are more than two software support, select this genotype.
+                selectSoftware = bestSoftwareVec[0]; // Select the most frequent results
             }
         }
     } else {  // Insertion and Deletion
         vector<string> softwareSortVec = {"BayesTyper", "Paragraph", "VG-MAP", "VG-Giraffe", "GraphTyper2", "GraphAligner", "PanGenie"};
         for (auto it : softwareSortVec) {
-            // 大于50bp的变异中如果有it支持，则直接选择it的结果
+            // If there is it support in the variation greater than 50bp, the result of it is directly selected
             if (find(softwareVec.begin(), softwareVec.end(), it) != softwareVec.end()) {
                 selectSoftware = it;
                 break;
-            } else {  // 否则选取覆盖度接近0的软件
-                selectSoftware = softwareVec[selectDepthIdx];  // 选取覆盖度接近于0的软件
+            } else {  // Otherwise, select software with coverage close to 0
+                selectSoftware = softwareVec[selectDepthIdx];  // Select software with coverage close to 0
             }
         }
     }
@@ -1238,14 +1238,14 @@ string VCFMerge::filter_rule(
 
 
 /*
-    vcf过滤
-    mergeVcfStruct_ -> 软件合并后的struct
+ * Select software with coverage close to 0
+ * mergeVcfStruct_ -> struct after software merger
 */
 
 /**
  * Filter and merge result according to the depth and number of variants.
  *
- * @param mode_               EVG运行的模式
+ * @param mode_               EVG running mode
  * 
  * @return void
 **/
@@ -1253,13 +1253,13 @@ void VCFMerge::vcf_merge_filter()
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Filtering.\n";
 
-    // 遍历recall哈希表
+    // Iterate over the recall hash table
     for (const auto& [chromosome, startSoftwareInfoMap] : mergeVcfStruct_.recallSoftwareGtDepVecMap) {  // map<chr, map<start, map<software, tuple<vector<depth>, vector<gt> > > > >
         for (const auto& [refStart, SoftwareInfoMap] : startSoftwareInfoMap) {  // map<start, map<software, tuple<vector<depth>, vector<gt> > > >
-            // 该位点的vcfInfo
+            // vcfInfo at this site
             string informations = mergeVcfStruct_.BaseInfoMap[chromosome][refStart];
 
-            // 构造filter_rule的参数
+            // Constructs the parameters of filter_rule
             vector<vector<int>> gtAllVec;
             vector<string> softwareVec;
             vector<float> depthSumVec;
@@ -1269,7 +1269,7 @@ void VCFMerge::vcf_merge_filter()
             for (const auto& [software, Info] : SoftwareInfoMap) {  // map<software, tuple<vector<depth>, vector<gt> > >
                 depthVecVec.push_back(get<0>(Info));
 
-                // 获取软件平均的覆盖度，先检查map中有没有，如果没有则报错
+                // Obtain the average coverage of the software. Check whether the map contains it. If no, an error is reported
                 float meanDepth;
                 float sd;
                 if (mergeVcfStruct_.depthMap.find(software) != mergeVcfStruct_.depthMap.end()) {
@@ -1279,10 +1279,10 @@ void VCFMerge::vcf_merge_filter()
                     cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no coverage information -> "<< software << endl;
                     exit(1);
                 }
-                float depthSumTmp = accumulate(get<0>(Info).begin(), get<0>(Info).end(), 0);  // 计算所有等位基因的深度和
+                float depthSumTmp = accumulate(get<0>(Info).begin(), get<0>(Info).end(), 0);  // Calculate the depth sum of all alleles
                 depthSumVec.push_back(depthSumTmp);
                 
-                // 对覆盖度标准化（z-score标准化）
+                // Standardization of coverage (z-score standardization)
                 float depthNor = (depthSumTmp - meanDepth) / (float)sd;
                 
                 gtAllVec.push_back(get<1>(Info));
@@ -1290,7 +1290,7 @@ void VCFMerge::vcf_merge_filter()
                 depthNorVec.push_back(depthNor);
             }
 
-            // 过滤，选择最有可能的单倍型
+            // Filter to select the most likely haplotype
             string selectSoftware = filter_rule(
                 gtAllVec, 
                 softwareVec, 
@@ -1298,12 +1298,12 @@ void VCFMerge::vcf_merge_filter()
                 informations
             );
 
-            if (selectSoftware.empty()) {  // 如果返回的是空的字符串，则表明位点不可信，跳过该位点
+            if (selectSoftware.empty()) {  // If an empty string is returned, the site is untrusted and is skipped
                 continue;
             }
 
-            // 选择的软件索引、基因型和深度信息
-            int softwareIdx = distance(softwareVec.begin(), find(softwareVec.begin(), softwareVec.end(), selectSoftware));  // 获取software的索引位置
+            // Selected software indexes, genotypes and in-depth information
+            int softwareIdx = distance(softwareVec.begin(), find(softwareVec.begin(), softwareVec.end(), selectSoftware));  // Gets the index location of the software
             vector<int> selectGtVec = gtAllVec[softwareIdx];
             float selectDepthSumVec = depthSumVec[softwareIdx];
             float selectDepthNor = depthNorVec[softwareIdx];
@@ -1323,9 +1323,9 @@ void VCFMerge::vcf_merge_filter()
 
 
 /**
- * 计算方差和标准差
+ * Calculate the variance and standard deviation
  *
- * @param data     含有位点深度的列表
+ * @param data     List with site depth
  * 
  * @return tuple   make_tuple(mean, variance, std_deviation)
 **/
@@ -1346,12 +1346,12 @@ tuple<float, float, float> VCFMerge::cal_var_sd(const vector<float>& data)
 }
 
 
-/*
-    save result
-    mergeVcfStruct_ -> 软件合并后的struct
-    outChrStartInfoMap_ -> vcf_merge_filter输出结果   outChrStartInfoMap_[chromosome][refStart][refLen][qryLen]
-    prefix -> 输出文件名前缀
-*/
+/**
+ * save result
+ * mergeVcfStruct_ -> struct after software merger
+ * outChrStartInfoMap_ -> vcf_merge_filter Output result   outChrStartInfoMap_[chromosome][refStart][refLen][qryLen]
+ * prefix -> Output file name prefix
+**/
 
 /**
  * save result
@@ -1366,7 +1366,7 @@ void VCFMerge::result_save(
 
     SAVE SaveClass(outputFileName_);
 
-    // 保存需要输出的string
+    // Output file name prefix
     string outTxt = mergeVcfStruct_.headInfo;
  
     for (const auto& [_, StartInfoMap] : outChrStartInfoMap_) {  // outChrStartInfoMap_<chromosome, map<refStart, vcfInfo> >

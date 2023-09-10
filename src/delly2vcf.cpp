@@ -8,7 +8,7 @@ int main_delly2vcf(int argc, char** argv)
     string refFileName;
     string outputFilename;
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -55,7 +55,7 @@ int main_delly2vcf(int argc, char** argv)
         return 1;
     }
 
-    // 设置输出文件的名字
+    // Set the name of the output file
     if (outputFilename.empty())
     {
         outputFilename = split(dellyFilename, ".")[0] + ".convert.vcf";
@@ -74,7 +74,7 @@ int main_delly2vcf(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_delly2vcf(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v -r [options]" << endl
@@ -163,14 +163,14 @@ void Delly2VCF::vcf_convert()
     uint32_t end;
     string qrySeq;
 
-    // 正则表达式对END进行重新替换，有[]时，不能用于regex库，所以先行删除
+    // The regular expression is used to replace END again. If there is [], it cannot be used in the regex library, so delete it first
     std::regex end_reg("END=(\\d+)");
     std::regex reg1("\\[");
     std::regex reg2("\\]");
 
-    smatch end_search; // 寻找informations字段中的END=
+    smatch end_search; // Look for END= in the informations field
     
-    srand((int)time(0));  // 产生随机种子,也可以把0换成NULL。
+    srand((int)time(0));  // Generate random seeds, or replace 0 with NULL.
 
     if(!dellyFile.is_open()) {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << dellyFilename_ << "': No such file or directory." << endl;
@@ -181,7 +181,7 @@ void Delly2VCF::vcf_convert()
                 std::regex reg_INFO("INFO\t.*");
                 outTxt += regex_replace(string(informations), regex(reg_INFO), string("INFO")) + "\n";
             } else {
-                // 删除方括号
+                // Remove square brackets
                 informations = regex_replace(string(informations), regex(reg1), string(""));
                 informations = regex_replace(string(informations), regex(reg2), string(""));
                 
@@ -195,7 +195,7 @@ void Delly2VCF::vcf_convert()
                 std::regex reg_PASS("PASS.*");
 
                 
-                // 找INFO字段中的END位置
+                // Look for the END location in the INFO field
                 if (regex_search(informations, end_search, end_reg)) {
                     // end = stoi(end_search.format("$1")) - 1;
                     end = stoul(end_search.str(1)) - 1;
@@ -204,7 +204,7 @@ void Delly2VCF::vcf_convert()
                     continue;
                 }
 
-                // delly找的结构变异有的会很大很大，将该变异缩小。
+                // Some of the structural variations delly finds are going to be very, very large, narrow that variation down.
                 if ((end - start) > 10000) {
                     end = start + 10000;
                 }        
@@ -256,7 +256,7 @@ void Delly2VCF::vcf_convert()
     }
     outFile << outTxt;
 
-    // 释放内存
+    // free memory
     dellyFile.close();
     outFile.close();
 }

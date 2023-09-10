@@ -41,21 +41,21 @@ private:
     map<string, uint32_t> chrLenMap_;  // map<chr, length>
     vector<string> vcfFileVec_;
 
-     // 步长字典
+     // Step dictionary
     map<string, vector<uint32_t> > winStartMap_;  // map<string, vector<start> >
     map<string, vector<uint32_t> > winEndMap_;  // map<string, vector<end> >
 
-    // ways分类字典
+    // ways classification dictionary
     map<string,string> waysGroupMap_;
 
     map<string,map<uint32_t, vector<uint32_t> > > chrWinStartLenMap_;  // <chromosome, map<winStart, vector<length> > >
     map<string,map<uint32_t, vector<string> > > chrWinStartGroupMap_;  // <chromosome, map<winStart, vector<group> > >
 
     /**
-     * 获取位点基因型列表.
+     * Get a list of loci genotypes.
      *
      * @param lineVec          lineVec
-     * @param sampleIdx        sample基因型的索引,默认值0代表最后一列
+     * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
      * 
      * 
      * @return gtVec           vector <int>
@@ -87,19 +87,19 @@ public:
         const string& mode
     );
 
-    // 统计染色体条数和名字
+    // Count chromosome numbers and names
     void count_chrName();
     
 
-    // 步长字典
+    // Step dictionary
     void step_count();
     
 
-    // ways的分类
+    // Classification of ways
     void ways_group();
 
 
-    // 计算窗口内变异的长度
+    // Calculate the length of the variation in the window
     void window_len_count();
 
 

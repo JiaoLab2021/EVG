@@ -23,17 +23,17 @@
 
 using namespace std;
 
-// kseq.h 打开文件
+// kseq.h Opens the file
 KSEQ_INIT(gzFile, gzread)
 
 
 #ifndef __AC_KHASH_H
 #define __AC_KHASH_H
 
-/*!
+/**
   @header
   Generic hash table library.
- */
+**/
 
 #define AC_VERSION_KHASH_H "0.2.6"
 

@@ -50,7 +50,7 @@ struct VCFINFOSTRUCT
 
 
 /**
- * @brief 打开vcf文件
+ * @brief Open the vcf file
  * 
  * @param vcfFileName   the output of vcf file
  * 
@@ -59,10 +59,10 @@ struct VCFINFOSTRUCT
 class VCFOPEN
 {
 private:
-    // vcf文件
+    // vcf file
     string vcfFileName_;
 
-    // 输入文件流
+    // Input file stream
     gzFile gzfpI;
 public:
     VCFOPEN(

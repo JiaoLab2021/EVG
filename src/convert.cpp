@@ -7,11 +7,11 @@ void help_convert(char** argv);
 
 int main_convert(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
     string fastaFilename;
     string outputFilename;
     
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -75,7 +75,7 @@ int main_convert(int argc, char** argv)
 }
 
 
-// 帮助文档
+// Help document
 void help_convert(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -i -o [options]" << endl
@@ -132,7 +132,7 @@ void Convert::convert()
         }
     }
 
-    // 关闭文件
+    // Close file
     fastaFile.close();
 
     // save the result

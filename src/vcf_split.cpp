@@ -9,25 +9,25 @@ using namespace std;
 
 int main_split(int argc, char** argv)
 {
-    // 输入文件
+    // Input file
     string vcfFileName;
 
-    // 输入提取snp和indel位置的vcf文件
+    // Input to extract the vcf file for snp and indel locations
     string baseVcfFileName;
     
-    // 拆分的模式
+    // Split mode
     string mode = "type";
 
-    // snp和indel离sv的距离
+    // The distance of snp and indel from sv
     int length = 100;
 
-    // 输出文件前缀
+    // Output file prefix
     string prefix = "split";
 
-    // 是否根据FILTER列进行过滤
+    // Whether to FILTER based on the filter column
     bool filterBool = false;
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -81,7 +81,7 @@ int main_split(int argc, char** argv)
         }
     }
 
-    // 检查参数是否正确
+    // Check whether the parameters are correct
     if (vcfFileName.empty() || (mode != "type" && mode != "number"))
     {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Parameter error.\n";
@@ -114,7 +114,7 @@ int main_split(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_split(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
@@ -170,70 +170,70 @@ bool VCFSplit::get_len(
     uint32_t& qryLen
 )
 {
-    // 最后一列信息
+    // The last column of information
     vector<string> lastColVec = split(INFOSTRUCTTMP.lineVec[INFOSTRUCTTMP.lineVec.size()-1], ":");
 
-    // 找FORMAT字段中gt的位置
+    // Find the location of gt in the FORMAT field
     vector<string> formatVec = split(strip(INFOSTRUCTTMP.lineVec[8], '\n'), ":");
     vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
 
     string gt;
     int gtIndex = 0;
-    if (gtItera != formatVec.end()) {  // FORMAT中有GT
-        // GT的index
+    if (gtItera != formatVec.end()) {  // The FORMAT contains GT
+        // GT index
         gtIndex = distance(formatVec.begin(), gtItera);
         gt = strip(lastColVec[gtIndex], '\n');
-    } else {  // 没有的话退出代码
+    } else {  // If not, exit the code
         cerr << "[" << __func__ << "::" << getTime() << "] "
             << "Error: GT not in FORMAT column -> " 
             << INFOSTRUCTTMP.line << endl;
         exit(1);
     }
 
-    if (gt == "0/0" || gt == "." || gt == "./." || gt == ".|." || gt == "0|0") {  // 如果是(0/0, .)格式的则直接跳过，不计数。
+    if (gt == "0/0" || gt == "." || gt == "./." || gt == ".|." || gt == "0|0") {  // If it is (0/0,.) Format is directly skipped, do not count.
         return false;
     }
 
-    // 根据FILTER字段进行过滤
-    if (INFOSTRUCTTMP.FILTER != "PASS" && filterBool_) {  // 如果不是(PASS)则直接跳过，如果不过滤，跳过该判断
+    // According to the FILTER field
+    if (INFOSTRUCTTMP.FILTER != "PASS" && filterBool_) {  // If it is not (PASS), it is skipped. If it is not filtered, it is skipped
         return false;
     }
 
-    // 软件的分型结果
+    // Software classification results
     vector<string> evaluate_gt;
     if (filterBool_) {
         evaluate_gt = VCFOPENCLASS.gt_split(gt);
     }
-    else {  // 如果不过滤，则这里也不判断，因为gramtools的GT格式是1，没有分隔符
+    else {  // If not filtered, then there is no judgment here either, because gramtools' GT format is 1 with no separator
         evaluate_gt = {"1", "1"};
     }
     
-    if (INFOSTRUCTTMP.ALT.find(">") != string::npos) {  // graphtyper软件的结果
-        // 使用正则表达式提取长度信息
+    if (INFOSTRUCTTMP.ALT.find(">") != string::npos) {  // The result of graphtyper software
+        // Use regular expressions to extract length information
         std::regex reg("SVSIZE=(\\d+)");
         std::smatch match;
-        // 检查qry序列中有没有长度信息，没有的话跳过该位点
+        // Check whether there is any length information in the qry sequence. If there is no length information, skip this site
         if (!std::regex_search(INFOSTRUCTTMP.ALT, match, reg)) {  // <INS:SVSIZE=97:BREAKPOINT1>
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No length information in the fourth column, skip this site -> " << INFOSTRUCTTMP.line << endl; 
             return false;
         }
 
-        if (INFOSTRUCTTMP.ALT.find("<INS") != string::npos) {  // 字符段中包含插入的字段（graphtyper）<INS:SVSIZE=97:BREAKPOINT1>
+        if (INFOSTRUCTTMP.ALT.find("<INS") != string::npos) {  // Character segment containing inserted fields (graphtyper) <INS:SVSIZE=97:BREAKPOINT1>
             refLen = INFOSTRUCTTMP.LEN;
             qryLen = std::stoul(match[1].str());
-        } else if (INFOSTRUCTTMP.ALT.find("<DEL") != string::npos) {  // 字符段中包含缺失的字段（graphtyper） <DEL:SVSIZE=233:COVERAGE>
+        } else if (INFOSTRUCTTMP.ALT.find("<DEL") != string::npos) {  // Character segment contains deletion fields (graphtyper) <DEL:SVSIZE=233:COVERAGE>
             refLen = std::stoul(match[1].str());
             qryLen = INFOSTRUCTTMP.LEN;
-        } else if (INFOSTRUCTTMP.ALT.find("<DUP") != string::npos) {  // 字符段中包含重复的字段（graphtyper）<DUP:SVSIZE=2806:BREAKPOINT1>
+        } else if (INFOSTRUCTTMP.ALT.find("<DUP") != string::npos) {  // Character segment containing duplicate fields (graphtyper) <DUP:SVSIZE=2806:BREAKPOINT1>
             refLen = std::stoul(match[1].str());
             qryLen = refLen * 2;
-        } else {  // 不认识的字段
+        } else {  // Unknown fields
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: unknown string -> ref_seq:" << INFOSTRUCTTMP.REF << " qey_seq:" << INFOSTRUCTTMP.ALT << endl;
             refLen = INFOSTRUCTTMP.LEN;
 
             qryLen = std::stoul(match[1].str());
         }
-    } else {  // 正常的变异
+    } else {  // Normal variation
         refLen = INFOSTRUCTTMP.LEN;
 
         string qrySeq;
@@ -243,14 +243,14 @@ bool VCFSplit::get_len(
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: genotyping and ALT sequence numbers do not match -> " << INFOSTRUCTTMP.line << endl;
             exit(1);
         } else {
-            qrySeq = INFOSTRUCTTMP.ALTVec[maxGtNum-1]; // GT号减去1是序列的索引
+            qrySeq = INFOSTRUCTTMP.ALTVec[maxGtNum-1]; // GT number minus 1 is the index of the sequence
         }
 
         qryLen = qrySeq.size();
     }
 
-    // 判断bayestyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
-    if ((INFOSTRUCTTMP.ID.find("Duplication") != string::npos) && (refLen <= 2)) {  // bayestyper会把duplication变成插入，所以重新计算长度
+    // The result of bayestyper was judged to be duplication, ref_len was 1-2, and qry_seq was very long
+    if ((INFOSTRUCTTMP.ID.find("Duplication") != string::npos) && (refLen <= 2)) {  // bayestyper will change duplication into insertion, so recalculate the length
         refLen = qryLen;
         qryLen *= 2;
     }
@@ -261,15 +261,15 @@ bool VCFSplit::get_len(
 
 void VCFSplit::vcf_split_type()
 {
-    // 输入文件流
-    // 存储vcf信息
+    // Input file stream
+    // Store vcf information
     VCFINFOSTRUCT INFOSTRUCTTMP;
     VCFOPEN VCFOPENCLASS(vcfFileName_);
 
-    // 记录每种变异和注释行
+    // Record each variation and comment line
     string simpleSVs, invSVs, dupSVs, otherSVs;
 
-    // 输出文件流
+    // Output file stream
     SAVE SimpleSave(prefix_ + ".snp.indel.ins.del.vcf.gz");
     SAVE InvSave(prefix_ + ".inv.vcf.gz");
     SAVE DupSave(prefix_ + ".dup.vcf.gz");
@@ -282,7 +282,7 @@ void VCFSplit::vcf_split_type()
             continue;
         }
 
-        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // 检查是否是注释行
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // Check for comment lines
             string headLine = INFOSTRUCTTMP.line + "\n";
             SimpleSave.save(headLine);
             InvSave.save(headLine);
@@ -295,7 +295,7 @@ void VCFSplit::vcf_split_type()
                 continue;
             }
 
-            // 判断变异类型，并保存到字符串中
+            // Determine the variation type and save it to the string
             if ((refLen < 50 && qryLen < 50) || (refLen >= 50 && qryLen < 50) || (refLen < 50 && qryLen >= 50)) {  // snp+indel+del+ins
                 simpleSVs += INFOSTRUCTTMP.line + "\n";
             } else if (refLen >= 50 && qryLen >= 50) {
@@ -311,13 +311,13 @@ void VCFSplit::vcf_split_type()
             }
 
             // save result
-            if (simpleSVs.size() > 10 * 1024 * 1024) {  // 每10Mb写入一次
+            if (simpleSVs.size() > 10 * 1024 * 1024) {  // Determine the variation type and save it to the string
                 SimpleSave.save(simpleSVs);
                 InvSave.save(invSVs);
                 DupSave.save(dupSVs);
                 OtherSave.save(otherSVs);
 
-                // 清空字符串
+                // Empty string
                 simpleSVs.clear();
                 invSVs.clear();
                 dupSVs.clear();
@@ -326,13 +326,13 @@ void VCFSplit::vcf_split_type()
         }
     }
 
-    // 最后写入一次
+    // Last write
     SimpleSave.save(simpleSVs);
     InvSave.save(invSVs);
     DupSave.save(dupSVs);
     OtherSave.save(otherSVs);
 
-    // 清空字符串
+    // Empty string
     simpleSVs.clear();
     invSVs.clear();
     dupSVs.clear();
@@ -347,10 +347,10 @@ void VCFSplit::vcf_split_number()
         baseVcfFileName_ = vcfFileName_;
     }
 
-    // 记录sv拆分的结果
+    // Record the result of the sv split
     string SVs0, SVs1, SVs2, SVs4, SVs6, SVs8, SVsMore;
 
-    // 输出文件流
+    // Output file stream
     SAVE SVs0Save(prefix_ + ".0.vcf.gz");
     SAVE SVs1Save(prefix_ + ".1.vcf.gz");
     SAVE SVs2Save(prefix_ + ".2.vcf.gz");
@@ -359,7 +359,7 @@ void VCFSplit::vcf_split_number()
     SAVE SVs8Save(prefix_ + ".8.vcf.gz");
     SAVE SVsMoreSave(prefix_ + ".more.vcf.gz");
 
-    // snp+indel的索引
+    // snp+indel index
     VCFINFOSTRUCT INFOSTRUCTBase;
     VCFOPEN VCFOPENCLASSBase(baseVcfFileName_);
 
@@ -383,8 +383,8 @@ void VCFSplit::vcf_split_number()
             uint32_t refEnd;
             refEnd = INFOSTRUCTBase.POS + refLen - 1;
 
-            // 判断变异类型，并保存到哈希表中
-            if ((refLen < 50 && qryLen < 50)) {  // 保存snp+indel的起始和终止位置
+            // Determine the variation type and save it to the hash table
+            if ((refLen < 50 && qryLen < 50)) {  // Save the start and end locations of snp+indel
                 snpIndelInfoMap[INFOSTRUCTBase.CHROM].refStartVec.push_back(INFOSTRUCTBase.POS);
                 snpIndelInfoMap[INFOSTRUCTBase.CHROM].refEndVec.push_back(refEnd);
             }
@@ -392,12 +392,12 @@ void VCFSplit::vcf_split_number()
     }
 
 
-    // 输入文件流
-    // 存储vcf信息
+    // Input file stream
+    // Store vcf information
     VCFINFOSTRUCT INFOSTRUCTTMP;
     VCFOPEN VCFOPENCLASS(vcfFileName_);
 
-    // 构建哈希表 （结构变异）
+    // Building a hash table (structure variation)
     map<string, map<uint32_t, svInfo> > svInfoMap; // map<chromosome, map<refStart, svInfo>>
 
     // If not traversed, continue
@@ -407,7 +407,7 @@ void VCFSplit::vcf_split_number()
             continue;
         }
 
-        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // 检查是否是注释行
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // Check for comment lines
             string headLine = INFOSTRUCTTMP.line + "\n";
             SVs0Save.save(headLine);
             SVs1Save.save(headLine);
@@ -426,8 +426,8 @@ void VCFSplit::vcf_split_number()
             uint32_t refEnd;
             refEnd = INFOSTRUCTTMP.POS + refLen - 1;
 
-            // 判断变异类型，并保存到哈希表中
-            if (refLen >= 50 || qryLen >= 50) {  // 保存sv的终止和变异信息
+            // Determine the variation type and save it to the hash table
+            if (refLen >= 50 || qryLen >= 50) {  // Save sv termination and mutation information
                 svInfoMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS].information = INFOSTRUCTTMP.line;
                 svInfoMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS].refEnd = refEnd;
             }
@@ -435,33 +435,33 @@ void VCFSplit::vcf_split_number()
     }
 
 
-    // 找sv附近的snp和indel数量并进行拆分
-    // 对sv哈希表进行循环
+    // Find the number of SNPS and indel near sv and split them
+    // Loop over the sv hash table
     for (const auto& [chromosome, refStartInfoMap] : svInfoMap) {
-        // snp+indel起始和终止的列表
+        // snp+indel start and end list
         const vector<uint32_t>& snpIndelRefStartVec = snpIndelInfoMap[chromosome].refStartVec;
         const vector<uint32_t>& snpIndelRefEndVec = snpIndelInfoMap[chromosome].refEndVec;
 
         for (const auto& [refStart, Info] : refStartInfoMap) {
-            // 二分查找法找起始和终止200bp内的snp和indel数量
-            // 寻找左右索引
+            // Binary search finds the number of SNPS and indel within 200bp of starting and ending
+            // Find left and right index
             int64_t startLeftIdxTmp = search_Binary_right(snpIndelRefEndVec, refStart - length_);
             int64_t startRightIdxTmp = search_Binary_left(snpIndelRefEndVec, refStart);
             int64_t endLeftIdxTmp = search_Binary_right(snpIndelRefStartVec, Info.refEnd);
             int64_t endRightIdxTmp = search_Binary_left(snpIndelRefStartVec, Info.refEnd + length_);
 
-            // sv两端snp+indel的数量
+            // Number of snp+indel at both ends of sv
             int64_t leftSnpIndelNum = startRightIdxTmp - startLeftIdxTmp;
-            if (leftSnpIndelNum < 0) {  // 没有
+            if (leftSnpIndelNum < 0) {  // none
                 leftSnpIndelNum = 0;
-            } else {  // 有一个或多个
+            } else {  // There is one or more
                 leftSnpIndelNum++;
             }
             
             int64_t rightSnpIndelNum = endRightIdxTmp - endLeftIdxTmp;
-            if (rightSnpIndelNum < 0) {  // 没有
+            if (rightSnpIndelNum < 0) {  // none
                 rightSnpIndelNum = 0;
-            } else {  // 有一个或多个
+            } else {  // There is one or more
                 rightSnpIndelNum++;
             }
 
@@ -483,7 +483,7 @@ void VCFSplit::vcf_split_number()
             }
             
             // save result
-            if (SVs0.size() > 10 * 1024 * 1024) // 每10Mb写入一次
+            if (SVs0.size() > 10 * 1024 * 1024) // It is written every 10Mb
             {
                 SVs0Save.save(SVs0);
                 SVs1Save.save(SVs1);
@@ -493,7 +493,7 @@ void VCFSplit::vcf_split_number()
                 SVs8Save.save(SVs8);
                 SVsMoreSave.save(SVsMore);
 
-                // 清空字符串
+                // It is written every 10Mb
                 SVs0.clear();
                 SVs1.clear();
                 SVs2.clear();
@@ -513,7 +513,7 @@ void VCFSplit::vcf_split_number()
     SVs8Save.save(SVs8);
     SVsMoreSave.save(SVsMore);
 
-    // 清空字符串
+    // Empty string
     SVs0.clear();
     SVs1.clear();
     SVs2.clear();

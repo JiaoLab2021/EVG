@@ -7,6 +7,8 @@
 #include <vector>
 #include <algorithm>
 #include <getopt.h>
+
+#include "count.hpp"
 #include "get_time.hpp"
 #include "strip_split_join.hpp"
 
@@ -16,12 +18,12 @@ namespace sample
 {
     void save(string outputFileName, string outTxt);
 
-    // 打开fastq.gz文件
+    // Open the fastq.gz file
     void sample(string inputFileName1, string inputFileName2, const vector<long long int> & randVecSel, string prefix)
     {
-        if (inputFileName1.size() > 0 && inputFileName2.size() > 0) // 双端测序
+        if (inputFileName1.size() > 0 && inputFileName2.size() > 0) // Double-ended sequencing
         {
-            // 输出文件名
+            // Output file name
             string outputFileName1 = prefix + "." + split(inputFileName1, "/")[split(inputFileName1, "/").size() - 1];
             string outputFileName2 = prefix + "." + split(inputFileName2, "/")[split(inputFileName2, "/").size() - 1];
             if (outputFileName1.rfind(".gz") == string::npos && outputFileName1.rfind(".GZ") == string::npos)
@@ -33,28 +35,28 @@ namespace sample
                 outputFileName2 += ".gz";
             }
 
-            // 看文件是否存在，存在则清空文件
-            // 输出文件流
+            // Check whether the file exists. If yes, delete the file
+            // Output file stream
             gzFile gzfpO1 = gzopen(outputFileName1.c_str(), "wb");
             gzFile gzfpO2 = gzopen(outputFileName2.c_str(), "wb");
             gzclose(gzfpO1);
             gzclose(gzfpO2);
             
-            // 输入文件流
+            // Input file stream
             gzFile gzfpI1 = gzopen(inputFileName1.c_str(), "rb");
             gzFile gzfpI2 = gzopen(inputFileName2.c_str(), "rb");
 
-            // 记录read数
+            // Record read
             long long int readNum = 0;
 
-            // 输出字符串
+            // Output string
             string outTxt1;
             string outTxt2;
 
-            // 记录在vec中的index
+            // The index recorded in the vec
             long long int index = 0;
 
-            // 打开文件
+            // Open file
             if(!gzfpI1 || !gzfpI2)
             {
                 cerr << "[" << __func__ << "::" << getTime() << "] '" 
@@ -71,7 +73,7 @@ namespace sample
             
                 while(kseq_read(ks1) >= 0 && kseq_read(ks2) >= 0)
                 {
-                    if (randVecSel[index] == readNum) // 如果是选择的read，则添加到outTxt里
+                    if (randVecSel[index] == readNum) // If it is a selected read, it is added to outTxt
                     {
                         string readName1 = ks1->name.s;
                         readName1 = "@" + readName1;
@@ -83,7 +85,7 @@ namespace sample
                         string readSeq2 = ks2->seq.s;
                         string readQual2 = ks2->qual.s;
 
-                        // 判断fastq有没有接头序列信息
+                        // Check whether fastq has joint sequence information
                         string readNameLast1;
                         string readNameLast2;
                         if (ks1->comment.s)
@@ -124,70 +126,70 @@ namespace sample
                                 readQual2 +
                                 "\n";
 
-                        if (outTxt1.length() > 100000000) // 每100Mb写一次
+                        if (outTxt1.length() > 100000000) // Write once every 100Mb
                         {
-                            // 写入磁盘
+                            // Write to disk
                             save(outputFileName1, outTxt1);
                             save(outputFileName2, outTxt2);
 
-                            // 清空字符串
+                            // Empty string
                             outTxt1.clear();
                             outTxt2.clear();
                             string().swap(outTxt1);
                             string().swap(outTxt2);
                         }
 
-                        // index指向下一个元素
+                        // index points to the next element
                         index++;
                     }
-                    // read数+1
+                    // read count + 1
                     readNum++;
                 }
 
-                // 写入到磁盘中
+                // Writes to disk
                 save(outputFileName1, outTxt1);
                 save(outputFileName2, outTxt2);
 
-                // 清空字符串
+                // Empty string
                 outTxt1.clear();
                 outTxt2.clear();
                 string().swap(outTxt1);
                 string().swap(outTxt2);
 
-                // 释放内存，关闭文件
+                // Free the memory and close the file
                 kseq_destroy(ks1);
                 kseq_destroy(ks2);
                 gzclose(gzfpI1);
                 gzclose(gzfpI2);
             }
         }
-        else if (inputFileName1.size() > 0 && inputFileName2.size() == 0) // 单端测序
+        else if (inputFileName1.size() > 0 && inputFileName2.size() == 0) // Single-ended sequencing
         {
-            // 输出文件名
+            // Output file name
             string outputFileName1 = prefix + "." + split(inputFileName1, "/")[split(inputFileName1, "/").size() - 1];
             if (outputFileName1.rfind(".gz") == string::npos && outputFileName1.rfind(".GZ") == string::npos)
             {
                 outputFileName1 += ".gz";
             }
 
-            // 看文件是否存在，存在则清空文件
-            // 输出文件流
+            // Check whether the file exists. If yes, delete the file
+            // Output file stream
             gzFile gzfpO1 = gzopen(outputFileName1.c_str(), "wb");
             gzclose(gzfpO1);
             
-            // 输入文件流
+            // Input file stream
             gzFile gzfpI1 = gzopen(inputFileName1.c_str(), "rb");
 
-            // 记录read数
+            // Record read
             long long int readNum = 0;
 
-            // 输出字符串
+            // Output string
             string outTxt1;
 
-            // 记录在vec中的index
+            // The index recorded in the vec
             long long int index = 0;
 
-            // 打开文件
+            // Open file
             if(!gzfpI1)
             {
                 cerr << "[" << __func__ << "::" << getTime() << "] '" 
@@ -203,14 +205,14 @@ namespace sample
             
                 while(kseq_read(ks1) >= 0)
                 {
-                    if (randVecSel[index] == readNum) // 如果是选择的read，则添加到outTxt里
+                    if (randVecSel[index] == readNum) // If it is a selected read, it is added to outTxt
                     {
                         string readName1 = ks1->name.s;
                         readName1 = "@" + readName1;
                         string readSeq1 = ks1->seq.s;
                         string readQual1 = ks1->qual.s;
 
-                        // 判断fastq有没有接头序列信息
+                        // Check whether fastq has joint sequence information
                         string readNameLast1;
                         if (ks1->comment.s)
                         {
@@ -231,31 +233,31 @@ namespace sample
                                 readQual1 +
                                 "\n";
 
-                        if (outTxt1.length() > 100000000) // 每100Mb写一次
+                        if (outTxt1.length() > 100000000) // Write once every 100Mb
                         {
-                            // 写入磁盘
+                            // Write to disk
                             save(outputFileName1, outTxt1);
 
-                            // 清空字符串
+                            // Empty string
                             outTxt1.clear();
                             string().swap(outTxt1);
                         }
 
-                        // index指向下一个元素
+                        // index points to the next element
                         index++;
                     }
-                    // read数+1
+                    // read count +1
                     readNum++;
                 }
 
-                // 写入到磁盘中
+                // Writes to disk
                 save(outputFileName1, outTxt1);
 
-                // 清空字符串
+                // Empty string
                 outTxt1.clear();
                 string().swap(outTxt1);
 
-                // 释放内存，关闭文件
+                // Free the memory and close the file
                 kseq_destroy(ks1);
                 gzclose(gzfpI1);
             }
@@ -269,13 +271,13 @@ namespace sample
         }
     }
 
-    // 保存fastq.gz文件
+    // Save the fastq.gz file
     void save(string outputFileName, string outTxt)
     {
-        // 输出文件流
+        // Output file stream
         gzFile gzfp = gzopen(outputFileName.c_str(), "ab");
 
-        // 打开文件
+        // Open file
         if(!gzfp)
         {
             cerr << "[" << __func__ << "::" << getTime() << "] '" 
@@ -288,11 +290,11 @@ namespace sample
             gzwrite(gzfp, outTxt.c_str(), outTxt.length());
         }
 
-        // 释放内存，关闭文件
+        // Free the memory and close the file
         gzclose(gzfp);
     }
 
-    // 随机一组数据
+    // A random set of data
     vector<long long int> randVector(long long int num)
     {
         vector<long long int> result;

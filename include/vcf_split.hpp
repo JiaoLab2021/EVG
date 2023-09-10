@@ -28,7 +28,7 @@ int main_split(int argc, char** argv);
 class VCFSplit
 {
 private:
-    // 存储vcf信息
+    // Store vcf information
     struct svInfo
     {
         string information;
@@ -39,7 +39,7 @@ private:
 
     struct snpIndelInfo
     {
-        // 保存snp和indel的起始和终止位置
+        // Save the start and end locations of SNPS and indel
         vector<uint32_t> refStartVec;
         vector<uint32_t> refEndVec;
     };

@@ -37,10 +37,10 @@ struct vcfStructure
     
     map<string, map<uint32_t, tuple<uint32_t, vector<uint32_t>, string, int32_t, vector<int> > > > chrStartLenInfoGtTupMap;  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen, gtVec> > >
     
-    vector<int64_t> allLengthList;  // 所有变异的长度
+    vector<int64_t> allLengthList;  // All the variations in length
 };
 
-// 对变异长度进行统计的Bool函数
+// Bool function that performs statistics on the variation length
 class f_mod
 {
 private:
@@ -128,10 +128,10 @@ public:
 
 
     /**
-	 * 获取位点基因型列表.
+	 * Get a list of loci genotypes.
 	 *
 	 * @param informationsVec  vcfInfoList
-     * @param sampleIdx        sample基因型的索引,默认值0代表最后一列
+     * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
      * 
      * 
      * @return gtVec           vector <int>
@@ -143,7 +143,7 @@ public:
 
 
     /**
-	 * 获取位点基因型列表.
+	 * Get a list of loci genotypes.
 	 *
      * @param INFOSTRUCTTMP    line information
      * 
@@ -156,11 +156,11 @@ public:
 
 
     /**
-	 * 获取变异的长度信息
+	 * Get the length information of the variation
 	 *
-     * @param refLen            ref长度
-	 * @param qryLenVec         qry长度列表
-     * @param gtVec             基因型列表
+     * @param refLen            ref length
+	 * @param qryLenVec         qry Length list
+     * @param gtVec             Genotype list
      * 
      * 
      * @return int32_t              svLength
@@ -173,12 +173,12 @@ public:
 
 
     /**
-	 * 统计变异长度信息
+	 * Statistical variation length information
 	 *
-	 * @param length_list         长度列表
+	 * @param length_list         Length list
      * 
      * 
-     * @return vector<int64_t>   每个区间的长度
+     * @return vector<int64_t>   The length of each interval
 	**/
     vector<int64_t> count_num(
         vector<int64_t> length_list
@@ -186,13 +186,13 @@ public:
 
 
     /**
-	 * 获取单倍型对应的长度信息.
+	 * Get the length of the haplotype.
 	 *
-     * @param svType                         变异类型
-	 * @param refSeq                         ref列信息
-     * @param qrySeqs                        qry列信息
-     * @param gtVec                          位点的分型信息
-     * @param lenType                        只取单倍型对应的长度还是所有的长度(hap/all)
+     * @param svType                         Variation type
+	 * @param refSeq                         ref column information
+     * @param qrySeqs                        qry Column information
+     * @param gtVec                          Typing information of loci
+     * @param lenType                        Take only the length corresponding to the haplotype or all the lengths (hap/all)
      * 
      * 
      * @return tuple<int, vector<int> >      tuple<refLen, vector<qryLen> >
@@ -207,10 +207,10 @@ public:
     
 
     /**
-	 * 保存recall中failCall的结果
+	 * Save the result of failCall in recall
 	 *
-	 * @param chrStartLenInfoGtTupMap     真集中用剩下的vcf信息
-     * @param outFileName                 输出文件名
+	 * @param chrStartLenInfoGtTupMap     The rest of the vcf information is used in the true set
+     * @param outFileName                 Output file name
      * 
      * 
      * @return int             0
@@ -222,9 +222,9 @@ public:
 
 
     /**
-	 * 保存recall中failCall的结果
+	 * Save the result of failCall in recall
 	 *
-     * @param allLengthList     所有变异长度
+     * @param allLengthList     All variation lengths
      * 
      * 
      * @return int             0

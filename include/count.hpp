@@ -29,7 +29,7 @@ struct countStruct
 class Count
 {
 private:
-    // kseq.h 打开文件
+    // kseq.h Opens the file
     KSEQ_INIT(gzFile, gzread)
 
     string inputFileName1_;
@@ -44,10 +44,10 @@ public:
         const string & outputFileName
     );
 
-    // 打开fastq/a.gz文件
+    // Open the fastq/a.g file
     void fastq_a_count();
 
-    // 打开fastq/a.gz文件
+    // Open the fastq/a.g file
     void save_result();
 };
 

@@ -15,7 +15,7 @@ int main_win(int argc, char** argv)
     uint32_t stepSize = 100000;
     string mode = "number";
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -90,16 +90,16 @@ int main_win(int argc, char** argv)
         mode
     );
 
-    // 统计染色体条数和名字
+    // Count chromosome numbers and names
     VCFWinClass.count_chrName();
 
-    // 步长字典
+    // Step dictionary
     VCFWinClass.step_count();
 
-    // ways的分类
+    // Classification of ways
     VCFWinClass.ways_group();
     
-    // 计算窗口内变异的长度
+    // Calculate the length of the variation in the window
     VCFWinClass.window_len_count();
 
     // save
@@ -109,7 +109,7 @@ int main_win(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_win(char** argv)
 
 {
@@ -154,12 +154,12 @@ VCFWin::VCFWin(
 ) : windowSize_(windowSize), stepSize_(stepSize), chrLenFilename_(chrLenFilename), vcfFilename_(vcfFilename), waysFilename_(waysFilename), outputFileName_(outputFileName), mode_(mode) {}
 
 
-// 统计染色体条数和名字
+// Count chromosome numbers and names
 void VCFWin::count_chrName()
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Count the number and names of chromosomes.\n";
 
-    // 看有多少条染色体
+    // See how many chromosomes there are
     string line;
 
     // input file stream
@@ -188,27 +188,27 @@ void VCFWin::count_chrName()
             }
         }
     }
-    // 释放内存
+    // Free memory
     chrLenFile.close();
 }
 
-// 步长字典
+// Step dictionary
 void VCFWin::step_count()
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Building step index.\n";
 
     for (const auto& [chrName, chrLen] : chrLenMap_) {
-        // 步数
+        // Step number
         uint32_t stepsNumber = static_cast<uint32_t>(std::ceil(chrLen / stepSize_));
 
-        // 制作步长字典
+        // Make a step dictionary
         for (uint32_t i = 0; i < stepsNumber; i++) {
             uint32_t stepStart = i * stepSize_ + 1;
             uint32_t stepEnd = stepStart + windowSize_ - 1;
             winStartMap_[chrName].push_back(stepStart);
             winEndMap_[chrName].push_back(stepEnd);
         }
-        // 最后到染色体的结尾
+        // And finally to the end of the chromosome
         if (winEndMap_[chrName].back()<chrLen) {
             winStartMap_[chrName].push_back(winEndMap_[chrName].back() + 1);
             winEndMap_[chrName].push_back(chrLen);
@@ -216,12 +216,12 @@ void VCFWin::step_count()
     }
 }
 
-// ways的分类
+// Classification of ways
 void VCFWin::ways_group()
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Building group index.\n";
 
-    if (waysFilename_.empty()) {  // 如果group文件为空，则构建假的group哈希表
+    if (waysFilename_.empty()) {  // If the group file is empty, a fake group hash table is built
     
         waysGroupMap_["0"] = "0";
         return;
@@ -259,12 +259,12 @@ void VCFWin::ways_group()
         }
     }
 
-    // 释放内存
+    // Free memory
     waysFile.close();
 }
 
 
-// 计算窗口内变异的长度
+// Calculate the length of the variation in the window
 void VCFWin::window_len_count()
 {
      // input file stream
@@ -288,21 +288,21 @@ void VCFWin::window_len_count()
             continue;
         }
         
-        // vcf文件没有注释行，则直接退出代码。
+        // If the vcf file has no comment line, the code simply exits.
         if (waysVector.size() < 1) {
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "Error: missing the comment line: #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  CW01    CW02......\n";
             exit(1);
         }
 
-        // 把qry序列按','拆分并循环加入到qryLenList中
+        // Split the qry sequence by ',' and loop it into qryLenList
         vector<uint32_t> qryLenList;
         for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
             qryLenList.push_back(INFOSTRUCTTMP.ALTVec[i].size());
         }
 
-        // vcf从第10列后开始是基因型信息，所以从i=9，也就是第10列开始循环
-        // 不同的vcf文件格式可能不同，需要检查
+        // The vcf is genotype information starting from column 10, so the loop starts from i=9, which is column 10
+        // Different vcf file formats may be different and need to be checked
         for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
             vector<int> gtVec = get_gt(
                 INFOSTRUCTTMP.lineVec, 
@@ -311,14 +311,14 @@ void VCFWin::window_len_count()
 
             string gt = join(gtVec, "/");
 
-            // 如果gt是空的则跳过
+            // Skip if gt is empty
             if (gt == "." || gt == "0" || gt == "0/0" || gt =="0|0") {
                 continue;
             }
 
             vector<string> stepsVectorKey;
 
-            // 在步长字典中的索引， 先检查染色体在不在字典中，不在的话报错
+            // In the index of the step dictionary, check whether the chromosome is in the dictionary first, and report an error if it is not
             for (auto rit = winStartMap_.begin(); rit != winStartMap_.end(); ++rit) {
                 stepsVectorKey.push_back(rit->first);                       
             }
@@ -327,28 +327,28 @@ void VCFWin::window_len_count()
                 cerr << "[" << __func__ << "::" << getTime() << "] " << "IndexError: " << INFOSTRUCTTMP.CHROM << "\t" << stepsVectorKey[0] << endl;
                 exit(1);
             } else {
-                uint32_t indexRight = search_Binary_right(winEndMap_[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS);  // 上一个窗口坐标
-                uint32_t indexLeft = search_Binary_left(winStartMap_[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS);  // 下一个窗口坐标
+                uint32_t indexRight = search_Binary_right(winEndMap_[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS);  // Previous window coordinates
+                uint32_t indexLeft = search_Binary_left(winStartMap_[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS);  // Next window coordinates
                 
-                string way = waysVector[i];  // 该株系的way
-                string group;  // 该株系的group
+                string way = waysVector[i];  // The way of the strain
+                string group;  // The group of the strain
                 if (waysGroupMap_.find(way) == waysGroupMap_.end()) {  // group
                     group = "0";
                 } else {
                     group = waysGroupMap_[way];
                 }
 
-                uint32_t winStart1 = winStartMap_[INFOSTRUCTTMP.CHROM][indexRight];  // 上一个窗口
-                uint32_t winStart2 = winStartMap_[INFOSTRUCTTMP.CHROM][indexLeft];  // 本窗口
+                uint32_t winStart1 = winStartMap_[INFOSTRUCTTMP.CHROM][indexRight];  // Previous window
+                uint32_t winStart2 = winStartMap_[INFOSTRUCTTMP.CHROM][indexLeft];  // This window
 
-                // 把ref长度和group添加到哈希表中
-                if (indexLeft - indexRight == 1) {  // 上一个窗口信息添加
-                    chrWinStartLenMap_[INFOSTRUCTTMP.CHROM][winStart1].push_back(min(winEndMap_[INFOSTRUCTTMP.CHROM][indexRight], INFOSTRUCTTMP.END)-INFOSTRUCTTMP.POS+1);  // 长度
+                // This window
+                if (indexLeft - indexRight == 1) {  // Previous window info added
+                    chrWinStartLenMap_[INFOSTRUCTTMP.CHROM][winStart1].push_back(min(winEndMap_[INFOSTRUCTTMP.CHROM][indexRight], INFOSTRUCTTMP.END)-INFOSTRUCTTMP.POS+1);  // length
                     chrWinStartGroupMap_[INFOSTRUCTTMP.CHROM][winStart1].push_back(group);  // group
                 }
 
                 // 本窗口
-                chrWinStartLenMap_[INFOSTRUCTTMP.CHROM][winStart2].push_back(min(winStart2+windowSize_-1, INFOSTRUCTTMP.END)-INFOSTRUCTTMP.POS+1);  // 长度
+                chrWinStartLenMap_[INFOSTRUCTTMP.CHROM][winStart2].push_back(min(winStart2+windowSize_-1, INFOSTRUCTTMP.END)-INFOSTRUCTTMP.POS+1);  // length
                 chrWinStartGroupMap_[INFOSTRUCTTMP.CHROM][winStart2].push_back(group);  // group
             }
         }
@@ -366,7 +366,7 @@ void VCFWin::save_result()
 {
     int waysNumber = waysGroupMap_.size();
 
-    // 记录每个group对应的数量 <group, number>
+    // Record the number of each group <group, number>
     map<string, int> groupNumMap;
     for (auto rit = waysGroupMap_.begin(); rit != waysGroupMap_.end(); ++rit) {
         string group = rit->second;
@@ -376,7 +376,7 @@ void VCFWin::save_result()
     // save result
     SAVE outFile(outputFileName_);
 
-    // 打印表头
+    // Print head
     string ouTxt = "#waysNumber: " + to_string(waysNumber) + "\n";
     ouTxt += "#chr\tLocation\t" + mode_ + "\taverage";
     for (auto iter1 : groupNumMap) {
@@ -384,14 +384,14 @@ void VCFWin::save_result()
     }
     ouTxt += "\n";
 
-    // 计算结果
+    // Calculation result
     long double sumValue;
     long double averageValue;
 
     for (const auto& [chromosome, winStartVec] : winStartMap_) {  // map<string, vector<start> >
         int idxTmp = 0;
 
-        // 线程的染色体不对应的话不打印
+        // Threads do not print if their chromosomes do not correspond
         if (chrWinStartLenMap_.find(chromosome) == chrWinStartLenMap_.end()) {
             continue;
         }
@@ -400,22 +400,22 @@ void VCFWin::save_result()
             uint32_t winEnd = winEndMap_[chromosome][idxTmp];
             map<uint32_t, vector<uint32_t> >::iterator findIter1 = chrWinStartLenMap_[chromosome].find(winStart);
             if (findIter1 != chrWinStartLenMap_[chromosome].end()) {
-                // 统计窗口内变异的长度
+                // The length of the variation in the statistical window
                 if (mode_ == "length") {
-                    // 该窗口变异长度的总和
+                    // The sum of the window variation lengths
                     sumValue = accumulate(findIter1->second.begin(), findIter1->second.end(), 0);
-                    // 变异长度占窗口的比例
+                    // The proportion of variation length to window
                     averageValue = sumValue/(winEnd-winStart+1);
-                } else {  // 统计窗口内变异的数量
-                    // 该窗口变异数量的总和
+                } else {  // Count the number of variations in the window
+                    // The sum of the number of variations in the window
                     sumValue = findIter1->second.size();
-                    // 平均的变异数量
+                    // The average number of variations
                     averageValue = sumValue/waysNumber;
                 }
                 
                 ouTxt += chromosome + "\t" + to_string(winStart) + "-" + to_string(winEnd) + "\t" + to_string(sumValue) + "\t" + to_string(averageValue);
                     
-                // group的数量统计
+                // Indicates the number of groups
                 for (auto iter3 : groupNumMap) {
                     string group = iter3.first;
                     int groupNum = iter3.second;
@@ -425,7 +425,7 @@ void VCFWin::save_result()
             } else {
                 ouTxt += chromosome + "\t" + to_string(winStart) + "-" + to_string(winEnd) + "\t0\t0";
 
-                // group的数量统计
+                // Indicates the number of groups
                 for (auto iter3 : groupNumMap) {
                     ouTxt += "\t0";
                 }
@@ -438,10 +438,10 @@ void VCFWin::save_result()
 }
 
 /**
- * 获取位点基因型列表.
+ * Indicates the number of groups.
  *
  * @param lineVec          lineVec
- * @param sampleIdx        sample基因型的索引,默认值0代表最后一列
+ * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
  * 
  * 
  * @return gtVec           vector <int>
@@ -451,46 +451,46 @@ vector<int> VCFWin::get_gt(
     int sampleIdx
 )
 {
-    vector <int> gtVec;  // 位点分型的vector
+    vector <int> gtVec;  // Locus typing vector
 
-    int formatIndex = 8; // FORMAT所在列
+    int formatIndex = 8; // FORMAT column
 
-    // FORMAT字符拆分
+    // FORMAT character split
     vector<string> formatVec = split(lineVec[formatIndex], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
 
-    if (gtIndex == formatVec.size()) {  // 判断index是否存在，不存在的话返回基因型都为0。
+    if (gtIndex == formatVec.size()) {  // Determine whether the index exists. If it does not exist, the genotypes are all 0.
     
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineVec[0] << ":" << lineVec[1] << endl;
         gtVec = {0, 0};
-    } else {  // 如果存在，则进行保存
-        string gt;  // 存储基因型字段
+    } else {  // If it exists, save it
+        string gt;  // Store the genotype field
 
-        if (sampleIdx == 0) {  // 没有指定列数就是最后一列
-            gt = split(lineVec.back(), ":")[gtIndex];  // gt字段
+        if (sampleIdx == 0) {  // The number of columns not specified is the last column
+            gt = split(lineVec.back(), ":")[gtIndex];  // gt field
         } else {
-            gt = split(lineVec[sampleIdx], ":")[gtIndex];  // gt字段
+            gt = split(lineVec[sampleIdx], ":")[gtIndex];  // gt field
         }
         
-        string splitStr;  // gt中的分隔符
-        if (gt.find("/") != string::npos) {  // 判断‘/’分隔符
+        string splitStr;  // Delimiter in gt
+        if (gt.find("/") != string::npos) {  // Determine the '/' separator
             splitStr = "/";
-        } else if (gt.find("|") != string::npos) {  // 判断‘|’为分隔符
+        } else if (gt.find("|") != string::npos) {  // Determine that '|' is the separator
             splitStr = "|";
-        } else {  // 不知道的时候为返回空值
+        } else {  // Return a null value if you do not know
         
             gtVec = {0, 0};
             return gtVec;
         }
         
-        for (auto it : split(gt, splitStr)) {  // 找到gt后，对其按splitStr拆分并循环
-            if (it == ".") {  // 如果为'.'，跳过该位点
+        for (auto it : split(gt, splitStr)) {  // Once you find gt, split it by splitStr and loop
+            if (it == ".") {  // If it is '.', skip this site
             
                 gtVec = {0, 0};
                 return gtVec;
             }
-            gtVec.push_back(stoi(it));  // 添加到vector中
+            gtVec.push_back(stoi(it));  // Add to vector
         }
     }
 

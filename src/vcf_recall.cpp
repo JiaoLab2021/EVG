@@ -11,10 +11,10 @@ int main_recall(int argc, char** argv)
 
     string model = "recall";
     string rocKey = "";
-    // roc计算规则
+    // roc calculation rule
     string rocType = "genotype";
 
-    // 输入参数
+    // Input parameter
     int c;
     while (true)
     {
@@ -63,7 +63,7 @@ int main_recall(int argc, char** argv)
         }
     }
 
-    // 检查参数是否正确
+    // Check whether the parameters are correct
     if (trueVCFFileName.empty() || evaluateFileName.empty() || model.empty()) {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
              << "Parameter error.\n";
@@ -71,7 +71,7 @@ int main_recall(int argc, char** argv)
         return 1;
     }
 
-    // 检查rocType是否正确
+    // Check that rocType is correct
     if (rocType != "recall" && rocType != "genotype") {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
              << "Parameter error: -r\n";
@@ -109,7 +109,7 @@ int main_recall(int argc, char** argv)
     return 0;
 }
 
-// 帮助文档
+// Help document
 void help_recall(char** argv)
 {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -t -e [options]" << endl
@@ -219,8 +219,8 @@ void VCFRecall::build_true_index()
 
         string gt = join(gtVec, "/");
 
-        // 根据基因型进行过滤
-        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  //如果是(0/0, .)格式的则直接跳过，或者返回了空列表，不构建索引
+        // Help document
+        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: The genotype of the variant is empty, skip this site -> "
                 << INFOSTRUCTTMP.CHROM << "\t" 
@@ -228,7 +228,7 @@ void VCFRecall::build_true_index()
             continue;
         }
 
-        // 获取ref和单倍型的长度
+        // Gets the length of the ref and haplotype
         uint32_t refLen;
         vector<uint32_t> qryLenVec;
         tie(refLen, qryLenVec) = get_hap_len(
@@ -239,20 +239,20 @@ void VCFRecall::build_true_index()
             "hap"
         );
 
-        // 获取变异的长度
+        // Gets the length of the variation
         int32_t svLength = sv_length_select(
             refLen, 
             qryLenVec, 
             gtVec
         );
 
-        // 保存所有变异的长度
+        // Save the length of all variations
         trueVCFStrcuture_.allLengthList.push_back(svLength);
 
-        // 变异信息
+        // Variation information
         trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
 
-        // 先初始化哈希表
+        // Initialize the hash table first
         if (trueVCFStrcuture_.chrStartLenInfoGtTupMap.find(INFOSTRUCTTMP.CHROM) == trueVCFStrcuture_.chrStartLenInfoGtTupMap.end()) {
             trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM];
         }
@@ -270,7 +270,7 @@ void VCFRecall::gramtools_convert()
 {
     string outInformations;
 
-    // check file是否排序
+    // check whether the file is sorted
     check_vcf_sort(evaluateFileName_);
 
     // output file stream
@@ -288,7 +288,7 @@ void VCFRecall::gramtools_convert()
             SaveClass.save(INFOSTRUCTTMP.line);
         }
 
-        // 提取informationsVector中基因型和位点覆盖度信息
+        // Extract genotype and locus coverage information from informationsVector
         vector<string> gtVector = split(INFOSTRUCTTMP.lineVec.back(), ":");
         vector<string> formatVector = split(INFOSTRUCTTMP.FORMAT, ":");
         string gt;
@@ -298,19 +298,19 @@ void VCFRecall::gramtools_convert()
             gt = "0";
         }
 
-        // 找FORMAT字段中COV的位置
+        // Find the location of COV in the FORMAT field
         vector<string>::iterator covItera = find(formatVector.begin(), formatVector.end(), "COV");
         int covIndex = 0;
-        if (covItera != formatVector.end()) { // FORMAT中有COV
+        if (covItera != formatVector.end()) { // The FORMAT contains COV
             covIndex = distance(formatVector.begin(), covItera);
-        } else {  // 没有的话直接转换，继续下一个循环
+        } else {  // If not, just switch and continue the next cycle
             outInformations += INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
-        // FILTER字段前边的内容不变，直接加到outInformations上
+        // The contents of the FILTER field are added directly to outInformations
         for (size_t i = 0; i < INFOSTRUCTTMP.lineVec.size()-1; i++) {
-            if (i == 6) {  // FILTER列改为PASS，源文件有的为.
+            if (i == 6) {  // The FILTER column is changed to PASS, and the source file is.
                 outInformations += "PASS\t";
             } else {
                 outInformations += INFOSTRUCTTMP.lineVec[i] + "\t";
@@ -319,35 +319,35 @@ void VCFRecall::gramtools_convert()
 
         string siteCoverage = gtVector[covIndex];
         
-        // 如果gt=0的话代表该位点没有变异，则gt改为0/0
+        // If gt=0 means that there is no variation at this site, then gt is changed to 0/0
         if (gt == "0") {
             outInformations += "\t0/0";
-        } else {  // gt不为0的时候
-            // 如果位点覆盖度中有0,字段，代表该位点为纯和的突变位点
+        } else {  // When gt is not 0
+            // If there is a 0 field in the site coverage, it represents a mutation site that is a pure sum
             if (siteCoverage.find("0,") < siteCoverage.length()) {
                 outInformations += "\t1/1";
-            } else {  // 如果位点覆盖度没有0,字段，代表该位点为杂合的突变位点
+            } else {  // If the site coverage does not have a 0, field, it indicates that the site is a heterozygous mutation site
                 outInformations += "\t0/1";
             }
         }
 
-        // 将informations最后的字段加上
+        // Add the last field of informations
         for (size_t i = 1; i < gtVector.size(); i++) {
             outInformations += ":" + gtVector[i];
         }
 
         outInformations += "\n";
 
-        // 每10Mb写入一次文件
+        // The file is written every 10Mb
         if (outInformations.size() > bufferSize_) {
             SaveClass.save(outInformations);
 
-            // 清空字符串
+            // The file is written every 10Mb
             outInformations.clear();
         }
     }
 
-    // 最后写入一次文件
+    // Last write to the file
     SaveClass.save(outInformations);
     
     evaluateFileName_ = outFileName;
@@ -363,26 +363,26 @@ void VCFRecall::evulate_gt()
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Evaluating the genotype results ..." << endl;
 
-    // check file是否排序
+    // check whether the file is sorted
     check_vcf_sort(evaluateFileName_);
     
-    // 保存分型正确的结果
+    // Save the correct results for typing
     string truetxt;
     SAVE trueFile("genotype.true.vcf.gz");
 
-    // 保存分型错误的结果
+    // Saves the result of a typing error
     string genotypeMisTxt;
     SAVE genotypeMisFile("genotype.err.vcf.gz");
 
-    // 保存miscall的结果
+    // Save the result of miscall
     string misCallTxt;
     SAVE misCallFile("miscall.vcf.gz");
 
-    // 没有找到的变异
+    // No variation found
     string failCallTxt;
     SAVE failCallFile("failcall.vcf.gz");
 
-    // 定义vector
+    // No variation found
     vector<int64_t> genotypeLenVec;
     vector<int64_t> misgenotypeLenVec;
     vector<int64_t> miscallLenVec;
@@ -392,13 +392,13 @@ void VCFRecall::evulate_gt()
     VCFOPEN VCFOPENCLASS(evaluateFileName_);
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // 跳过注释行
+        // Skip comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             continue;
         }
         
-        // 根据FILTER字段进行过滤
-        if (INFOSTRUCTTMP.FILTER != "PASS") {  // 如果不是(PASS)则直接跳过
+        // According to the FILTER field
+        if (INFOSTRUCTTMP.FILTER != "PASS") {  // If not (PASS), skip directly
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: '" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
                 << INFOSTRUCTTMP.CHROM << "\t" 
@@ -406,13 +406,13 @@ void VCFRecall::evulate_gt()
             continue;
         }
 
-        // 获取基因型信息
+        // Get genotype information
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
         string gt = join(gtVec, "/");
-        // 根据基因型进行过滤
-        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  //如果是(0/0, .)格式的则直接跳过，或者返回了空列表，不构建索引
+        // Filter by genotype
+        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: The genotype of the variant is empty, skip this site -> "
                 << INFOSTRUCTTMP.CHROM << "\t" 
@@ -425,7 +425,7 @@ void VCFRecall::evulate_gt()
         rocNum = get_roc(INFOSTRUCTTMP);
         /* --------------------------------- roc ------------------------------------ */
 
-        // 获取ref和单倍型的长度
+        // Gets the length of the ref and haplotype
         uint32_t refLen;
         vector<uint32_t> qryLenVec;
         tie(refLen, qryLenVec) = get_hap_len(
@@ -436,18 +436,18 @@ void VCFRecall::evulate_gt()
             "hap"
         );
 
-        // 获取变异的长度
+        // Gets the length of the variation
         int32_t svLength = sv_length_select(
             refLen, 
             qryLenVec, 
             gtVec
         );
 
-        // 添加长度到rocAllMap中
+        // Add length to rocAllMap
         rocCallMap_[rocNum].push_back(svLength);
 
-        // 进行基因分型评估
-        // 检查染色体是否存在，不存在就是miscall
+        // Genotyping was performed
+        // Check for the presence of chromosomes. No is a miscall
         auto iter1 = trueVCFStrcuture_.chrStartLenInfoGtTupMap.find(INFOSTRUCTTMP.CHROM);
         if (iter1 == trueVCFStrcuture_.chrStartLenInfoGtTupMap.end()) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
@@ -457,23 +457,23 @@ void VCFRecall::evulate_gt()
             continue;
         }
 
-        // 记录genotype的结果
+        // Record the result of the genotype
         uint32_t genotypeTrueNum = 0;  // 0->misCall >0&&<gtVec.size()->recall  >=gtVec.size()->trueGenotype
         uint32_t trueRefLen;
         string trueVcfInfo;
         int32_t trueSvLen;
 
-        // 在对应染色体的map中查找真值的refLen qryLenVec
+        // Find the true refLen in the map of the corresponding chromosome qryLenVec
         auto iter2 = iter1->second.find(INFOSTRUCTTMP.POS);
-        if (iter2 != iter1->second.end()) {  // 软件找到了，接下来判断分型是否正确
-            // true变异信息
+        if (iter2 != iter1->second.end()) {  // The software finds it and then determines whether the classification is correct
+            // true mutation information
             trueRefLen = get<0>(iter2->second);
             const vector<uint32_t>& trueQryLenVec = get<1>(iter2->second);
             trueVcfInfo = get<2>(iter2->second);
             trueSvLen = get<3>(iter2->second);
             vector<int> trueGtVec = get<4>(iter2->second);
 
-            // 如果长度为0，则报错，并退出代码。
+            // If the length is 0, an error is reported and the code exits.
             if (trueQryLenVec.size() == 0) {
                 cerr << "[" << __func__ << "::" << getTime() << "] " 
                     << "Error: trueQryLenVec.size() == 0 -> " 
@@ -482,14 +482,14 @@ void VCFRecall::evulate_gt()
                 exit(1);
             }
 
-            // 遍历等位基因
-            int64_t trueQryLenVecIdx = -1;  // 记录真值中用过的单倍型，防止重复评估
+            // Traverse alleles
+            int64_t trueQryLenVecIdx = -1;  // Record used haplotypes for truth values to prevent duplicate evaluations
             for (size_t i = 0; i < qryLenVec.size(); i++) {
                 uint32_t qryLen = qryLenVec[i];
                 int callGt = gtVec[i];
 
                 for (size_t j = 0; j < trueQryLenVec.size(); j++) {
-                    // 用过的单倍型跳过
+                    // Used haplotypes are skipped
                     if (j == trueQryLenVecIdx) {
                         continue;
                     }
@@ -497,12 +497,12 @@ void VCFRecall::evulate_gt()
                     uint32_t trueQryLen = trueQryLenVec[j];
                     int trueGt = trueGtVec[j];
 
-                    // callGt和trueGt中有一个是0，但另一个不是，则下一个循环，防止SNP判断时候出错
+                    // If one of callGt and trueGt is 0, but the other is not, the next loop will be performed to prevent SNP from making errors in judgment
                     if ((callGt != 0 && trueGt == 0) || (callGt == 0 && trueGt != 0)) {
                         continue;;
                     }
 
-                    // 缺失
+                    // deficiency
                     if (refLen >= 50 && qryLen < 50) {
                         if ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) {
                             genotypeTrueNum++;
@@ -510,7 +510,7 @@ void VCFRecall::evulate_gt()
 
                             goto stop;
                         }
-                    } else if (refLen < 50 && qryLen >= 50) {  // 插入
+                    } else if (refLen < 50 && qryLen >= 50) {  // ins
                         if ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25)
                         {
                             genotypeTrueNum++;
@@ -518,7 +518,7 @@ void VCFRecall::evulate_gt()
                             
                             goto stop;
                         }
-                    } else if (refLen >= 50 && qryLen >= 50) {  // 替换
+                    } else if (refLen >= 50 && qryLen >= 50) {  // Replace
                         if (((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
@@ -563,50 +563,50 @@ void VCFRecall::evulate_gt()
                         }
                     }
                 }
-                stop:; // 如果找到了，则退出嵌套循环。结束该单倍型的循环，继续下一个单倍型
+                stop:; // If found, exit the nested loop. End the cycle of this haplotype and proceed to the next haplotype
             }
         }
 
-        // 判断分型的结果
-        if (genotypeTrueNum == 0) {  // 找到的变异不在真集中 
+        // Determine the result of typing
+        if (genotypeTrueNum == 0) {  // The mutations we found are not in the true concentration 
             miscallLenVec.push_back(svLength);
             misCallTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         } else {
-            // 分型正确
+            // Correct typing
             if (genotypeTrueNum >= gtVec.size()) {
                 genotypeLenVec.push_back(trueSvLen);
                 truetxt += "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                             "true_length\t" + to_string(trueSvLen) + "\t" + trueVcfInfo + "\n";
 
-                // 添加长度到rocTrueMap中
+                // Add length to rocTrueMap
                 rocRecallMap_[rocNum].push_back(svLength);
-            } else {  // 分型错误
+            } else {  // Typing error
                 misgenotypeLenVec.push_back(trueSvLen);
                 genotypeMisTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                                 "true_length\t" + to_string(trueSvLen) + "\t" + trueVcfInfo + "\n";
 
-                // 该判断是用recall来计算roc，如果不开启是只用genotype计算roc
+                // The roc is calculated using the recall, or only the genotype if the roc is not enabled
                 if (rocType_ == "recall") {
-                    // 添加长度到rocTrueMap中
+                    // Add length to rocTrueMap
                     rocRecallMap_[rocNum].push_back(svLength);
                 }
                 
             }
-            // 删除已经被用过的变异
+            // Delete variations that have already been used
             trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].erase(INFOSTRUCTTMP.POS);
         }
 
         // save result
         if (truetxt.size() > bufferSize_ || 
             genotypeMisTxt.size() > bufferSize_ || 
-            misCallTxt.size() > bufferSize_) // 每10Mb写入一次
+            misCallTxt.size() > bufferSize_) // It is written every 10Mb
         {
-            trueFile.save(truetxt);  // 分型正确
-            genotypeMisFile.save(genotypeMisTxt);  // 分型错误
-            misCallFile.save(misCallTxt);  // 不在真集中的变异
+            trueFile.save(truetxt);  // Correct typing
+            genotypeMisFile.save(genotypeMisTxt);  // Typing error
+            misCallFile.save(misCallTxt);  // Variation that is not in true concentration
 
-            // 清空字符串
+            // Empty string
             truetxt.clear();
             genotypeMisTxt.clear();
             misCallTxt.clear();
@@ -614,24 +614,24 @@ void VCFRecall::evulate_gt()
     }
 
     // save result
-    trueFile.save(truetxt);  // 分型正确
-    genotypeMisFile.save(genotypeMisTxt);  // 分型错误
-    misCallFile.save(misCallTxt);  // 不在真集中的变异
+    trueFile.save(truetxt);  // Correct typing
+    genotypeMisFile.save(genotypeMisTxt);  // Typing error
+    misCallFile.save(misCallTxt);  // Variation that is not in true concentration
 
-    // 未找到的真实变异
+    // True variation not found
     for (auto it1 : trueVCFStrcuture_.chrStartLenInfoGtTupMap) {  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> > >
         for (auto it2 : it1.second) {  // map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> >
             failCallTxt += get<2>(it2.second) + "\n";
 
-            if (failCallTxt.size() > bufferSize_) {  // 每10Mb写入一次
-                failCallFile.save(failCallTxt);  // 未找到的真实变异
+            if (failCallTxt.size() > bufferSize_) {  // It is written every 10Mb
+                failCallFile.save(failCallTxt);  // True variation not found
 
-                // 清空字符串
+                // Empty string
                 failCallTxt.clear();
             }
         }
     }
-    failCallFile.save(failCallTxt);  // 未找到的真实变异
+    failCallFile.save(failCallTxt);  // True variation not found
 
     int64_t sv_genotype_recall = genotypeLenVec.size();
     int64_t sv_misgenotype_recall = misgenotypeLenVec.size();
@@ -660,7 +660,7 @@ void VCFRecall::evulate_gt()
     
     outFile << "length/length: genotype_recall/misgenotype_call/recall/mis_call/call/fail_call/all\n";
 
-    // 长度结果输出
+    // True variation not found
     for (size_t i = 0; i < lengthVec_.size(); i++) {
         outFile << lengthVec_[i] << ": " 
                 << genotype_length_count[i] << "/" 
@@ -691,7 +691,7 @@ void VCFRecall::evulate_gt()
             << endl
             << endl;
 
-    // 释放内存
+    // Free memory
     outFile.close();
 
     roc_calculate(trueVCFStrcuture_.allLengthList);
@@ -707,33 +707,33 @@ void VCFRecall::evulate_recall()
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Evaluating the genotype results ..." << endl;
 
-    // 检查vcf文件是否排序
+    // Check whether the vcf file is sorted
     check_vcf_sort(evaluateFileName_);
 
-    // 保存正确的结果
+    // Save the correct results
     string truetxt;
     SAVE trueFile("recall.true.vcf.gz");
 
-    // 保存分型正确的结果
+    // Save the correct results for typing
     string true_Gt_txt;
     SAVE trueGtFile("genotype.true.vcf.gz");
 
-    // 保存分型错误的结果
+    // Saves the result of a typing error
     string genotypeMisTxt;
     SAVE genotypeMisFile("genotype.err.vcf.gz");
 
-    // 保存miscall的结果
+    // Save the result of miscall
     string misCallTxt;
     SAVE misCallFile("miscall.vcf.gz");
 
-    // 定义vector
+    // Define vector
     vector<int64_t> genotypeLenVec;
     vector<int64_t> callLenVec;
     vector<int64_t> recallLenVec;
 
-    string preChr; // 用于判断是不是新的染色体，是的话再重新构建vector。
+    string preChr; // It's used to determine if it's a new chromosome, and if it is, it reconstructs the vector.
 
-    // 二分查找法左右索引
+    // Binary search method left and right index
     int leftIdxTmp = 0;
     int rightIdxTmp = 0;
 
@@ -742,13 +742,13 @@ void VCFRecall::evulate_recall()
     VCFOPEN VCFOPENCLASS(evaluateFileName_);
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // 跳过注释行
+        // Skip comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             continue;
         }
 
-        // 根据FILTER字段进行过滤
-        if (INFOSTRUCTTMP.FILTER != "PASS") {  // 如果不是(PASS)则直接跳过
+        // According to the FILTER field
+        if (INFOSTRUCTTMP.FILTER != "PASS") {  // Skip comment line
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: '" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
                 << INFOSTRUCTTMP.CHROM << "\t" 
@@ -756,13 +756,13 @@ void VCFRecall::evulate_recall()
             continue;
         }
 
-        // 获取基因型信息
+        // According to the FILTER field
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
         string gt = join(gtVec, "/");
-        // 根据基因型进行过滤
-        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  //如果是(0/0, .)格式的则直接跳过，或者返回了空列表，不构建索引
+        // Filter by genotype
+        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: The genotype of the variant is empty, skip this site -> "
                 << INFOSTRUCTTMP.CHROM << "\t" 
@@ -777,7 +777,7 @@ void VCFRecall::evulate_recall()
         /* --------------------------------- roc ------------------------------------ */
 
 
-        // 获取ref和单倍型的长度
+        // Gets the length of the ref and haplotype
         uint32_t refLen;
         vector<uint32_t> qryLenVec;
         tie(refLen, qryLenVec) = get_hap_len(
@@ -788,19 +788,19 @@ void VCFRecall::evulate_recall()
             "hap"
         );
 
-        // 获取变异的长度
+        // Gets the length of the variation
         int32_t svLength = sv_length_select(
             refLen, 
             qryLenVec, 
             gtVec
         );
 
-        // 添加长度到rocAllMap中
+        // Add length to rocAllMap
         rocCallMap_[rocNum].push_back(svLength);
 
 
         // recall
-        // 检查染色体是否存在，不存在就是miscall
+        // Check for the presence of chromosomes. No is a miscall
         if (trueVCFStrcuture_.chrStartLenInfoGtTupMap.find(INFOSTRUCTTMP.CHROM) == trueVCFStrcuture_.chrStartLenInfoGtTupMap.end()) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: '" << INFOSTRUCTTMP.CHROM << "' is not in the true set.\n";
@@ -810,34 +810,34 @@ void VCFRecall::evulate_recall()
         }
     
 
-        if (preChr != INFOSTRUCTTMP.CHROM) {  // 二分查找的左右索引归零，用于加快查询速度
-            // 左右索引归零
+        if (preChr != INFOSTRUCTTMP.CHROM) {  // Check for the presence of chromosomes. No is a miscall
+            // The left and right indexes of binary search are zeroed out to speed up the query
             leftIdxTmp = 0;
             rightIdxTmp = 0;
         }
 
-        // 记录二分查找法的索引，多个等位基因用同一个refStart
+        // Record binary search index, multiple alleles with the same refStart
         int64_t indexLeft = -1;
         int64_t indexRight = -1;
 
-        uint32_t genotypeTrueNum = 0;  // 0->misCall >0&&<gtVec.size()->recall  >=gtVec.size()->trueGenotype
+        uint32_t genotypeTrueNum = 0;  // 0->misCall >0 && <gtVec.size()->recall  >=gtVec.size()->trueGenotype
 
-        // 记录recall的  trueRefStart, trueRefLen, trueSvLen、truevcfInfo
+        // recalled  trueRefStart, trueRefLen, trueSvLen、truevcfInfo
         uint32_t trueRefStart;
         uint32_t trueRefLen;
         int32_t trueSvLen;
         string truevcfInfo;
 
-        // 记录真集中被用过的单倍型
+        // Record the used haplotypes in the true set
         int64_t trueQryLenVecIdx = -1;
 
-        // 遍历多等位基因
+        // Traverse multiple alleles
         for (size_t i = 0; i < qryLenVec.size(); i++) {
             uint32_t qryLen = qryLenVec[i];
             int callGt = gtVec[i];
 
-            // 二分查找法找200/10bp内的变异索引。
-            if (indexLeft == -1 && indexRight == -1) {  // 新的等位基因再查找
+            // Binary search method to find the variation index within 200/10bp.
+            if (indexLeft == -1 && indexRight == -1) {  // New alleles were searched again
                 if (refLen <= 49 && qryLen <= 49) {
                     indexLeft = search_Binary_left(trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS-10, leftIdxTmp);
                     leftIdxTmp = indexLeft;
@@ -854,12 +854,12 @@ void VCFRecall::evulate_recall()
                 }
             }
 
-            // 遍历二分查找法的索引
+            // Traverse the index of the binary search method
             for (int64_t j = indexLeft; j <= indexRight; j++) {
-                // true变异的信息
+                // Traverse the index of the binary search method
                 trueRefStart = trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM][j];
 
-                // 先检查变异有没有被用过，如果被删除了就下一个坐标
+                // First check to see if the mutation has been used, then move on to the next coordinates if it's been deleted
                 if (trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].find(trueRefStart) == trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].end()) {
                     continue;
                 }
@@ -870,8 +870,8 @@ void VCFRecall::evulate_recall()
                 trueSvLen = get<3>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
                 vector<int> trueGtVec = get<4>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
 
-                for (size_t k = 0; k < trueQryLenVec.size(); k++) {  // 一个位点有多个等位基因的时候，trueSeqLenVec存储了各个等位基因的长度，因此遍历它看该位点的变异是否和merge里边的一致，包含0
-                    // 用过的单倍型跳过
+                for (size_t k = 0; k < trueQryLenVec.size(); k++) {  // First check to see if the mutation has been used, then move on to the next coordinates if it's been deleted
+                    // Used haplotypes are skipped
                     if (k == trueQryLenVecIdx) {
                         continue;
                     }
@@ -879,25 +879,25 @@ void VCFRecall::evulate_recall()
                     uint32_t trueQryLen = trueQryLenVec[k];
                     int trueGt = trueGtVec[k];
 
-                    // callGt和trueGt中有一个是0，但另一个不是，则下一个循环，防止SNP判断时候出错
+                    // If one of callGt and trueGt is 0, but the other is not, the next loop will be performed to prevent SNP from making errors in judgment
                     if ((callGt != 0 && trueGt == 0) || (callGt == 0 && trueGt != 0)) {
                         continue;;
                     }
 
-                    // 缺失
+                    // deletion
                     if (refLen >= 50 && qryLen < 50) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=200) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -907,32 +907,32 @@ void VCFRecall::evulate_recall()
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
                         }
-                    } else if (refLen >= 50 && qryLen >= 50) {  // 替换
+                    } else if (refLen >= 50 && qryLen >= 50) {  // Replace
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=200) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -943,14 +943,14 @@ void VCFRecall::evulate_recall()
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // Records indexes that have used haplotypes
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -960,14 +960,14 @@ void VCFRecall::evulate_recall()
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=10) &&
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -977,14 +977,14 @@ void VCFRecall::evulate_recall()
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=10) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // The haplotype recall and genotype were recorded correctly
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -995,14 +995,14 @@ void VCFRecall::evulate_recall()
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // 记录单倍型recall and genotype 正确
+                            // Records indexes that have used haplotypes
                             genotypeTrueNum++;
 
-                            // 多个等位基因用同一个起始位置
+                            // The haplotype recall and genotype were recorded correctly
                             indexLeft = j;
                             indexRight = j;
 
-                            // 记录用过单倍型的索引
+                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -1010,42 +1010,42 @@ void VCFRecall::evulate_recall()
                     }
                 }
             }
-            stop:; // 如果找到了，则退出嵌套循环。结束该单倍型的循环，继续下一个单倍型
+            stop:; // If found, exit the nested loop. End the cycle of this haplotype and proceed to the next haplotype
         }
 
-        // 判断寻找的结果并添加 
-        if (genotypeTrueNum > 0) {  // 大于0代表找到了
-            // 软件call的vcf-vector
+        // Determine the results of the search and add 
+        if (genotypeTrueNum > 0) {  // Determine the results of the search and add
+            // Software call vcf-vector
             callLenVec.push_back(trueSvLen);
 
             truetxt += "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                         "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
             recallLenVec.push_back(trueSvLen);
 
-            // 分型正确
-            if (genotypeTrueNum >= gtVec.size()) {  // 大于等于gtVec.size()代表分型正确
+            // Correct typing
+            if (genotypeTrueNum >= gtVec.size()) {  // If the value is greater than or equal to gtVec.size(), the classification is correct
                 genotypeLenVec.push_back(trueSvLen);
                 true_Gt_txt += "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                             "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
-                // 添加长度到rocTrueMap中
+                // Add length to rocTrueMap
                 rocRecallMap_[rocNum].push_back(svLength);
-            } else {  // 分型错误
+            } else {  // Typing error
                 genotypeMisTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                                 "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
 
-                // 该判断是用recall来计算roc，如果不开启是只用genotype计算roc
+                // The roc is calculated using the recall, or only the genotype if the roc is not enabled
                 if (rocType_ == "recall")
                 {
-                    // 添加长度到rocTrueMap中
+                    // Add length to rocTrueMap
                     rocRecallMap_[rocNum].push_back(svLength);
                 }
             }
 
-            // 删除已经被用过的变异
+            // Add length to rocTrueMap
             if (trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].find(INFOSTRUCTTMP.POS) != trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].end()) {
                 trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].erase(INFOSTRUCTTMP.POS);
             }
-        } else {  // 如果上边循环没找到真集里的变异，则用软件自己找到的长度来添加
+        } else {  // If the above loop does not find the variation in the true set, it is added with the length found by the software itself
             callLenVec.push_back(svLength);
             misCallTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
         }
@@ -1054,14 +1054,14 @@ void VCFRecall::evulate_recall()
         if (truetxt.size() > bufferSize_ || 
             true_Gt_txt.size() > bufferSize_ || 
             genotypeMisTxt.size() > bufferSize_ || 
-            misCallTxt.size() > bufferSize_) // 每10Mb写入一次
+            misCallTxt.size() > bufferSize_) // It is written every 10Mb
         {
             trueFile.save(truetxt);
             trueGtFile.save(true_Gt_txt);
-            genotypeMisFile.save(genotypeMisTxt);  // 分型错误
-            misCallFile.save(misCallTxt);  // 不在真集中的变异
+            genotypeMisFile.save(genotypeMisTxt);  // Typing error
+            misCallFile.save(misCallTxt);  // Variation that is not in true concentration
 
-            // 清空字符串
+            // Empty string
             truetxt.clear();
             true_Gt_txt.clear();
             genotypeMisTxt.clear();
@@ -1072,10 +1072,10 @@ void VCFRecall::evulate_recall()
     // save result
     trueFile.save(truetxt);
     trueGtFile.save(true_Gt_txt);
-    genotypeMisFile.save(genotypeMisTxt);  // 分型错误
-    misCallFile.save(misCallTxt);  // 不在真集中的变异
+    genotypeMisFile.save(genotypeMisTxt);  // Typing error
+    misCallFile.save(misCallTxt);  // Variation that is not in true concentration
 
-    // 保存没有找到变异，假阴性
+    // Save no variation found, false negative
     saveFailCall(
         trueVCFStrcuture_.chrStartLenInfoGtTupMap, 
         "failcall.vcf.gz"
@@ -1109,7 +1109,7 @@ void VCFRecall::evulate_recall()
     
     outFile << "length/length: genotype_recall/misgenotype_call/recall/mis_call/call/fail_call/all\n";
 
-    // 长度结果输出
+    // Save no variation found, false negative
     for (size_t i = 0; i < lengthVec_.size(); i++) {
         outFile << lengthVec_[i] << ": " 
                 << genotypeRecallNumVec[i] << "/" 
@@ -1139,19 +1139,19 @@ void VCFRecall::evulate_recall()
             << endl 
             << endl;
 
-    // 释放内存
+    // Length result output
     outFile.close();
 
-    // 计算ROC
+    // Free memory
     roc_calculate(trueVCFStrcuture_.allLengthList);
 }
 
 
 /**
- * 获取位点基因型列表.
+ * Get a list of loci genotypes.
  *
  * @param lineVec          lineVec
- * @param sampleIdx        sample基因型的索引,默认值0代表最后一列
+ * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
  * 
  * 
  * @return gtVec           vector <int>
@@ -1160,46 +1160,46 @@ vector<int> VCFRecall::get_gt(
     const vector<string> & lineVec, 
     int sampleIdx
 ) {
-    vector <int> gtVec;  // 位点分型的vector
+    vector <int> gtVec;  // Locus typing vector
 
-    // FORMAT字符拆分
+    // FORMAT character split
     vector<string> formatVec = split(lineVec[8], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // 获取GT的索引位置
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
 
-    if (gtIndex == formatVec.size()) {  // 判断index是否存在，不存在的话返回基因型都为0。
+    if (gtIndex == formatVec.size()) {  // Gets the index location of GT
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineVec[0] << ":" << lineVec[1] << endl;
         gtVec = {0, 0};
-    } else {  // 如果存在，则进行保存
-        string gt;  // 存储基因型字段
+    } else {  // If it exists, save it
+        string gt;  // Store the genotype field
 
-        if (sampleIdx == 0) {  // 没有指定列数就是最后一列
-            gt = split(lineVec[lineVec.size()-1], ":")[gtIndex];  // gt字段
+        if (sampleIdx == 0) {  // The number of columns not specified is the last column
+            gt = split(lineVec[lineVec.size()-1], ":")[gtIndex];  // gt field
         } else {
-            gt = split(lineVec[sampleIdx], ":")[gtIndex];  // gt字段
+            gt = split(lineVec[sampleIdx], ":")[gtIndex];  // gt field
         }
         
-        string splitStr;  // gt中的分隔符
-        if (gt.find("/") != string::npos) {  // 判断‘/’分隔符
+        string splitStr;  // gt field
+        if (gt.find("/") != string::npos) {  // Delimiter in gt
             splitStr = "/";
-        } else if (gt.find("|") != string::npos) {  // 判断‘|’为分隔符
+        } else if (gt.find("|") != string::npos) {  // Determine that '|' is the separator
             splitStr = "|";
-        } else {  // 不知道的时候为返回空值
+        } else {  // Return a null value if you do not know
             gtVec = {0, 0};
             return gtVec;
         }
 
-        // 找到gt后，对其按splitStr拆分并循环
+        // Once you find gt, split it by splitStr and loop
         auto splitResult = split(gt, splitStr);
         for (auto it : splitResult) {
-            // 如果为'.'，跳过该位点
+            // If it is '.', skip this site
             if (it == ".") {
                 gtVec = {0, 0};
                 return gtVec;
             }
             // Prevent error in stof(it) conversion
             try {
-                gtVec.push_back(stoi(it));  // 添加到vector中
+                gtVec.push_back(stoi(it));  // Add to vector
             } catch (const std::exception& e) {
                 cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: stof(it) conversion failed. Replaced with {0,0} -> " << it << endl;
                 gtVec = {0, 0};
@@ -1213,7 +1213,7 @@ vector<int> VCFRecall::get_gt(
 
 
 /**
- * 获取位点基因型列表.
+ * Get a list of loci genotypes.
  *
  * @param INFOSTRUCTTMP    line information
  * 
@@ -1228,14 +1228,14 @@ float VCFRecall::get_roc(
         return 0.0;
     }
 
-    if (rocColNum_ == 8) {  // FORMAT字段
+    if (rocColNum_ == 8) {  // FORMAT field
         vector<string> lastColVec = split(INFOSTRUCTTMP.lineVec.back(), ":");
 
         vector<string> rocInfVec = split(INFOSTRUCTTMP.FORMAT, ":");
-        // rocNum的下标
+        // rocNum subscript
         vector<string>::iterator rocItera = find(rocInfVec.begin(), rocInfVec.end(), rocKeyVec_[1]);
 
-        if (rocItera == rocInfVec.end()) {  // 检查该字段中有没有对应的rocNum信息
+        if (rocItera == rocInfVec.end()) {  // rocNum subscript
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: " << rocKeyVec_[1] << " not in " << rocKeyVec_[0] << " column -> " 
                 << INFOSTRUCTTMP.line << endl;
@@ -1243,11 +1243,11 @@ float VCFRecall::get_roc(
         }
 
         return stof(lastColVec[distance(rocInfVec.begin(), rocItera)]);
-    } else {  // INFO字段
-        smatch patternResult; // 正则表达式的结果
+    } else {  // INFO field
+        smatch patternResult; // INFO field
         regex pattern(rocKeyVec_[1] + "=(\\d+)");
 
-        if (!regex_search(INFOSTRUCTTMP.INFO, patternResult, pattern)) {  // 检查是否匹配到 rocKeyVec_[1] 的值
+        if (!regex_search(INFOSTRUCTTMP.INFO, patternResult, pattern)) {  // Check whether the value of rocKeyVec_[1] is matched
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: " << rocKeyVec_[1] << " not in " << rocKeyVec_[0] << " column -> " 
                 << INFOSTRUCTTMP.line << endl;
@@ -1262,11 +1262,11 @@ float VCFRecall::get_roc(
 
 
 /**
- * 获取变异的长度信息
+ * Get the length information of the variation
  *
- * @param refLen            ref长度
- * @param qryLenVec         qry长度列表
- * @param gtVec             基因型列表
+ * @param refLen            ref length
+ * @param qryLenVec         qry Length list
+ * @param gtVec             qry Length list
  * 
  * 
  * @return int32_t          svLength
@@ -1279,7 +1279,7 @@ int32_t VCFRecall::sv_length_select(
     int32_t svLength = 0;
 
     for (size_t i = 0; i < gtVec.size(); i++) {
-        if (gtVec[i] == 0) {  // 如果基因型是0，跳过
+        if (gtVec[i] == 0) {  // Genotype list
             continue;
         } else {
             svLength = qryLenVec[i] - refLen;
@@ -1291,13 +1291,13 @@ int32_t VCFRecall::sv_length_select(
 
 
 /**
- * 统计变异长度信息
+ * If genotype is 0, skip
  *
- * @param lengthVec_          划分的区间
- * @param length_list        长度列表
+ * @param lengthVec_         Divided interval
+ * @param length_list        Length list
  * 
  * 
- * @return vector<int64_t>  每个区间的长度
+ * @return vector<int64_t>  The length of each interval
 **/
 vector<int64_t> VCFRecall::count_num(
     vector<int64_t> length_list
@@ -1317,13 +1317,13 @@ vector<int64_t> VCFRecall::count_num(
 
 
 /**
- * 获取单倍型对应的长度信息.
+ * The length of each interval.
  *
- * @param svType                         变异类型
- * @param refSeq                         ref列信息
- * @param qrySeqs                        qry列信息
- * @param gtVec                          位点的分型信息
- * @param lenType                        只取单倍型对应的长度还是所有的长度(hap/all)
+ * @param svType                         Variation type
+ * @param refSeq                         ref column information
+ * @param qrySeqs                        qry Column information
+ * @param gtVec                          qry Column information
+ * @param lenType                        Take only the length corresponding to the haplotype or all the lengths (hap/all)
  * 
  * 
  * @return tuple<uint32_t, vector<uint32_t> >      tuple<refLen, vector<qryLen> >
@@ -1335,7 +1335,7 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
     const vector<int> & gtVec, 
     const string & lenType
 ) {
-    // 检查模式是否正确，不正确退出代码
+    // Take only the length corresponding to the haplotype or all the lengths (hap/all)
     if (lenType != "hap" && lenType != "all") {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
             << "Error: lenType -> " 
@@ -1343,13 +1343,13 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
         exit(1);
     }
     
-    uint32_t refLen = refSeq.size();  // ref序列长度
-    vector<string> qrySeqVec = split(qrySeqs, ",");  // qry的序列列表
+    uint32_t refLen = refSeq.size();  // Check that the mode is correct and exit the code incorrectly
+    vector<string> qrySeqVec = split(qrySeqs, ",");  // ref sequence length
     
-    // 检查索引是否越界，如果只要hap的长度时候再检查
+    // Check whether the index is out of bounds. If only hap length is needed, check again
     if (lenType == "hap") {
         int maxGtNum = *max_element(gtVec.begin(), gtVec.end());
-        if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {  // 先检查是否数组是否越界
+        if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {  // First check whether the array is out of bounds
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "Error: number of genotyping and ALT sequences do not match -> " 
                 << qrySeqs << endl;
@@ -1357,32 +1357,32 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
         }
     }
 
-    // 构造ref和qry共同的长度索引
+    // First check whether the array is out of bounds
     vector<uint32_t> seqLenVec;
     seqLenVec.push_back(refLen);
 
-    // 遍历等位基因列表
+    // Construct the length index common to ref and qry
     for (size_t i = 0; i < qrySeqVec.size(); i++) {
         string qrySeq = qrySeqVec[i];
 
-        // 临时存储长度
+        // Temporary storage length
         uint32_t refLenTmp = refLen;
         uint32_t qryLenTmp = qrySeq.size(); 
 
-        if (qrySeq.find(">") != string::npos) {  // GraphTyper2的结果
-            // 使用正则表达式提取长度信息
+        if (qrySeq.find(">") != string::npos) {  // GraphTyper2 results
+            // Use regular expressions to extract length information
             std::regex reg("SVSIZE=(\\d+)");
             std::smatch match;
-            // 检查qry序列中有没有长度信息，没有的话跳过该位点
+            // Check whether there is any length information in the qry sequence. If there is no length information, skip this site
             if (std::regex_search(qrySeq, match, reg)) {  // <INS:SVSIZE=97:BREAKPOINT1>
                 // <INS:SVSIZE=90:BREAKPOINT1>
-                if (qrySeq.find("<INS") != string::npos && qrySeq.find("<DEL") == string::npos) {  // 字符段中包含插入
+                if (qrySeq.find("<INS") != string::npos && qrySeq.find("<DEL") == string::npos) {  // The character segment contains inserts
                     refLenTmp = refLen;
                     qryLenTmp = std::stoul(match[1].str());;
-                } else if (qrySeq.find("<INS") == string::npos && qrySeq.find("<DEL") != string::npos) {  // 字符段中包含缺失: <DEL:SVSIZE=1720:BREAKPOINT>
+                } else if (qrySeq.find("<INS") == string::npos && qrySeq.find("<DEL") != string::npos) {  // The character segment contains missing characters: <DEL:SVSIZE=1720:BREAKPOINT>
                     refLenTmp = std::stoul(match[1].str());;
                     qryLenTmp = refLen;
-                } else if (qrySeq.find("<DUP") != string::npos) {  // 字符段中包含重复的字段（GraphTyper2）<DUP:SVSIZE=2806:BREAKPOINT1>
+                } else if (qrySeq.find("<DUP") != string::npos) {  // Character segment contains duplicate fields (GraphTyper2) <DUP:SVSIZE=2806:BREAKPOINT1>
                     refLenTmp = std::stoul(match[1].str());;
                     qryLenTmp = refLenTmp * 2;
                 }
@@ -1392,31 +1392,31 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
                 qryLenTmp = qrySeq.size();
             }
 
-            seqLenVec[0] = refLenTmp; // 重置ref的长度
+            seqLenVec[0] = refLenTmp; // Reset the length of the ref
         }
 
-        // 判断BayesTyper的结果为duplication，且ref_len为1-2，qry_seq却很长时
-        if (svType.find("Duplication") != string::npos && refLenTmp <= 2) {  // BayesTyper会把duplication变成插入，所以重新计算长度
+        // The result of BayesTyper was judged to be duplication, ref_len was 1-2, and qry_seq was very long
+        if (svType.find("Duplication") != string::npos && refLenTmp <= 2) {  // BayesTyper will change duplication into insertion, so recalculate the length
             refLenTmp = qryLenTmp;
             qryLenTmp *= 2;
         }
 
-        // 添加qry的长度
-        if (seqLenVec.size() == (i + 1)) {  // 判断单倍型确实在自己的位置上，
-            seqLenVec.push_back(qryLenTmp);  // 添加qry的长度
-        } else {  // 索引和列表长度不符合时报错
+        // Add the length of qry
+        if (seqLenVec.size() == (i + 1)) {  // Judging that the haplotype is indeed in its place,
+            seqLenVec.push_back(qryLenTmp);  // Add the length of qry
+        } else {  // Index and list length do not match The Times error
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                 << "Warning: Incorrect index for haplotype length -> " << qrySeqs << endl;
             exit(1);
         }
     }
 
-    // 找基因型对应的qry长度
+    // Index and list length do not match The Times error
     vector<uint32_t> qryLenVec;
-    if (lenType == "hap") {  // 只取单倍型的序列长度
-        if (gtVec.size() == 1) {  // gt只有一个，代表为纯合的变异，两个单倍型添加一样的长度
-            if (gtVec[0] == 0) {  // 如果基因型为0，跳过该位点
-                // 返回 '0/0'
+    if (lenType == "hap") {  // The index and list length do not match the qry length corresponding to the genotype found by Times Error a
+        if (gtVec.size() == 1) {  // Take only the sequence length of the haplotype
+            if (gtVec[0] == 0) {  // If genotype 0, skip this locus
+                // Return '0/0'
                 vector<uint32_t> qryLenVecTmp(seqLenVec[0], qrySeqVec.size());
                 return make_tuple(seqLenVec[0], qryLenVecTmp);
             } else {
@@ -1428,7 +1428,7 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
                 qryLenVec.push_back(seqLenVec[gtTmp]);
             }
         }
-    } else {  // 取所有的长度
+    } else {  // Take all the lengths
         for (size_t i = 1; i < seqLenVec.size(); i++) {
             qryLenVec.push_back(seqLenVec[i]);
         }
@@ -1439,10 +1439,10 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
 
 
 /**
- * 保存recall中failCall的结果
+ * Save the result of failCall in recall
  *
- * @param chrStartLenInfoGtTupMap     真集中用剩下的vcf信息
- * @param outFileName                 输出文件名
+ * @param chrStartLenInfoGtTupMap     Save the result of failCall in recall
+ * @param outFileName                 Output file name
  * 
  * 
  * @return int             0
@@ -1452,21 +1452,21 @@ int VCFRecall::saveFailCall(
     const string & outFileName
 )
 {
-    // 没有找到的变异
+    // No variation found
     string failCallTxt;
-    // 输出文件流
+    // Output file stream
     gzFile gzfp = gzopen(outFileName.c_str(), "wb");
 
-    // 遍历字典，将没有找到的vcf进行保存
+    // Iterate through the dictionary and save the vcf that is not found
     for (const auto& [_, StartLenInfoGtTupMap] : chrStartLenInfoGtTupMap) {  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> > >
         for (const auto& [_, LenInfoGtTup] : StartLenInfoGtTupMap) {  // map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> >
             failCallTxt += get<2>(LenInfoGtTup) + "\n";
 
             // save result
-            if (failCallTxt.size() > bufferSize_) {  // 每10Mb写入一次
+            if (failCallTxt.size() > bufferSize_) {  // It is written every 10Mb
                 gzwrite(gzfp, failCallTxt.c_str(), failCallTxt.length());
 
-                // 清空字符串
+                // Empty string
                 failCallTxt.clear();
             }
         }
@@ -1474,7 +1474,7 @@ int VCFRecall::saveFailCall(
     // save result
     gzwrite(gzfp, failCallTxt.c_str(), failCallTxt.length());
 
-    // 释放内存，关闭文件
+    // Empty string
     gzclose(gzfp);
 
     return 0;
@@ -1482,9 +1482,9 @@ int VCFRecall::saveFailCall(
 
 
 /**
- * 保存recall中failCall的结果
+ * Save the result of failCall in recall
  *
- * @param allLengthList     所有变异长度
+ * @param allLengthList     All variation lengths
  * 
  * 
  * @return int             0
@@ -1504,14 +1504,14 @@ void VCFRecall::roc_calculate(
     ofstream insFile;
     insFile.open("weight.ins.table", ios::out);
     
-    // 计算所有的长度计算roc
-    // 从大往小循环
+    // Calculate all the lengths to calculate roc
+    // Cycle from big to small
     string outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    int64_t allTruePositives = allLengthList.size(); // 所有正确的位点数量
-    int64_t truePositives = 0; // 真阳性
-    int64_t falsePositives = 0; // 假阳性
-    int64_t trueNegatives = 0; // 真阴性
-    int64_t falseNegatives = 0; // 假阴性
+    int64_t allTruePositives = allLengthList.size(); // All correct number of sites
+    int64_t truePositives = 0; // True positive
+    int64_t falsePositives = 0; // False positive
+    int64_t trueNegatives = 0; // True negative
+    int64_t falseNegatives = 0; // false negative
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         auto findIter1 = rocRecallMap_.find(iter1->first);
@@ -1542,21 +1542,21 @@ void VCFRecall::roc_calculate(
 
     // snp
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // 所有正确的位点数量
+    allTruePositives = 0; // All correct number of sites
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] == 0) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // 真阳性
-    falsePositives = 0; // 假阳性
-    trueNegatives = 0; // 真阴性
-    falseNegatives = 0; // 假阴性
+    truePositives = 0; // True positive
+    falsePositives = 0; // False positive
+    trueNegatives = 0; // True negative
+    falseNegatives = 0; // false negative
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         uint32_t allPositiveTmp = 0;
-        // all中的snp数量
-        // 遍历该score下的长度vector
+        // Number of SNPS in all
+        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] == 0) {
                 allPositiveTmp++;
@@ -1566,14 +1566,14 @@ void VCFRecall::roc_calculate(
         uint32_t truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // 遍历该score下的长度vector
+            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] == 0) {
                     truePositiveTmp++;
                 }
             }
         }
-        // 如果个数是0，跳过该score
+        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1601,21 +1601,21 @@ void VCFRecall::roc_calculate(
 
     // indel
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // 所有正确的位点数量
+    allTruePositives = 0; // All correct number of sites
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] > -50 && allLengthList[i] < 50 && allLengthList[i] != 0) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // 真阳性
-    falsePositives = 0; // 假阳性
-    trueNegatives = 0; // 真阴性
-    falseNegatives = 0; // 假阴性
+    truePositives = 0; // True positive
+    falsePositives = 0; // False positive
+    trueNegatives = 0; // True negative
+    falseNegatives = 0; // false negative
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         int allPositiveTmp = 0;
-        // all中的snp数量
-        // 遍历该score下的长度vector
+        // Number of SNPS in all
+        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] > -50 && iter1->second[i] < 50 && iter1->second[i] != 0) {
                 allPositiveTmp++;
@@ -1625,14 +1625,14 @@ void VCFRecall::roc_calculate(
         int truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // 遍历该score下的长度vector
+            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] > -50 && findIter1->second[i] < 50 && findIter1->second[i] != 0) {
                     truePositiveTmp++;
                 }
             }
         }
-        // 如果个数是0，跳过该score
+        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1660,21 +1660,21 @@ void VCFRecall::roc_calculate(
 
     // del
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // 所有正确的位点数量
+    allTruePositives = 0; // All correct number of sites
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] <= -50) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // 真阳性
-    falsePositives = 0; // 假阳性
-    trueNegatives = 0; // 真阴性
-    falseNegatives = 0; // 假阴性
+    truePositives = 0; // True positive
+    falsePositives = 0; // False positive
+    trueNegatives = 0; // True negative
+    falseNegatives = 0; // false negative
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         int allPositiveTmp = 0;
-        // all中的snp数量
-        // 遍历该score下的长度vector
+        // Number of SNPS in all
+        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] <= -50) {
                 allPositiveTmp++;
@@ -1684,14 +1684,14 @@ void VCFRecall::roc_calculate(
         int truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // 遍历该score下的长度vector
+            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] <= -50) {
                     truePositiveTmp++;
                 }
             }
         }
-        // 如果个数是0，跳过该score
+        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1719,21 +1719,21 @@ void VCFRecall::roc_calculate(
 
     // ins
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // 所有正确的位点数量
+    allTruePositives = 0; // All correct number of sites
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] >= 50) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // 真阳性
-    falsePositives = 0; // 假阳性
-    trueNegatives = 0; // 真阴性
-    falseNegatives = 0; // 假阴性
+    truePositives = 0; // True positive
+    falsePositives = 0; // False positive
+    trueNegatives = 0; // True negative
+    falseNegatives = 0; // false negative
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         int64_t allPositiveTmp = 0;
-        // all中的snp数量
-        // 遍历该score下的长度vector
+        // Number of SNPS in all
+        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] >= 50) {
                 allPositiveTmp++;
@@ -1743,14 +1743,14 @@ void VCFRecall::roc_calculate(
         int64_t truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // 遍历该score下的长度vector
+            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] >= 50) {
                     truePositiveTmp++;
                 }
             }
         }
-        // 如果个数是0，跳过该score
+        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
