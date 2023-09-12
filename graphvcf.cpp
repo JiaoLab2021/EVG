@@ -19,7 +19,7 @@
 using namespace std;
 
 // define data
-#define PROGRAM_DATA "2023/09/11"
+#define PROGRAM_DATA "2023/09/12"
 // define version
 #define PROGRAM_VERSION "1.0.6"
 // define author
