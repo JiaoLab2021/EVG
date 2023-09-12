@@ -72,21 +72,23 @@ public:
     **/
     void build_reference_index();
 
-    /*
-     a. Head plus chromosome length
-     b. The first variation is greater than the read length
-     c. The sequence must correspond to reference
-     d. Replace 'END=' in the eighth column of vcf
-     e. The first base of e. refSeq is the same as the first base of qrySeq
-     f. Check whether ref and qry sequences are the same and the same sites are skipped
-     g. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site
-     h. Check whether the qry after replacement is the same. If yes, skip this site --> e.
-     i. Check for mutations that duplicate positions
-     j. Combine the genotypes. Convert to.|.
-     k. Change the/in genotype to |
-     l. Retain only the diploid variation in the genotype
-     m. Check if GT has more sequences than qry
-    */
+    /**
+     * 1. Head plus chromosome length. (bayestyper)
+     * 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
+     * 3. The first variation is greater than the read length. (paragraph)
+     * 4. The sequence must correspond to reference.
+     * 5. Replace 'END=' in the eighth column of vcf. (paragrpah)
+     * 6. Graphtyper2 will report an error when it encounters SVLEN=1,2.
+     * 7. The first base of refSeq is the same as the first base of qrySeq.
+     * 8. Check whether ref and qry sequences are the same and the same sites are skipped.
+     * 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
+     * 10. Check whether the qry after replacement is the same. If yes, skip this site.
+     * 11. Check for mutations that duplicate positions.
+     * 12. Combine the genotypes. Convert to.|.. (PanGenie)
+     * 13. Change the/in genotype to |. (PanGenie)
+     * 14. Retain only the diploid variation in the genotype.
+     * 15. Check if GT has more sequences than qry.
+    **/
     /**
      * @brief Convert vcf to the format required by graph genome tools
      * 

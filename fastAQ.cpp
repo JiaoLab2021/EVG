@@ -11,9 +11,9 @@
 #include "include/convert.hpp"
 
 // define data
-#define PROGRAM_DATA "2023/09/10"
+#define PROGRAM_DATA "2023/09/11"
 // define version
-#define PROGRAM_VERSION "1.0.5"
+#define PROGRAM_VERSION "1.0.6"
 // define author
 #define PROGRAM_AUTHOR "Zezhen Du"
 // define E-mail
