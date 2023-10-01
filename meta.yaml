@@ -1,6 +1,6 @@
 package:
   name: evg
-  version: 1.0.6
+  version: 1.0.7
 
 source:
   path: .
@@ -17,6 +17,9 @@ requirements:
     - gcc >=7.3.0
     - python =3.9
     - zlib
+    - tabix
+    - bwa
+    - samtools
     - vg
     - graphaligner
     - paragraph

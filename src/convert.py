@@ -183,7 +183,7 @@ def fasta_count(
     cmd = '{} -i {}'.format(code_path, reference_file)
 
     # submit task
-    stdout, stderr, log_out = run_cmd.run(cmd, "fasta_count", env_path)
+    stdout, stderr, log_out = run_cmd.run(cmd, "fastAQ count", env_path)
 
     fasta_base = 0
     for i in stdout.split("\n"):
@@ -192,7 +192,7 @@ def fasta_count(
 
     # Is the result of the inspection correct?
     if fasta_base == 0:
-        log_out = '[EVG.fasta_count] The fasta file is wrong, please check the parameters.\n'
+        log_out = f'[EVG.fastAQ count] Error: The size of the reference genome is 0. Please check the file: {reference_file}.\n'
 
     return stdout, stderr, log_out, fasta_base
 
@@ -361,8 +361,8 @@ def vcf_convert(
         vcf_out_name
     )
     cmd += '''awk -F "\t" '!a[$1,$2]++' 1>>{} && mv {} {}'''.format(
-        vcf_out_name+".sort",
-        vcf_out_name+".sort",
+        vcf_out_name + ".sort",
+        vcf_out_name + ".sort",
         vcf_out_name
     )
 

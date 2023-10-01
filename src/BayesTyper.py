@@ -33,6 +33,7 @@ def main(
     stderr = ""
     log_out = ""
 
+    # ----------------------------------- ln -sf ----------------------------------- #
     # First traverse the bam file and soft-link it to the current working path
     for key, value in bam_infos_map.items():
         bam_file = value["bam_file"]
@@ -44,6 +45,7 @@ def main(
         if log_out:
             return stdout, stderr, log_out, ""
 
+    # ----------------------------------- bayesTyper k-mers ----------------------------------- #
     # Traversing bam file hashes
     work_dir = os.getcwd()
     try:
@@ -94,6 +96,7 @@ def main(
                     )
         return "", "", log_out, ""
 
+    # ----------------------------------- bayesTyper cluster ----------------------------------- #
     # bayesTyper cluster
     cmd = "bayesTyper cluster -v {} -s {} -g {} -p {}".format(
         vcf_file,
@@ -119,25 +122,51 @@ def main(
     if log_out:
         return stdout, stderr, log_out, ""
 
-    # bayesTyper genotype
-    cmd = "bayesTyper genotype -v bayestyper_unit_1/variant_clusters.bin -c bayestyper_" \
-          "cluster_data -s {} -g {} -o bayestyper_unit_1/bayestyper -z -p {} --noise-genotyping".\
-        format(bam2bayestyper_file, reference_file, threads)
+    # ----------------------------------- bayesTyper genotype ----------------------------------- #
+    # List all directories under the current directory starting with "bayestyper_unit_"
+    unit_folders = [folder for folder in os.listdir(".") if os.path.isdir(folder) and folder.startswith("bayestyper_unit_")]
 
-    # Check if the file exists
-    if restart:
-        # check file
-        file_size = getsize(
-            "bayestyper_unit_1/bayestyper.vcf.gz"
+    # If the list is empty, return null
+    if len(unit_folders) == 0:
+        log_out = "[EVG.{}] Warning: BayesTyper does not generate any folders starting with 'bayestyper_unit_'.\n".format(
+                        "BayesTyper"
+                    )
+        return "", "", log_out, ""
+
+    # Iterate through all the unit folders and run the genotyping command
+    for unit_folder in unit_folders:
+        # Define the paths of the input and output files
+        output_prefix = os.path.join(unit_folder, "bayestyper")
+
+        # Define the command to run BayesTyper genotype
+        cmd = "bayesTyper genotype -v {}/variant_clusters.bin -c bayestyper_cluster_data -s {} -g {} -o {} -z -p {} --noise-genotyping".format(
+            unit_folder, bam2bayestyper_file, reference_file, output_prefix, threads
         )
-        # <= 0
-        if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.genotype", env_path)
-    else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.genotype", env_path)
 
-    vcf_out_file = os.path.join(os.getcwd(), "bayestyper_unit_1/bayestyper.vcf.gz")
+        # Check if the file exists
+        if restart:
+            # Check the file size of the output VCF file
+            vcf_gz_file = os.path.join(unit_folder, "bayestyper.vcf.gz")
+            file_size = getsize(vcf_gz_file)
+            # <= 0
+            if file_size <= 0:
+                # Submit the command to the system
+                stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.genotype", env_path)
+        else:  # If restart is not specified, run the command directly
+            # Submit the command to the system
+            stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.genotype", env_path)
+
+    # ----------------------------------- merge ----------------------------------- #
+    # Merge the output VCF files using a shell script
+    vcf_files = [os.path.join(unit_folder, "bayestyper.vcf.gz") for unit_folder in unit_folders]
+    vcf_out_file = os.path.abspath("bayestyper.vcf.gz")
+
+    # head
+    head_cmd = "zcat {} | grep '^#' | gzip -c > {}".format(vcf_files[0], vcf_out_file)
+    stdout, stderr, log_out = run_cmd.run(head_cmd, "BayesTyper.head", env_path)
+
+    # merge
+    merge_cmd = "zcat {} | sort -k 1,1 -k 2,2n -t $'\t' | gzip -c >> {}".format(" ".join(vcf_files), vcf_out_file)
+    stdout, stderr, log_out = run_cmd.run(merge_cmd, "BayesTyper.merge", env_path)
 
     return stdout, stderr, log_out, vcf_out_file

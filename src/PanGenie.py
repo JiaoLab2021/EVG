@@ -77,9 +77,7 @@ def check(
     # Check if the file exists
     if restart:
         # check file
-        file_size = getsize(
-            fastq_out_file
-        )
+        file_size = getsize(fastq_out_file)
         # <= 0
         if file_size <= 0:
             # submit task
@@ -139,9 +137,7 @@ def main(
     # Check if the file exists
     if restart:
         # check file
-        file_size = getsize(
-            out_vcf_file
-        )
+        file_size = getsize(out_vcf_file)
         # <= 0
         if file_size <= 0:
             # submit task
@@ -150,4 +146,4 @@ def main(
         # submit task
         stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie", env_path)
 
-    return stdout, stderr, log_out, os.path.abspath(out_vcf_file)
+    return stdout, stderr, log_out, out_vcf_file

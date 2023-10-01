@@ -13,6 +13,9 @@ A comprehensive benchmark of graph-based genetic variant genotyping algorithms o
 
 ## Requirements
 
+[tabix_url]: https://github.com/samtools/htslib
+[bwa_url]: https://github.com/lh3/bwa
+[samtools_url]: https://github.com/samtools/samtools
 [VG_url]: https://github.com/vgteam/vg
 [GraphAligner_url]: https://github.com/maickrau/GraphAligner
 [Paragraph_url]: https://github.com/Illumina/paragraph
@@ -26,7 +29,7 @@ Please note the following requirements before building and running the software:
 * cmake version `3.12` or higher
 * Python version `3.6` or higher
 * C++ compiler that supports `C++17` or higher, and the `zlib` library installed (we recommend using GCC version `"7.3.0"` or newer) for building `graphvcf` and `fastAQ`
-* The following dependencies must also be installed: [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
+* The following dependencies must also be installed: [tabix][tabix_url], [bwa][bwa_url], [samtools][samtools_url], [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
 ## Installation
 
@@ -73,7 +76,7 @@ conda create -n evg_env
 # Activate the environment
 conda activate evg_env
 # Install software using conda
-conda install -c bioconda -c conda-forge -c kdm801 vg graphaligner paragraph bayestyper graphtyper kmc pangenie
+conda install -c bioconda -c conda-forge -c kdm801 tabix bwa samtools vg graphaligner paragraph bayestyper graphtyper kmc pangenie
 # "ModuleNotFoundError: No module named 'pysam.bcftools'", therefore it is recommended to upgrade pysam in this case
 conda update pysam
 ```
@@ -86,6 +89,9 @@ To verify that the software has been installed correctly, perform a test run usi
 EVG -h
 graphvcf -h
 fastAQ -h
+tabix -h
+bwa
+samtools
 vg -h
 GraphAligner -h
 paragraph -h

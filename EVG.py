@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2023/09/12"
-__version__ = "1.0.6"
+__data__ = "2023/10/01"
+__version__ = "1.0.7"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -30,7 +30,7 @@ env_path = {'PATH': os.environ.get('PATH')}
 base_work_dir = os.getcwd()
 
 # global parameters
-flag = "*"*65
+flag = "-"*65
 force = False
 restart = False
 select_software_list = []  # Final selection of software list
@@ -57,6 +57,7 @@ def print_merge(
     :param vcf_merge_files_map: Merged vcf file, map<sample_name, vcf_file>
     :return:
     """
+    logger.error("")
     logger.error(f"{flag} Result {flag}")
 
     for key, value in vcf_merge_files_map.items():
@@ -269,6 +270,7 @@ def run_bwa(
             "bam_file": bam_file
         }
     """
+    logger.error("")
     logger.error(f"{flag} BWA MEM {flag}")
 
     os.chdir(work_path)
@@ -315,6 +317,7 @@ def run_graphtyper(
     :param work_path:             work path
     :return: "GraphTyper2", sample_name, graphtyper_vcf_file
     """
+    logger.error("")
     logger.error(f"{flag} GraphTyper2 {flag}")
 
     # Create folder and switch paths
@@ -355,6 +358,7 @@ def run_paragraph(
     :param work_path:                work path
     :return: "Paragraph", sample_name, paragraph_vcf_file
     """
+    logger.error("")
     logger.error(f"{flag} Paragraph {flag}")
 
     stdout = ""
@@ -416,6 +420,7 @@ def run_bayestyper(
     :param bam_infos_map:              the informations of BAM
     :return: stdout, stderr, log_out, "BayesTyper", "", bayestyper_vcf_file_list
     """
+    logger.error("")
     logger.error(f"{flag} BayesTyper {flag}")
 
     stdout = ""
@@ -481,6 +486,7 @@ def run_vg_map_giraffe(
     :param index_dir:            the path of index
     :return: software, sample_name, map_vcf_file
     """
+    logger.error("")
     logger.error(f"{flag} VG {flag}")
 
     # Create folder and switch paths
@@ -525,6 +531,7 @@ def run_graphaligner(
     :param index_dir:            the path of index
     :return: "GraphAligner", sample_name, graphaligner_vcf_file
     """
+    logger.error("")
     logger.error(f"{flag} GraphAligner {flag}")
 
     # genotype
@@ -569,6 +576,7 @@ def run_pangenie(
     :param software_work_path: work path
     :return: "PanGenie", sample_name, pangenie_vcf_file
     """
+    logger.error("")
     logger.error(f"{flag} PanGenie {flag}")
 
     # Create folder and switch paths
@@ -616,6 +624,7 @@ def ref_vcf_convert(
                 "giraffe_index_dir": giraffe_index_dir
             }
     """
+    logger.error("")
     logger.error(f"{flag} Reference Genome and VCF File Conversion {flag}")
 
     # switch paths
@@ -824,7 +833,8 @@ def read_convert(
                 "read_len": read_len
             }
     """
-    logger.error(f"{flag} Read Conversion {flag}")
+    logger.error("")
+    logger.error(f"{flag} fastAQ sample {flag}")
 
     # log
     stdout = ""
@@ -900,6 +910,7 @@ def run_genotype(
     :param bam_infos_map:    run_bwa return value
     :return: stdout, stderr, log_out, vcf_merge_files_map
     """
+    logger.error("")
     logger.error(f"{flag} Genotyping {flag}")
 
     # log
@@ -1079,6 +1090,7 @@ def run_genotype(
     pool.join()
 
     # ################################################ graphvcf merge ################################################
+    logger.error("")
     logger.error(f"{flag} Merge the result {flag}")
 
     # merge result path
@@ -1202,6 +1214,8 @@ def main():
     # Return to the main working path
     os.chdir(base_work_dir)
     # Evaluate the fasta file
+    logger.error("")
+    logger.error(f"{flag} fastAQ count {flag}")
     stdout, stderr, log_out, fasta_base = convert.fasta_count(
         code_dir, 
         env_path, 
