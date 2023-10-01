@@ -27,7 +27,7 @@ Please note the following requirements before building and running the software:
 
 * `Linux` operating system
 * cmake version `3.12` or higher
-* Python version `3.6` or higher
+* Python version `3.9`
 * C++ compiler that supports `C++17` or higher, and the `zlib` library installed (we recommend using GCC version `"7.3.0"` or newer) for building `graphvcf` and `fastAQ`
 * The following dependencies must also be installed: [tabix][tabix_url], [bwa][bwa_url], [samtools][samtools_url], [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
