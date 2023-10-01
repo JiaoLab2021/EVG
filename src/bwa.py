@@ -20,8 +20,6 @@ def index(
     :return: stdout, stderr, log_out
     """
 
-    print(reference_file)
-
     # log
     stdout = ""
     stderr = ""
