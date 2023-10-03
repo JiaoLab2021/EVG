@@ -9,12 +9,15 @@
 #include <regex>
 #include <unordered_map>
 #include "zlib.h"
+#include <getopt.h>
+#include <sstream>
 
 #include "kseq.h"
 #include "get_time.hpp"
 #include "strip_split_join.hpp"
 #include "sort_find.hpp"
-#include <getopt.h>
+#include "vcf_open.hpp"
+#include "save.hpp"
 
 using namespace std;
 

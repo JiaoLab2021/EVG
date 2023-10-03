@@ -9,6 +9,7 @@
 #include <algorithm>
 #include "zlib.h"
 #include <getopt.h>
+#include <sstream>
 
 #include "strip_split_join.hpp"
 #include "kseq.h"

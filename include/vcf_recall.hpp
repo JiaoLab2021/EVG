@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include "zlib.h"
 #include <getopt.h>
+#include <sstream>
 
 #include "vcf_open.hpp"
 #include "save.hpp"
@@ -73,7 +74,7 @@ private:
     vector<string> lengthVec_;
 
     // output
-    uint32_t bufferSize_;
+    static const int32_t bufferSize_ = 10 * 1024 * 1024;
     map<float, vector<int32_t> > rocCallMap_;  // map<DP/GQ, vector<length>> The software identifies all variants
     map<float, vector<int32_t> > rocRecallMap_;  // map<DP/GQ, vector<length>> The software identifies the correct variants
     

@@ -10,6 +10,7 @@
 #include "zlib.h"
 #include <map>
 #include <unordered_map>
+#include <sstream>
 
 #include "strip_split_join.hpp"
 #include "vcf_open.hpp"

@@ -170,8 +170,6 @@ VCFRecall::VCFRecall(
     lengthVec_.push_back("5000/9999");
     lengthVec_.push_back("10000/999999");
 
-    bufferSize_ = 10 * 1024 * 1024;
-
     // ROC -> save the number of DP or GQ
     rocColNum_ = 0;
     if (!rocKey_.empty())
@@ -367,19 +365,23 @@ void VCFRecall::evulate_gt()
     check_vcf_sort(evaluateFileName_);
     
     // Save the correct results for typing
-    string truetxt;
+    stringstream truetxtStream; // Use stringstream instead of string concatenation
+    truetxtStream.str().reserve(bufferSize_);
     SAVE trueFile("genotype.true.vcf.gz");
 
     // Saves the result of a typing error
-    string genotypeMisTxt;
+    stringstream genotypeMisTxtStream; // Use stringstream instead of string concatenation
+    genotypeMisTxtStream.str().reserve(bufferSize_);
     SAVE genotypeMisFile("genotype.err.vcf.gz");
 
     // Save the result of miscall
-    string misCallTxt;
+    stringstream misCallTxtStream; // Use stringstream instead of string concatenation
+    misCallTxtStream.str().reserve(bufferSize_);
     SAVE misCallFile("miscall.vcf.gz");
 
     // No variation found
-    string failCallTxt;
+    stringstream failCallTxtStream; // Use stringstream instead of string concatenation
+    failCallTxtStream.str().reserve(bufferSize_);
     SAVE failCallFile("failcall.vcf.gz");
 
     // No variation found
@@ -453,7 +455,7 @@ void VCFRecall::evulate_gt()
             cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: " << INFOSTRUCTTMP.CHROM << " not in true set.\n";
             miscallLenVec.push_back(svLength);
-            misCallTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
+            misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
@@ -490,7 +492,7 @@ void VCFRecall::evulate_gt()
 
                 for (size_t j = 0; j < trueQryLenVec.size(); j++) {
                     // Used haplotypes are skipped
-                    if (j == trueQryLenVecIdx) {
+                    if (static_cast<int64_t>(j) == trueQryLenVecIdx) {
                         continue;
                     }
 
@@ -570,20 +572,20 @@ void VCFRecall::evulate_gt()
         // Determine the result of typing
         if (genotypeTrueNum == 0) {  // The mutations we found are not in the true concentration 
             miscallLenVec.push_back(svLength);
-            misCallTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
+            misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         } else {
             // Correct typing
             if (genotypeTrueNum >= gtVec.size()) {
                 genotypeLenVec.push_back(trueSvLen);
-                truetxt += "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                truetxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                             "true_length\t" + to_string(trueSvLen) + "\t" + trueVcfInfo + "\n";
 
                 // Add length to rocTrueMap
                 rocRecallMap_[rocNum].push_back(svLength);
             } else {  // Typing error
                 misgenotypeLenVec.push_back(trueSvLen);
-                genotypeMisTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                genotypeMisTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                                 "true_length\t" + to_string(trueSvLen) + "\t" + trueVcfInfo + "\n";
 
                 // The roc is calculated using the recall, or only the genotype if the roc is not enabled
@@ -598,40 +600,83 @@ void VCFRecall::evulate_gt()
         }
 
         // save result
-        if (truetxt.size() > bufferSize_ || 
-            genotypeMisTxt.size() > bufferSize_ || 
-            misCallTxt.size() > bufferSize_) // It is written every 10Mb
+        if (truetxtStream.tellp() >= bufferSize_ || 
+            genotypeMisTxtStream.tellp() >= bufferSize_ || 
+            misCallTxtStream.tellp() >= bufferSize_) // It is written every 10Mb
         {
-            trueFile.save(truetxt);  // Correct typing
-            genotypeMisFile.save(genotypeMisTxt);  // Typing error
-            misCallFile.save(misCallTxt);  // Variation that is not in true concentration
+            // Correct genotyping
+            string truetxt = truetxtStream.str();
+            trueFile.save(truetxt);
+            // Clear stringstream
+            truetxtStream.str(string());
+            truetxtStream.clear();
 
-            // Empty string
-            truetxt.clear();
-            genotypeMisTxt.clear();
-            misCallTxt.clear();
+            // genotyping error
+            string genotypeMisTxt = genotypeMisTxtStream.str();
+            genotypeMisFile.save(genotypeMisTxt);
+            // Clear stringstream
+            genotypeMisTxtStream.str(string());
+            genotypeMisTxtStream.clear();
+
+            // Variation that is not in true concentration
+            string misCallTxt = misCallTxtStream.str();
+            misCallFile.save(misCallTxt);
+            // Clear stringstream
+            misCallTxtStream.str(string());
+            misCallTxtStream.clear();
         }
     }
 
-    // save result
-    trueFile.save(truetxt);  // Correct typing
-    genotypeMisFile.save(genotypeMisTxt);  // Typing error
-    misCallFile.save(misCallTxt);  // Variation that is not in true concentration
+    // last save
+    if (truetxtStream.tellp() > 0 || 
+        genotypeMisTxtStream.tellp() > 0 || 
+        misCallTxtStream.tellp() > 0) // It is written every 10Mb
+    {
+        // Correct typing
+        string truetxt = truetxtStream.str();
+        trueFile.save(truetxt);
+        // Clear stringstream
+        truetxtStream.str(string());
+        truetxtStream.clear();
+
+        // genotyping error
+        string genotypeMisTxt = genotypeMisTxtStream.str();
+        genotypeMisFile.save(genotypeMisTxt);
+        // Clear stringstream
+        genotypeMisTxtStream.str(string());
+        genotypeMisTxtStream.clear();
+
+        // Variation that is not in true concentration
+        string misCallTxt = misCallTxtStream.str();
+        misCallFile.save(misCallTxt);
+        // Clear stringstream
+        misCallTxtStream.str(string());
+        misCallTxtStream.clear();
+    }
 
     // True variation not found
     for (auto it1 : trueVCFStrcuture_.chrStartLenInfoGtTupMap) {  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> > >
         for (auto it2 : it1.second) {  // map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> >
-            failCallTxt += get<2>(it2.second) + "\n";
+            failCallTxtStream << get<2>(it2.second) + "\n";
 
-            if (failCallTxt.size() > bufferSize_) {  // It is written every 10Mb
-                failCallFile.save(failCallTxt);  // True variation not found
-
-                // Empty string
-                failCallTxt.clear();
+            // save the result
+            if (failCallTxtStream.tellp() >= bufferSize_) {  // It is written every 10Mb
+                string failCallTxt = failCallTxtStream.str();
+                failCallFile.save(failCallTxt);
+                // Clear stringstream
+                failCallTxtStream.str(string());
+                failCallTxtStream.clear();
             }
         }
     }
-    failCallFile.save(failCallTxt);  // True variation not found
+    // last save
+    if (failCallTxtStream.tellp() > 0) {  // It is written every 10Mb
+        string failCallTxt = failCallTxtStream.str();
+        failCallFile.save(failCallTxt);
+        // Clear stringstream
+        failCallTxtStream.str(string());
+        failCallTxtStream.clear();
+    }
 
     int64_t sv_genotype_recall = genotypeLenVec.size();
     int64_t sv_misgenotype_recall = misgenotypeLenVec.size();
@@ -711,19 +756,23 @@ void VCFRecall::evulate_recall()
     check_vcf_sort(evaluateFileName_);
 
     // Save the correct results
-    string truetxt;
+    stringstream truetxtStream; // Use stringstream instead of string concatenation
+    truetxtStream.str().reserve(bufferSize_);
     SAVE trueFile("recall.true.vcf.gz");
 
     // Save the correct results for typing
-    string true_Gt_txt;
+    stringstream trueGtTxtStream; // Use stringstream instead of string concatenation
+    trueGtTxtStream.str().reserve(bufferSize_);
     SAVE trueGtFile("genotype.true.vcf.gz");
 
     // Saves the result of a typing error
-    string genotypeMisTxt;
+    stringstream genotypeMisTxtStream; // Use stringstream instead of string concatenation
+    genotypeMisTxtStream.str().reserve(bufferSize_);
     SAVE genotypeMisFile("genotype.err.vcf.gz");
 
     // Save the result of miscall
-    string misCallTxt;
+    stringstream misCallTxtStream; // Use stringstream instead of string concatenation
+    misCallTxtStream.str().reserve(bufferSize_);
     SAVE misCallFile("miscall.vcf.gz");
 
     // Define vector
@@ -805,7 +854,7 @@ void VCFRecall::evulate_recall()
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: '" << INFOSTRUCTTMP.CHROM << "' is not in the true set.\n";
             callLenVec.push_back(svLength);
-            misCallTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
+            misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         }
     
@@ -848,7 +897,7 @@ void VCFRecall::evulate_recall()
                     leftIdxTmp = indexLeft;
                     indexRight = search_Binary_right(trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS+200, rightIdxTmp);
                     rightIdxTmp = indexRight;
-                } if (indexLeft < 0 || indexRight >= trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM].size()) {
+                } if (indexLeft < 0 || indexRight >= static_cast<int64_t>(trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM].size())) {
                     cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: out of index, please check the data or code.\n";
                     exit(1);
                 }
@@ -872,7 +921,7 @@ void VCFRecall::evulate_recall()
 
                 for (size_t k = 0; k < trueQryLenVec.size(); k++) {  // First check to see if the mutation has been used, then move on to the next coordinates if it's been deleted
                     // Used haplotypes are skipped
-                    if (k == trueQryLenVecIdx) {
+                    if (static_cast<int64_t>(k) == trueQryLenVecIdx) {
                         continue;
                     }
 
@@ -1018,19 +1067,19 @@ void VCFRecall::evulate_recall()
             // Software call vcf-vector
             callLenVec.push_back(trueSvLen);
 
-            truetxt += "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+            truetxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                         "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
             recallLenVec.push_back(trueSvLen);
 
             // Correct typing
             if (genotypeTrueNum >= gtVec.size()) {  // If the value is greater than or equal to gtVec.size(), the classification is correct
                 genotypeLenVec.push_back(trueSvLen);
-                true_Gt_txt += "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                trueGtTxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                             "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
                 // Add length to rocTrueMap
                 rocRecallMap_[rocNum].push_back(svLength);
             } else {  // Typing error
-                genotypeMisTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                genotypeMisTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
                                 "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
 
                 // The roc is calculated using the recall, or only the genotype if the roc is not enabled
@@ -1047,33 +1096,79 @@ void VCFRecall::evulate_recall()
             }
         } else {  // If the above loop does not find the variation in the true set, it is added with the length found by the software itself
             callLenVec.push_back(svLength);
-            misCallTxt += "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
+            misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
         }
 
         // save result
-        if (truetxt.size() > bufferSize_ || 
-            true_Gt_txt.size() > bufferSize_ || 
-            genotypeMisTxt.size() > bufferSize_ || 
-            misCallTxt.size() > bufferSize_) // It is written every 10Mb
+        if (truetxtStream.tellp() >= bufferSize_ || 
+            trueGtTxtStream.tellp() >= bufferSize_ || 
+            genotypeMisTxtStream.tellp() >= bufferSize_ || 
+            misCallTxtStream.tellp() >= bufferSize_) // It is written every 10Mb
         {
+            // Correct call
+            string truetxt = truetxtStream.str();
             trueFile.save(truetxt);
-            trueGtFile.save(true_Gt_txt);
-            genotypeMisFile.save(genotypeMisTxt);  // Typing error
-            misCallFile.save(misCallTxt);  // Variation that is not in true concentration
+            // Clear stringstream
+            truetxtStream.str(string());
+            truetxtStream.clear();
 
-            // Empty string
-            truetxt.clear();
-            true_Gt_txt.clear();
-            genotypeMisTxt.clear();
-            misCallTxt.clear();
+            // Correct genotyping
+            string trueGtTxt = trueGtTxtStream.str();
+            trueGtFile.save(trueGtTxt);
+            // Clear stringstream
+            trueGtTxtStream.str(string());
+            trueGtTxtStream.clear();
+
+            // Genotyping error
+            string genotypeMisTxt = genotypeMisTxtStream.str();
+            genotypeMisFile.save(genotypeMisTxt);
+            // Clear stringstream
+            genotypeMisTxtStream.str(string());
+            genotypeMisTxtStream.clear();
+
+            // Variation that is not in true concentration
+            string misCallTxt = misCallTxtStream.str();
+            misCallFile.save(misCallTxt);
+            // Clear stringstream
+            misCallTxtStream.str(string());
+            misCallTxtStream.clear();
         }
     }
 
-    // save result
-    trueFile.save(truetxt);
-    trueGtFile.save(true_Gt_txt);
-    genotypeMisFile.save(genotypeMisTxt);  // Typing error
-    misCallFile.save(misCallTxt);  // Variation that is not in true concentration
+    // last save
+    if (truetxtStream.tellp() > 0 || 
+        trueGtTxtStream.tellp() > 0 || 
+        genotypeMisTxtStream.tellp() > 0 || 
+        misCallTxtStream.tellp() > 0) // It is written every 10Mb
+    {
+        // Correct call
+        string truetxt = truetxtStream.str();
+        trueFile.save(truetxt);
+        // Clear stringstream
+        truetxtStream.str(string());
+        truetxtStream.clear();
+
+        // Correct genotyping
+        string trueGtTxt = trueGtTxtStream.str();
+        trueGtFile.save(trueGtTxt);
+        // Clear stringstream
+        trueGtTxtStream.str(string());
+        trueGtTxtStream.clear();
+
+        // Genotyping error
+        string genotypeMisTxt = genotypeMisTxtStream.str();
+        genotypeMisFile.save(genotypeMisTxt);
+        // Clear stringstream
+        genotypeMisTxtStream.str(string());
+        genotypeMisTxtStream.clear();
+
+        // Variation that is not in true concentration
+        string misCallTxt = misCallTxtStream.str();
+        misCallFile.save(misCallTxt);
+        // Clear stringstream
+        misCallTxtStream.str(string());
+        misCallTxtStream.clear();
+    }
 
     // Save no variation found, false negative
     saveFailCall(
@@ -1452,30 +1547,35 @@ int VCFRecall::saveFailCall(
     const string & outFileName
 )
 {
-    // No variation found
-    string failCallTxt;
-    // Output file stream
-    gzFile gzfp = gzopen(outFileName.c_str(), "wb");
+    SAVE SAVEClass(outFileName);
+
+    stringstream outStream; // Use stringstream instead of string concatenation
+    outStream.str().reserve(bufferSize_);
 
     // Iterate through the dictionary and save the vcf that is not found
     for (const auto& [_, StartLenInfoGtTupMap] : chrStartLenInfoGtTupMap) {  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> > >
         for (const auto& [_, LenInfoGtTup] : StartLenInfoGtTupMap) {  // map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> >
-            failCallTxt += get<2>(LenInfoGtTup) + "\n";
+            outStream << get<2>(LenInfoGtTup) + "\n";
 
             // save result
-            if (failCallTxt.size() > bufferSize_) {  // It is written every 10Mb
-                gzwrite(gzfp, failCallTxt.c_str(), failCallTxt.length());
-
-                // Empty string
-                failCallTxt.clear();
+            if (outStream.tellp() >= bufferSize_) {  // Cache size is 10mb
+                string outTxt = outStream.str();
+                SAVEClass.save(outTxt);
+                // Clear stringstream
+                outStream.str(string());
+                outStream.clear();
             }
         }
     }
-    // save result
-    gzwrite(gzfp, failCallTxt.c_str(), failCallTxt.length());
 
-    // Empty string
-    gzclose(gzfp);
+    // last save
+    if (outStream.tellp() > 0) {  // Cache size is 10mb
+        string outTxt = outStream.str();
+        SAVEClass.save(outTxt);
+        // Clear stringstream
+        outStream.str(string());
+        outStream.clear();
+    }
 
     return 0;
 }

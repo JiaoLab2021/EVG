@@ -166,7 +166,7 @@ def main(
     stdout, stderr, log_out = run_cmd.run(head_cmd, "BayesTyper.head", env_path)
 
     # merge
-    merge_cmd = "zcat {} | sort -k 1,1 -k 2,2n -t $'\t' | gzip -c >> {}".format(" ".join(vcf_files), vcf_out_file)
+    merge_cmd = "zcat {} | grep -v '^#' | sort -k 1,1 -k 2,2n -t $'\t' | gzip -c >> {}".format(" ".join(vcf_files), vcf_out_file)
     stdout, stderr, log_out = run_cmd.run(merge_cmd, "BayesTyper.merge", env_path)
 
     return stdout, stderr, log_out, vcf_out_file

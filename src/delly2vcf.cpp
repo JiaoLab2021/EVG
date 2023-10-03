@@ -56,8 +56,7 @@ int main_delly2vcf(int argc, char** argv)
     }
 
     // Set the name of the output file
-    if (outputFilename.empty())
-    {
+    if (outputFilename.empty()) {
         outputFilename = split(dellyFilename, ".")[0] + ".convert.vcf";
     }
 
@@ -65,8 +64,10 @@ int main_delly2vcf(int argc, char** argv)
 
     // init
     Delly2VCF Delly2VCFClass(refFileName, dellyFilename, outputFilename);
+
     // build index
     Delly2VCFClass.build_fasta_index();
+
     // convert
     Delly2VCFClass.vcf_convert();
 
@@ -150,18 +151,11 @@ void Delly2VCF::build_fasta_index()
 
 void Delly2VCF::vcf_convert()
 {
-    // 打开文件
-    ifstream dellyFile;
-    dellyFile.open(dellyFilename_, ios::in);
+    SAVE SAVEClass(outputFilename_);
 
-    string informations;
-    string outTxt;
-
-    string chromosome;
-    uint32_t start;
-    string refSeq;
-    uint32_t end;
-    string qrySeq;
+    stringstream outStream; // Use stringstream instead of string concatenation
+    static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
+    outStream.str().reserve(CACHE_SIZE);
 
     // The regular expression is used to replace END again. If there is [], it cannot be used in the regex library, so delete it first
     std::regex end_reg("END=(\\d+)");
@@ -172,91 +166,90 @@ void Delly2VCF::vcf_convert()
     
     srand((int)time(0));  // Generate random seeds, or replace 0 with NULL.
 
-    if(!dellyFile.is_open()) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << dellyFilename_ << "': No such file or directory." << endl;
-        exit(1);
-    } else {
-        while(getline(dellyFile,informations)) {
-            if (informations.find("#") != string::npos) {
-                std::regex reg_INFO("INFO\t.*");
-                outTxt += regex_replace(string(informations), regex(reg_INFO), string("INFO")) + "\n";
-            } else {
-                // Remove square brackets
-                informations = regex_replace(string(informations), regex(reg1), string(""));
-                informations = regex_replace(string(informations), regex(reg2), string(""));
-                
-                chromosome = split(informations, "\t")[0];
-                start = stoul(split(informations, "\t")[1]);
-                refSeq = split(informations, "\t")[3];
-                qrySeq = split(informations, "\t")[4];
+    // input file stream
+    VCFINFOSTRUCT INFOSTRUCTTMP;
+    VCFOPEN VCFOPENCLASS(dellyFilename_);
 
-                std::regex reg_ref_seq("\t" + refSeq + "\t");
-                std::regex reg_qry_seq("\t" + qrySeq + "\t");
-                std::regex reg_PASS("PASS.*");
+    // open file
+    ifstream dellyFile;
+    dellyFile.open(dellyFilename_, ios::in);
 
-                
-                // Look for the END location in the INFO field
-                if (regex_search(informations, end_search, end_reg)) {
-                    // end = stoi(end_search.format("$1")) - 1;
-                    end = stoul(end_search.str(1)) - 1;
-                } else {
-                    cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: skip ->" << informations << endl;
-                    continue;
-                }
+    // If not traversed, continue
+    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+        // empty line, skip
+        if (INFOSTRUCTTMP.line.empty()) {
+            continue;
+        }
 
-                // Some of the structural variations delly finds are going to be very, very large, narrow that variation down.
-                if ((end - start) > 10000) {
-                    end = start + 10000;
-                }        
-                
-                refSeq = FastaMap_[chromosome].substr(start-1, end-start+1);
-                
-                if (qrySeq == "<INV>") {
-                    qrySeq = refSeq;
-                    reverse(qrySeq.begin(), qrySeq.end());
-                } else if (qrySeq == "<DEL>") {
-                    qrySeq = refSeq[0];
-                } else if (qrySeq == "<DUP>") {
-                    qrySeq = refSeq + refSeq;
-                } else if (qrySeq == "<INS>") {
-                    uint32_t chromosome_len = FastaMap_[chromosome].length();
-                    uint32_t qry_start = rand()%(chromosome_len-10001)+0;
-                    uint32_t qryLen = rand()%10000+50;
-                    qrySeq = refSeq[0] + FastaMap_[chromosome].substr(qry_start, qryLen);
-                } else if (qrySeq.find(chromosome) == string::npos) {  // Translocation.
-                
-                    if (refSeq.length() == 1) {
-                        cerr << "[" << __func__ << "::" << getTime() << "] " << "Skip this short variations: " << chromosome << " " << start << endl;
-                        continue;
-                    } else {
-                        qrySeq = refSeq[0];
-                    }
-                } else {
-                    cerr << "[" << __func__ << "::" << getTime() << "] " << "This variations could not be converted, please check code: " << informations << endl;
-                }
+        // commant line
+        if (INFOSTRUCTTMP.line.find("#") != string::npos) {
+            outStream << INFOSTRUCTTMP.line << endl;
+            continue;
+        }
 
-                
-                informations = regex_replace(string(informations), regex(reg_ref_seq), string("\t" + refSeq + "\t"));
-                informations = regex_replace(string(informations), regex(reg_qry_seq), string("\t" + qrySeq + "\t"));
-                informations = regex_replace(string(informations), regex(reg_PASS), string("PASS\tEND=" + to_string(end)));
+        // low qual, skip
+        if (INFOSTRUCTTMP.FILTER != "PASS") {
+            continue;
+        }
 
-                outTxt += informations + "\n";
-            }
+        // Remove square brackets
+        INFOSTRUCTTMP.ALT = regex_replace(string(INFOSTRUCTTMP.ALT), regex(reg1), string(""));
+        INFOSTRUCTTMP.ALT = regex_replace(string(INFOSTRUCTTMP.ALT), regex(reg2), string(""));
+
+        // Look for the END location in the INFO field
+        uint32_t refEnd = 0;
+        if (regex_search(INFOSTRUCTTMP.INFO, end_search, end_reg)) {
+            refEnd = stoul(end_search.str(1));
+        } else {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: INFO column is missing END information, skipping this position: " << INFOSTRUCTTMP.line << endl;
+            continue;
+        }
+
+        uint32_t refLen = refEnd - INFOSTRUCTTMP.POS + 1;
+        if (refLen > 0.1 * 1000 * 1000) {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: The variant is too long, skipping this position: " << INFOSTRUCTTMP.line << endl;
+            continue;
+        }
+        
+        string refSeq = FastaMap_[INFOSTRUCTTMP.CHROM].substr(INFOSTRUCTTMP.POS - 1, refLen);
+        string qrySeq = "";
+
+        if (INFOSTRUCTTMP.ALT == "<INV>") {
+            qrySeq = refSeq;
+            reverse(qrySeq.begin(), qrySeq.end());
+        } else if (INFOSTRUCTTMP.ALT == "<DEL>") {
+            qrySeq = refSeq[0];
+        } else if (INFOSTRUCTTMP.ALT == "<DUP>") {
+            qrySeq = refSeq + refSeq;
+        } else if (INFOSTRUCTTMP.ALT == "<INS>") {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: ALT == <INS>, skipping this position: " << INFOSTRUCTTMP.line << endl;
+            continue;
+        } else if (INFOSTRUCTTMP.ALT.find(":") != string::npos) {  // Translocation.
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: Skipping translocation: " << INFOSTRUCTTMP.line << endl;
+            continue;
+        } else {
+            qrySeq = INFOSTRUCTTMP.ALT;
+        }
+
+        INFOSTRUCTTMP.lineVec[3] = refSeq;
+        INFOSTRUCTTMP.lineVec[4] = qrySeq;
+
+        outStream << join(INFOSTRUCTTMP.lineVec, "\t") + "\n";;
+
+        if (outStream.tellp() >= CACHE_SIZE) {  // Cache size is 10mb
+            string outTxt = outStream.str();
+            SAVEClass.save(outTxt);
+            // Clear stringstream
+            outStream.str(string());
+            outStream.clear();
         }
     }
 
-    // save result
-    ofstream outFile;
-
-    outFile.open(outputFilename_, ios::app);
-
-    if(!outFile.is_open()) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "'" << outputFilename_ << "': No such file or directory." << endl;
-        exit(1);
+    if (outStream.tellp() > 0) {  //Write for the last time
+        string outTxt = outStream.str();
+        SAVEClass.save(outTxt);
+        // Clear stringstream
+        outStream.str(string());
+        outStream.clear();
     }
-    outFile << outTxt;
-
-    // free memory
-    dellyFile.close();
-    outFile.close();
 }

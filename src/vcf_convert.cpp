@@ -227,11 +227,12 @@ void Convert::vcf_convert()
     // Sequence information on the genome
     const map<string, string>& seqMap = refIndexS_.sequenceMap;
 
-    // Save the converted result
-    string outTxt;
-
     // Output file stream
     SAVE SAVECLASS(outFileName_);
+
+    stringstream outStream; // Use stringstream instead of string concatenation
+    static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
+    outStream.str().reserve(CACHE_SIZE);
 
     // Record the start and chromosome number of the previous variant
     string preChromosome;
@@ -253,14 +254,14 @@ void Convert::vcf_convert()
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
                 // 1. Head plus chromosome length. (bayestyper)
-                outTxt += refIndexS_.chrLenTxt;
+                outStream << refIndexS_.chrLenTxt;
 
                 // save header
-                outTxt += INFOSTRUCTTMP.line + "\n";
+                outStream << INFOSTRUCTTMP.line + "\n";
             }
             // Skip if the vcf contains chromosome length information
             else if (INFOSTRUCTTMP.line.find(",length") == string::npos) {
-                outTxt += INFOSTRUCTTMP.line + "\n";
+                outStream << INFOSTRUCTTMP.line + "\n";
             }
 
             continue;
@@ -521,24 +522,23 @@ void Convert::vcf_convert()
             continue;
         }
 
-        // Add the replaced string to outTxt
-        outTxt += join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
+        // Add the replaced string to outStream
+        outStream << join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
 
-        if (outTxt.size() > 10 * 1024 * 1024) { // Write once every 10Mb to reduce disk I/O
+        if (outStream.tellp() >= CACHE_SIZE) {  // Cache size is 10mb
+            string outTxt = outStream.str();
             SAVECLASS.save(outTxt);
-
-            // Empty string
-            outTxt.clear();
-            string().swap(outTxt);
+            // Clear stringstream
+            outStream.str(string());
+            outStream.clear();
         }
     }
 
-
-    if (outTxt.size() > 0) {  // Write for the last time
+    if (outStream.tellp() > 0) {  //Write for the last time
+        string outTxt = outStream.str();
         SAVECLASS.save(outTxt);
-
-        // Clear
-        outTxt.clear();
-        string().swap(outTxt);
+        // Clear stringstream
+        outStream.str(string());
+        outStream.clear();
     }
 }

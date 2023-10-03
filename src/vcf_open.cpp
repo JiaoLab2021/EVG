@@ -11,14 +11,12 @@ using namespace std;
 **/
 VCFOPEN::VCFOPEN(
     const string & vcfFileName
-)
-{
+) {
     vcfFileName_ = vcfFileName;
 
     // Input file stream
     gzfpI = gzopen(vcfFileName_.c_str(), "rb");
-    if(!gzfpI)
-    {
+    if(!gzfpI) {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
             << "'" << vcfFileName_ << "': No such file or directory." << endl;
         exit(1);
@@ -30,16 +28,14 @@ VCFOPEN::VCFOPEN(
  * 
  * @return 0
 **/
-VCFOPEN::~VCFOPEN()
-{
+VCFOPEN::~VCFOPEN() {
     // Close file
     gzclose(gzfpI);
 }
 
 
 // Empty structure
-void VCFINFOSTRUCT::clear()
-{
+void VCFINFOSTRUCT::clear() {
     // general information
     line.clear();
     lineVec.clear();
@@ -69,23 +65,20 @@ void VCFINFOSTRUCT::clear()
 **/
 bool VCFOPEN::read(
     VCFINFOSTRUCT & INFOSTRUCTTMP
-)
-{
+) {
     INFOSTRUCTTMP.clear();
 
     string info = ""; // temporary string
     char line[1024]; // Read only 1024 bytes of data at a time
 
-    if(gzgets(gzfpI, line, 1024))
-    {
+    if(gzgets(gzfpI, line, 1024)) {
         info += line;
 
         // empty line
         memset(line, '\0', sizeof(line));
 
         // If there is no newline character, it means that the line is not over, continue to read
-        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line, 1024))
-        {
+        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line, 1024)) {
             info += line;
 
             // empty line
@@ -93,12 +86,9 @@ bool VCFOPEN::read(
         }
         
         // remove line breaks
-        if (info.size() > 0)
-        {
+        if (info.size() > 0) {
             info = strip(info, '\n');
-        }
-        else  // false
-        {
+        } else {  // false
             return false;
         }
         
@@ -107,15 +97,13 @@ bool VCFOPEN::read(
         INFOSTRUCTTMP.lineVec = split(info, "\t");  // segmentation
 
         // comment lines
-        if (info.find("#") != string::npos)
-        {
+        if (info.find("#") != string::npos) {
             return true;
         }
         
 
         // non-comment lines
-        if (INFOSTRUCTTMP.lineVec.size() < 9) // Check the file first, if it is wrong, it will jump out of the code
-        {
+        if (INFOSTRUCTTMP.lineVec.size() < 9) { // Check the file first, if it is wrong, it will jump out of the code
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: '"
                 << vcfFileName_ 
@@ -131,12 +119,9 @@ bool VCFOPEN::read(
         INFOSTRUCTTMP.ALT = INFOSTRUCTTMP.lineVec[4];  // ALT
         INFOSTRUCTTMP.ALTVec = split(INFOSTRUCTTMP.ALT, ",");  // 'ALT' µÄ 'vec'
 
-        if (isdigit(INFOSTRUCTTMP.lineVec[5][0]))  // Assign QUAL if it is a number, otherwise 0.0
-        {
+        if (isdigit(INFOSTRUCTTMP.lineVec[5][0])) {  // Assign QUAL if it is a number, otherwise 0.0
             INFOSTRUCTTMP.QUAL = stod(INFOSTRUCTTMP.lineVec[5]);  // QUAL
-        }
-        else
-        {
+        } else {
             INFOSTRUCTTMP.QUAL = 0.0;
         }
 
@@ -146,9 +131,7 @@ bool VCFOPEN::read(
 
         INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.REF.size();  // REF length
         INFOSTRUCTTMP.END = INFOSTRUCTTMP.POS + INFOSTRUCTTMP.LEN - 1;  // end position
-    }
-    else  // Return false directly after traversing
-    {
+    } else {  // Return false directly after traversing
         return false;
     }
 
@@ -167,11 +150,9 @@ bool VCFOPEN::read(
 string VCFOPEN::get_TYPE(
     const uint32_t & refLen,
     const vector<string> & ALTVec
-)
-{
+) {
     uint32_t qryLen = 0;
-    for (const auto& it1 : ALTVec)
-    {
+    for (const auto& it1 : ALTVec) {
         uint32_t qryLenTmp = it1.size();
         qryLen = max(qryLen, qryLenTmp);  // Find the longest qrySeq
     }
@@ -179,32 +160,19 @@ string VCFOPEN::get_TYPE(
     int32_t svLen = qryLen - refLen;
     double lengthRatio = qryLen / float(refLen);
 
-    if (svLen == 0 && refLen == 1 && qryLen == 1)
-    {
+    if (svLen == 0 && refLen == 1 && qryLen == 1) {
         return "SNP";
-    }
-    else if (svLen <= 49 && svLen >= -49 && refLen <= 49 && qryLen <= 49)
-    {
+    } else if (svLen <= 49 && svLen >= -49 && refLen <= 49 && qryLen <= 49) {
         return "InDel";
-    }
-    else if (svLen >= -2 && svLen <= 2 && refLen > 49 && qryLen > 49 )
-    {
+    } else if (svLen >= -2 && svLen <= 2 && refLen > 49 && qryLen > 49) {
         return "Inversion";
-    }
-    else if (lengthRatio >= 1.8 && lengthRatio <= 2.2 && refLen > 49 && qryLen > 49)
-    {
+    } else if (lengthRatio >= 1.8 && lengthRatio <= 2.2 && refLen > 49 && qryLen > 49) {
         return "Duplication";
-    }
-    else if (svLen < 0)
-    {
+    } else if (svLen < 0) {
         return "Deletion";
-    }
-    else if (svLen > 0)
-    {
+    } else if (svLen > 0) {
         return "Insertion";
-    }
-    else
-    {
+    } else {
         return "Other";
     }
     
@@ -237,29 +205,23 @@ map<int, vector<string> > VCFOPEN::get_gt(
     } else {  // If it exists, save it
         string GTString;  // Store the genotype field
 
-        for (size_t i = 9; i < lineTmpVec.size(); i++)  // Start the loop in the ninth column
-        {
+        for (size_t i = 9; i < lineTmpVec.size(); i++) {  // Start the loop in the ninth column
             GTString = split(lineTmpVec[i], ":")[gtIndex];  // gt field
 
             // Sites with '.' are skipped
-            if (GTString.find(".") != string::npos)
-            {
+            if (GTString.find(".") != string::npos) {
                 continue;
             }
             
             string splitStr;  // Delimiter in gt
-            if (GTString.find("/") != string::npos)  // Determine the '/' separator
-            {
+            if (GTString.find("/") != string::npos) {  // Determine the '/' separator
                 splitStr = "/";
-            }
-            else if (GTString.find("|") != string::npos)  // Determine that '|' is the separator
-            {
+            } else if (GTString.find("|") != string::npos) {  // Determine that '|' is the separator
                 splitStr = "|";
             }
             
             // If you know the separator then assign it
-            if (splitStr.size() > 0)
-            {
+            if (splitStr.size() > 0) {
                 GTVecMap[i - 9] = split(GTString, splitStr);  // Assign
             }
         }
@@ -282,16 +244,11 @@ vector<string> VCFOPEN::gt_split(const string & gtTxt)
     // Temporary gt list
     vector<string> gtVecTmp;
 
-    if (gtTxt.find("/") != string::npos)
-    {
+    if (gtTxt.find("/") != string::npos) {
         gtVecTmp = split(gtTxt, "/");
-    }
-    else if (gtTxt.find("|") != string::npos)
-    {
+    } else if (gtTxt.find("|") != string::npos) {
         gtVecTmp = split(gtTxt, "|");
-    }
-    else
-    {
+    } else {
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
         exit(1);
     }
@@ -312,8 +269,7 @@ vector<string> VCFOPEN::gt_split(const string & gtTxt)
 tuple<double, double> VCFOPEN::calculate(
     const map<int, vector<string> > & GTVecMap, 
     uint32_t sampleNum
-)
-{
+) {
     double MAFTMP;  // Minimum allele frequency
     double MISSRATETMP;  // Miss rate
 
@@ -321,27 +277,22 @@ tuple<double, double> VCFOPEN::calculate(
     map<string, uint32_t> GTFreMapTmp;  // Genotype frequency map<gt, fre>
     uint16_t ploidy = 1;  // Record ploidy
 
-    for (const auto& it1 : GTVecMap)  // map<idx, vector<GTString> >
-    {
-        for (const auto& it2 : it1.second)  // vector<GTString>
-        {
+    for (const auto& it1 : GTVecMap) {  // map<idx, vector<GTString> >
+        for (const auto& it2 : it1.second) {  // vector<GTString>
             GTFreMapTmp[it2]++;  // Add 1 to the frequency corresponding to the genotype
         }
         // If it is 1 then calculate again
-        if (ploidy == 1)
-        {
+        if (ploidy == 1) {
             ploidy = it1.second.size();  // Record ploidy
         }
     }
 
     map<uint32_t, string> GTFreMapTmpTmp;  // map conversion, map<fre, gt>
-    for (const auto& it1 : GTFreMapTmp)  // map<gt, fre>
-    {
+    for (const auto& it1 : GTFreMapTmp) {  // map<gt, fre>
         GTFreMapTmpTmp[it1.second] = it1.first;
     }
 
-    if (GTFreMapTmpTmp.size() > 1)
-    {
+    if (GTFreMapTmpTmp.size() > 1) {
         // The second-to-last is the suballele
         auto iter1 = GTFreMapTmpTmp.end();
         iter1--; iter1--;

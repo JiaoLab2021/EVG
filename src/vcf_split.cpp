@@ -266,8 +266,12 @@ void VCFSplit::vcf_split_type()
     VCFINFOSTRUCT INFOSTRUCTTMP;
     VCFOPEN VCFOPENCLASS(vcfFileName_);
 
-    // Record each variation and comment line
-    string simpleSVs, invSVs, dupSVs, otherSVs;
+    stringstream simpleSVsStream, invSVsStream, dupSVsStream, otherSVsStream; // Use stringstream instead of string concatenation
+    static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
+    simpleSVsStream.str().reserve(CACHE_SIZE);
+    invSVsStream.str().reserve(CACHE_SIZE);
+    dupSVsStream.str().reserve(CACHE_SIZE);
+    otherSVsStream.str().reserve(CACHE_SIZE);
 
     // Output file stream
     SAVE SimpleSave(prefix_ + ".snp.indel.ins.del.vcf.gz");
@@ -297,46 +301,74 @@ void VCFSplit::vcf_split_type()
 
             // Determine the variation type and save it to the string
             if ((refLen < 50 && qryLen < 50) || (refLen >= 50 && qryLen < 50) || (refLen < 50 && qryLen >= 50)) {  // snp+indel+del+ins
-                simpleSVs += INFOSTRUCTTMP.line + "\n";
+                simpleSVsStream << INFOSTRUCTTMP.line + "\n";
             } else if (refLen >= 50 && qryLen >= 50) {
                 if (refLen*2 <= qryLen+10 && refLen*2 >= qryLen-10) {  // dup
-                    dupSVs += INFOSTRUCTTMP.line + "\n";
+                    dupSVsStream << INFOSTRUCTTMP.line + "\n";
                 } else if (refLen <= qryLen+10 && refLen >= qryLen-10) {  // inv
-                    invSVs += INFOSTRUCTTMP.line + "\n";
+                    invSVsStream << INFOSTRUCTTMP.line + "\n";
                 } else {
-                    otherSVs += INFOSTRUCTTMP.line + "\n";
+                    otherSVsStream << INFOSTRUCTTMP.line + "\n";
                 }
             } else {
-                otherSVs += INFOSTRUCTTMP.line + "\n";
+                otherSVsStream << INFOSTRUCTTMP.line + "\n";
             }
 
             // save result
-            if (simpleSVs.size() > 10 * 1024 * 1024) {  // Determine the variation type and save it to the string
+            if (simpleSVsStream.tellp() >= CACHE_SIZE || 
+                invSVsStream.tellp() >= CACHE_SIZE || 
+                dupSVsStream.tellp() >= CACHE_SIZE || 
+                otherSVsStream.tellp() >= CACHE_SIZE
+            ) {  // Determine the variation type and save it to the string
+                string simpleSVs = simpleSVsStream.str();
+                string invSVs = invSVsStream.str();
+                string dupSVs = dupSVsStream.str();
+                string otherSVs = otherSVsStream.str();
+
                 SimpleSave.save(simpleSVs);
                 InvSave.save(invSVs);
                 DupSave.save(dupSVs);
                 OtherSave.save(otherSVs);
 
-                // Empty string
-                simpleSVs.clear();
-                invSVs.clear();
-                dupSVs.clear();
-                otherSVs.clear();
+                // Clear stringstream
+                simpleSVsStream.str(string());
+                simpleSVsStream.clear();
+                invSVsStream.str(string());
+                invSVsStream.clear();
+                dupSVsStream.str(string());
+                dupSVsStream.clear();
+                otherSVsStream.str(string());
+                otherSVsStream.clear();
             }
         }
     }
 
     // Last write
-    SimpleSave.save(simpleSVs);
-    InvSave.save(invSVs);
-    DupSave.save(dupSVs);
-    OtherSave.save(otherSVs);
+    if (simpleSVsStream.tellp() > 0 || 
+        invSVsStream.tellp() > 0 || 
+        dupSVsStream.tellp() > 0 || 
+        otherSVsStream.tellp() > 0
+    ) {  // Determine the variation type and save it to the string
+        string simpleSVs = simpleSVsStream.str();
+        string invSVs = invSVsStream.str();
+        string dupSVs = dupSVsStream.str();
+        string otherSVs = otherSVsStream.str();
 
-    // Empty string
-    simpleSVs.clear();
-    invSVs.clear();
-    dupSVs.clear();
-    otherSVs.clear();
+        SimpleSave.save(simpleSVs);
+        InvSave.save(invSVs);
+        DupSave.save(dupSVs);
+        OtherSave.save(otherSVs);
+
+        // Clear stringstream
+        simpleSVsStream.str(string());
+        simpleSVsStream.clear();
+        invSVsStream.str(string());
+        invSVsStream.clear();
+        dupSVsStream.str(string());
+        dupSVsStream.clear();
+        otherSVsStream.str(string());
+        otherSVsStream.clear();
+    }
 }
 
 
@@ -347,8 +379,15 @@ void VCFSplit::vcf_split_number()
         baseVcfFileName_ = vcfFileName_;
     }
 
-    // Record the result of the sv split
-    string SVs0, SVs1, SVs2, SVs4, SVs6, SVs8, SVsMore;
+    stringstream SVs0Stream, SVs1Stream, SVs2Stream, SVs4Stream, SVs6Stream, SVs8Stream, SVsMoreStream; // Use stringstream instead of string concatenation
+    static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
+    SVs0Stream.str().reserve(CACHE_SIZE);
+    SVs1Stream.str().reserve(CACHE_SIZE);
+    SVs2Stream.str().reserve(CACHE_SIZE);
+    SVs4Stream.str().reserve(CACHE_SIZE);
+    SVs6Stream.str().reserve(CACHE_SIZE);
+    SVs8Stream.str().reserve(CACHE_SIZE);
+    SVsMoreStream.str().reserve(CACHE_SIZE);
 
     // Output file stream
     SAVE SVs0Save(prefix_ + ".0.vcf.gz");
@@ -467,24 +506,38 @@ void VCFSplit::vcf_split_number()
 
             int64_t snpIndelNum = leftSnpIndelNum + rightSnpIndelNum;
             if (snpIndelNum == 0) {
-                SVs0 += Info.information + "\n";
+                SVs0Stream << Info.information + "\n";
             } else if (snpIndelNum == 1) {
-                SVs1 += Info.information + "\n";
+                SVs1Stream << Info.information + "\n";
             } else if (snpIndelNum == 2) {
-                SVs2 += Info.information + "\n";
+                SVs2Stream << Info.information + "\n";
             } else if (snpIndelNum == 4) {
-                SVs4 += Info.information + "\n";
+                SVs4Stream << Info.information + "\n";
             } else if (snpIndelNum == 6) {
-                SVs6 += Info.information + "\n";
+                SVs6Stream << Info.information + "\n";
             } else if (snpIndelNum == 8) {
-                SVs8 += Info.information + "\n";
+                SVs8Stream << Info.information + "\n";
             } else {
-                SVsMore += Info.information + "\n";
+                SVsMoreStream << Info.information + "\n";
             }
-            
+
             // save result
-            if (SVs0.size() > 10 * 1024 * 1024) // It is written every 10Mb
-            {
+            if (SVs0Stream.tellp() >= CACHE_SIZE || 
+                SVs1Stream.tellp() >= CACHE_SIZE || 
+                SVs2Stream.tellp() >= CACHE_SIZE || 
+                SVs4Stream.tellp() >= CACHE_SIZE || 
+                SVs6Stream.tellp() >= CACHE_SIZE || 
+                SVs8Stream.tellp() >= CACHE_SIZE || 
+                SVsMoreStream.tellp() >= CACHE_SIZE
+            ) {  // Determine the variation type and save it to the string
+                string SVs0 = SVs0Stream.str();
+                string SVs1 = SVs1Stream.str(); 
+                string SVs2 = SVs2Stream.str();
+                string SVs4 = SVs4Stream.str();
+                string SVs6 = SVs6Stream.str();
+                string SVs8 = SVs8Stream.str();
+                string SVsMore = SVsMoreStream.str();
+
                 SVs0Save.save(SVs0);
                 SVs1Save.save(SVs1);
                 SVs2Save.save(SVs2);
@@ -493,32 +546,64 @@ void VCFSplit::vcf_split_number()
                 SVs8Save.save(SVs8);
                 SVsMoreSave.save(SVsMore);
 
-                // It is written every 10Mb
-                SVs0.clear();
-                SVs1.clear();
-                SVs2.clear();
-                SVs4.clear();
-                SVs6.clear();
-                SVs8.clear();
-                SVsMore.clear();
+                // Clear stringstream
+                SVs0Stream.str(string());
+                SVs0Stream.clear();
+                SVs1Stream.str(string());
+                SVs1Stream.clear();
+                SVs2Stream.str(string());
+                SVs2Stream.clear();
+                SVs4Stream.str(string());
+                SVs4Stream.clear();
+                SVs6Stream.str(string());
+                SVs6Stream.clear();
+                SVs8Stream.str(string());
+                SVs8Stream.clear();
+                SVsMoreStream.str(string());
+                SVsMoreStream.clear();
             }
         }
     }
     
-    SVs0Save.save(SVs0);
-    SVs1Save.save(SVs1);
-    SVs2Save.save(SVs2);
-    SVs4Save.save(SVs4);
-    SVs6Save.save(SVs6);
-    SVs8Save.save(SVs8);
-    SVsMoreSave.save(SVsMore);
+    // last save
+    if (SVs0Stream.tellp() > 0 || 
+        SVs1Stream.tellp() > 0 || 
+        SVs2Stream.tellp() > 0 || 
+        SVs4Stream.tellp() > 0 || 
+        SVs6Stream.tellp() > 0 || 
+        SVs8Stream.tellp() > 0 || 
+        SVsMoreStream.tellp() > 0
+    ) {  // Determine the variation type and save it to the string
+        string SVs0 = SVs0Stream.str();
+        string SVs1 = SVs1Stream.str(); 
+        string SVs2 = SVs2Stream.str();
+        string SVs4 = SVs4Stream.str();
+        string SVs6 = SVs6Stream.str();
+        string SVs8 = SVs8Stream.str();
+        string SVsMore = SVsMoreStream.str();
 
-    // Empty string
-    SVs0.clear();
-    SVs1.clear();
-    SVs2.clear();
-    SVs4.clear();
-    SVs6.clear();
-    SVs8.clear();
-    SVsMore.clear();
+        SVs0Save.save(SVs0);
+        SVs1Save.save(SVs1);
+        SVs2Save.save(SVs2);
+        SVs4Save.save(SVs4);
+        SVs6Save.save(SVs6);
+        SVs8Save.save(SVs8);
+        SVsMoreSave.save(SVsMore);
+
+        // Clear stringstream
+        SVs0Stream.str(string());
+        SVs0Stream.clear();
+        SVs1Stream.str(string());
+        SVs1Stream.clear();
+        SVs2Stream.str(string());
+        SVs2Stream.clear();
+        SVs4Stream.str(string());
+        SVs4Stream.clear();
+        SVs6Stream.str(string());
+        SVs6Stream.clear();
+        SVs8Stream.str(string());
+        SVs8Stream.clear();
+        SVsMoreStream.str(string());
+        SVsMoreStream.clear();
+    }
 }

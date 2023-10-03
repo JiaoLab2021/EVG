@@ -855,7 +855,7 @@ void VCFMerge::vcf_merge(
                             indexRight = search_Binary_right(mergeRefStartVec, (refStart+200));
                         }
 
-                        if (indexLeft < 0 || indexRight >= mergeRefStartVec.size()) {
+                        if (indexLeft < 0 || indexRight >= static_cast<int64_t>(mergeRefStartVec.size())) {
                             cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: out of index, please check the data or code.\n";
                             exit(1);
                         }
@@ -1364,16 +1364,34 @@ void VCFMerge::result_save(
 {
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Wrote genotyped variants to '" << outputFileName_ << "'\n";
 
-    SAVE SaveClass(outputFileName_);
+    SAVE SAVEClass(outputFileName_);
+
+    stringstream outStream; // Use stringstream instead of string concatenation
+    static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
+    outStream.str().reserve(CACHE_SIZE);
 
     // Output file name prefix
-    string outTxt = mergeVcfStruct_.headInfo;
+    outStream << mergeVcfStruct_.headInfo;
  
     for (const auto& [_, StartInfoMap] : outChrStartInfoMap_) {  // outChrStartInfoMap_<chromosome, map<refStart, vcfInfo> >
         for (const auto& [_, info] : StartInfoMap) {  // map<refStart, vcfInfo>
-            outTxt += info + "\n";
+            outStream << info + "\n";
+
+            if (outStream.tellp() >= CACHE_SIZE) {  // Cache size is 10mb
+                string outTxt = outStream.str();
+                SAVEClass.save(outTxt);
+                // Clear stringstream
+                outStream.str(string());
+                outStream.clear();
+            }
         }
     }
 
-    SaveClass.save(outTxt);
+    if (outStream.tellp() > 0) {  //Write for the last time
+        string outTxt = outStream.str();
+        SAVEClass.save(outTxt);
+        // Clear stringstream
+        outStream.str(string());
+        outStream.clear();
+    }
 }

@@ -12,6 +12,7 @@
 #include <malloc.h>
 #include "zlib.h"
 #include <cmath>
+#include <sstream>
 
 #include "vcf_open.hpp"
 #include "save.hpp"
