@@ -19,9 +19,9 @@
 using namespace std;
 
 // define data
-#define PROGRAM_DATA "2023/10/03"
+#define PROGRAM_DATA "2023/10/10"
 // define version
-#define PROGRAM_VERSION "1.0.8"
+#define PROGRAM_VERSION "1.0.9"
 // define author
 #define PROGRAM_AUTHOR "Zezhen Du"
 // define E-mail

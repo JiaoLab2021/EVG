@@ -20,7 +20,7 @@ def vg_index(
     :param reference_file: reference genome
     :param vcf_file:       vcf file
     :param threads:        Threads
-    :param index_dir:      Threads
+    :param index_dir:      the path of index
     :param env_path:       environment variable
     :param restart:        resume
     :return: stdout, stderr, log_out

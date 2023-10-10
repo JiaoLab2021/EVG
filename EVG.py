@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2023/10/03"
-__version__ = "1.0.8"
+__data__ = "2023/10/10"
+__version__ = "1.0.9"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -559,18 +559,15 @@ def run_graphaligner(
 
 # PanGenie
 def run_pangenie(
+    index_path: str,
     sample_name: str,
-    reference_file: str,
-    vcf_file: str,
     fastq_file1: str,
     fastq_file2: str,
     software_work_path: str
 ):
     """
-
+    :param index_path:         the path of index
     :param sample_name:        sample name
-    :param reference_file:     reference genome
-    :param vcf_file:           vcf file
     :param fastq_file1:        read1
     :param fastq_file2:        read2
     :param software_work_path: work path
@@ -591,8 +588,7 @@ def run_pangenie(
 
     # genotype
     stdout, stderr, log_out, pangenie_vcf_file = PanGenie.main(
-        reference_file,
-        vcf_file,
+        index_path,
         sample_name,
         fastq_file1,
         fastq_file2,
@@ -785,6 +781,35 @@ def ref_vcf_convert(
         # return to main path
         os.chdir(work_path)
 
+        # PanGenie build index
+        if "PanGenie" in select_software_list:
+            # switch paths
+            index_dir = os.path.join(work_path, "PanGenie")
+            makedir(
+                index_dir,
+                force_tmp=force,
+                restart_tmp=restart
+            )
+            os.chdir(index_dir)
+
+            # submit task
+            future = executor.submit(
+                PanGenie.run_index, 
+                reference_file, 
+                vcf_out_name,
+                index_dir, 
+                env_path, 
+                threads,
+                restart
+            )
+            # save result
+            to_do.append(future)
+
+            time.sleep(0.05)
+
+        # return to main path
+        os.chdir(work_path)
+
         # Obtain the return value of multithreading. If log_out exists, it indicates that the operation failed and the exit code
         for future in concurrent.futures.as_completed(to_do):  # concurrent execution
             stdout, stderr, log_out = future.result()  # check return value
@@ -795,6 +820,7 @@ def ref_vcf_convert(
     map_index_dir = os.path.join(work_path, "map")
     giraffe_index_dir = os.path.join(work_path, "giraffe")
     graphaligner_index_dir = os.path.join(work_path, "GraphAligner")
+    pangenie_index_dir = os.path.join(work_path, "PanGenie")
 
     # The path to store the converted file
     convert_out_map = {
@@ -805,7 +831,8 @@ def ref_vcf_convert(
         "fasta_base": fasta_base,
         "map_index_dir": map_index_dir,
         "giraffe_index_dir": giraffe_index_dir,
-        "GraphAligner_index_dir": graphaligner_index_dir
+        "GraphAligner_index_dir": graphaligner_index_dir, 
+        "PanGenie_index_dir": pangenie_index_dir
     }
 
     return stdout, stderr, log_out, convert_out_map
@@ -1016,9 +1043,8 @@ def run_genotype(
                 else:
                     # Multi-process submission tasks
                     pool_out = pool.apply_async(run_pangenie, args=(
+                        convert_out_map["PanGenie_index_dir"], 
                         sample_name,
-                        convert_out_map["reference_file"],
-                        convert_out_map["vcf_out_name"],
                         fastq_file1,
                         fastq_file2,
                         software_work_path,

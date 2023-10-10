@@ -13,6 +13,8 @@
 #include "zlib.h"
 #include <cmath>
 #include <sstream>
+#include <tuple>
+#include <unordered_map>
 
 #include "vcf_open.hpp"
 #include "save.hpp"
@@ -29,16 +31,18 @@ void help_merge(char** argv);
 int main_merge(int argc, char** argv);
 
 
- struct baseVcfStruct
-{
+ struct baseVcfStruct {
     string headInfo; // Comment lines of the vcf
 
     map<string, vector<uint32_t> > startMap;  // map<chromosome, vector<start>>
     map<string, vector<uint32_t> > refLenMap;  // map<chromosome, vector<refLen>>
-    map<string, vector<vector<uint32_t> > > qryLenVecMap;  // map<chromosome, vector<vector<qryLen> > >, When a locus has multiple alleles, this is used to preserve the length of the qry
+    map<string, vector<vector<uint32_t> > > qryLenVecVecMap;  // map<chromosome, vector<vector<qryLen> > >, When a locus has multiple alleles, this is used to preserve the length of the qry
+
+    // sample information
+    vector<string> sampleNameVec;
 
     // Store the vcfInfo of baseVcf
-    map<string, map<uint32_t, string> > BaseInfoMap;  // map<chromosome, map<start, vcfInfo>>
+    unordered_map<string, unordered_map<uint32_t, tuple<string, vector<string> > > > BaseInfoTupMap;  // map<chromosome, map<start, tuple<vcfInfo, vector<gt> > > >
 
     // Store the results after binary search method, save the software name and the corresponding typing results
     map<string, map<uint32_t, map<string, tuple<vector<float>, vector<int> > > > > recallSoftwareGtDepVecMap;  // map<chr, map<start, map<software, tuple<vector<depth>, vector<gt> > > > >
@@ -52,15 +56,14 @@ int main_merge(int argc, char** argv);
     baseVcfStruct() : colNum(0) {}
 };
 
-struct softwareVcfStruct
-{
+struct softwareVcfStruct {
     string software;  // Software name
 
     map<string, vector<uint32_t> > startMap;  // map<chromosome, vector<start>>
     map<string, vector<uint32_t> > refLenMap;  // map<chromosome, vector<refLen>>
-    map<string, vector<vector<uint32_t> > > qryLenVecMap;  // map<chromosome, vector<vector<qryLen> > >, probably 1/2, etc. Therefore, the length of each allele should be stored. If the length was 1, it represented homozygous variation
-    map<string, vector<vector<int> > > gtVecMap;  // map<chromosome, vector<vector<genotype>>>
-    map<string, vector<vector<float> > > depthVecMap;  // map<chromosome, vector<vector<depth>>>
+    map<string, vector<vector<uint32_t> > > qryLenVecVecMap;  // map<chromosome, vector<vector<qryLen> > >, probably 1/2, etc. Therefore, the length of each allele should be stored. If the length was 1, it represented homozygous variation
+    map<string, vector<vector<int> > > gtVecMap;  // map<chromosome, vector<vector<genotype> > >
+    map<string, vector<vector<float> > > depthVecMap;  // map<chromosome, vector<vector<depth> > >
 
     vector<float> depthVec;  // vector<depth>
 };
@@ -70,9 +73,6 @@ struct softwareVcfStruct
 class VCFMerge
 {
 private:
-    // EVG running mode
-    string mode_;
-
     string trueVcf_;
 
     string ParagraphVcf_;
@@ -85,14 +85,16 @@ private:
 
     string sampleName_;
 
-    uint16_t softwareNum_;  // Records the amount of software used to filter the results
+    uint16_t softwareNum_ = 0;  // Records the amount of software used to filter the results
+    bool paragraphInputBool_ = false;  // Whether the user entered paragraph
 
     map<string, map<int, string > > outChrStartInfoMap_;  // outMap<chromosome, map<refStart, vcfInfo> >
 
     baseVcfStruct mergeVcfStruct_;  // recore the index of all software
 
-    string outputFileName_;
-
+    // Index of the most similar sample
+    uint32_t mostSimilarSampleIdx_ = 0;
+    
 
     /**
      * Get the length of the haplotype.
@@ -112,6 +114,19 @@ private:
         const string & qrySeqs, 
         const vector<int> & gtVec, 
         const string & lenType
+    );
+
+
+    /**
+     * Get the typing list of all samples.
+     *
+     * @param lineVec          lineVec
+     * 
+     * 
+     * @return gtVec           vector<string>
+    **/
+    vector<string> get_gt_all(
+        const vector<string> & lineVec
     );
 
 
@@ -161,7 +176,7 @@ private:
      * 
      * @return gtVec           vector <int>
     **/
-    vector<int> get_gt(
+    vector<int> get_gt_sample(
         const vector<string> & informationsVec, 
         uint32_t sampleIdx
     );
@@ -261,6 +276,10 @@ private:
     **/
     tuple<float, float, float> cal_var_sd(const vector<float>& data);
 public:
+    // EVG running mode
+    string mMode;
+    string mOutputFileName;
+
     /**
 	 * init
 	 *
@@ -278,7 +297,6 @@ public:
      * 
 	**/
     VCFMerge(
-        const string& mode,
         const string& trueVcf, 
         const string& ParagraphVcf, 
         const string& GraphTyper2Vcf, 
@@ -288,6 +306,7 @@ public:
         const string& GraphAlignerVcf, 
         const string& PanGenieVcf, 
         const string& sampleName, 
+        const string& mode, 
         const string& outputFileName
     );
 
@@ -318,11 +337,11 @@ public:
     /**
      * Filter and merge result according to the depth and number of variants.
      *
-     * @param mode_               EVG running mode
+     * @param secondBool          second filter
      * 
-     * @return void
+     * @return
     **/
-   void vcf_merge_filter();
+   void vcf_merge_filter(bool secondBool = false);
 
 
     /**
@@ -339,6 +358,19 @@ public:
      * @return void
 	**/
     void result_save();
+
+
+    /**
+     * replace file base name
+     *
+     * @param path
+     * @param directory
+     * @param fileName
+     * 
+     * 
+     * @return void
+    **/
+    void extract_directory_FileName(const std::string& path, std::string& directory, std::string& fileName);
 
 };
 

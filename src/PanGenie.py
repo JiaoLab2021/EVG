@@ -8,32 +8,25 @@ from getsize import getsize
 
 
 # check file
-def check(
+def check_index(
     vcf_file: str,
-    sample_name: str,
-    fastq_file1: str,
-    fastq_file2: str,
     env_path, 
     restart: bool
 ):
     """
     :param vcf_file: the path of vcf file
-    :param sample_name sample name
-    :param fastq_file1: read1
-    :param fastq_file2: read2
     :param env_path: environment variable
     :param restart: Whether to check if the file exists and skip this step
     :return: stdout, stderr, log_out, vcf_out_file, fastq_out_file
     """
 
-    #  initial log
+    # initial log
     stdout = ""
     stderr = ""
     log_out = ""
 
     # output file path
-    vcf_out_file = os.path.abspath(sample_name + ".vcf")
-    fastq_out_file = os.path.abspath("{}.fq".format(sample_name))
+    vcf_out_file = os.path.abspath( "convert.vcf")
 
     # awk cmd
     awk_cmd = r""" awk 'BEGIN{FS="\t"; OFS="\t"; start=0; end=0} /^#/ {print; next} $1!=chr {chr=$1; start=0; end=0} {if(start==0) {start=$2; end=$2+length($4)-1} else if($2>end) {start=$2; end=$2+length($4)-1} else{next}} {print}' """
@@ -58,6 +51,34 @@ def check(
     # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, "", ""
+
+    return stdout, stderr, log_out, vcf_out_file
+
+
+# check file
+def check_read(
+    sample_name: str,
+    fastq_file1: str,
+    fastq_file2: str,
+    env_path, 
+    restart: bool
+):
+    """
+    :param sample_name sample name
+    :param fastq_file1: read1
+    :param fastq_file2: read2
+    :param env_path: environment variable
+    :param restart: Whether to check if the file exists and skip this step
+    :return: stdout, stderr, log_out, vcf_out_file, fastq_out_file
+    """
+
+    # initial log
+    stdout = ""
+    stderr = ""
+    log_out = ""
+
+    # output file path
+    fastq_out_file = os.path.abspath("{}.fq".format(sample_name))
 
     cmd = ""
     if '.gz' in fastq_file1 or ".GZ" in fastq_file1:  # fastq1
@@ -90,13 +111,55 @@ def check(
     if log_out:
         return stdout, stderr, log_out, "", ""
 
-    return stdout, stderr, log_out, vcf_out_file, fastq_out_file
+    return stdout, stderr, log_out, fastq_out_file
 
+# index
+def run_index(
+    reference_file: str, 
+    vcf_file: str,
+    index_dir: str,
+    env_path, 
+    threads: int,
+    restart: bool
+):
+    """
+    :param reference_file: reference genome
+    :param vcf_file: vcf file
+    :param index_dir: the path of index
+    :param env_path: environment variable
+    :param threads: Threads
+    :param restart: Whether to check if the file exists and skip this step
+    :return:
+    """
+
+    # initial log
+    stdout = ""
+    stderr = ""
+    log_out = ""
+
+    # change working path
+    os.chdir(index_dir)
+
+    stdout, stderr, log_out, vcf_out_file = check_index(
+        vcf_file,
+        env_path, 
+        restart
+    )
+
+    # Report an error if there is a problem with the exit code
+    if log_out:
+        return stdout, stderr, log_out, ""
+    
+    cmd = f"PanGenie-index -r {reference_file} -v {vcf_out_file} -t {threads} -o out"
+
+    # submit task
+    stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie-index", env_path)
+
+    return stdout, stderr, log_out
 
 # genotype
 def main(
-    reference_file: str,
-    vcf_file: str,
+    index_path: str,
     sample_name: str,
     fastq_file1: str,
     fastq_file2: str,
@@ -105,8 +168,7 @@ def main(
     restart: bool
 ):
     """
-    :param reference_file: reference genome
-    :param vcf_file: vcf file
+    :param index_path: the path of index
     :param sample_name sample name
     :param fastq_file1: read1
     :param fastq_file2: read2
@@ -117,8 +179,7 @@ def main(
     """
 
     # Check if files are compressed and merge
-    stdout, stderr, log_out, vcf_file, fastq_file = check(
-        vcf_file,
+    stdout, stderr, log_out, fastq_file = check_read(
         sample_name,
         fastq_file1,
         fastq_file2,
@@ -129,7 +190,7 @@ def main(
     if log_out:
         return stdout, stderr, log_out, ""
 
-    cmd = f"PanGenie -s {sample_name} -i {fastq_file} -r {reference_file} -v {vcf_file} -t {threads} -j {threads} -o {sample_name}"
+    cmd = f"PanGenie -s {sample_name} -i {fastq_file} -f {index_path}/out -t {threads} -j {threads} -o {sample_name}"
 
     # output vcf path
     out_vcf_file = os.path.abspath(f"{sample_name}_genotyping.vcf")

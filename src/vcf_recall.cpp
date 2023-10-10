@@ -273,7 +273,7 @@ void VCFRecall::gramtools_convert()
 
     // output file stream
     vector<string> prefixVec = split(evaluateFileName_, "/");
-    string outFileName = "convert." + prefixVec[prefixVec.size()-1];
+    string outFileName = "convert." + prefixVec.back();
     SAVE SaveClass(outFileName);
 
     // input file stream
@@ -1263,13 +1263,13 @@ vector<int> VCFRecall::get_gt(
     uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
 
     if (gtIndex == formatVec.size()) {  // Gets the index location of GT
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineVec[0] << ":" << lineVec[1] << endl;
+        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No [GT] information in FORMAT, replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
         gtVec = {0, 0};
     } else {  // If it exists, save it
         string gt;  // Store the genotype field
 
         if (sampleIdx == 0) {  // The number of columns not specified is the last column
-            gt = split(lineVec[lineVec.size()-1], ":")[gtIndex];  // gt field
+            gt = split(lineVec.back(), ":")[gtIndex];  // gt field
         } else {
             gt = split(lineVec[sampleIdx], ":")[gtIndex];  // gt field
         }
@@ -1279,7 +1279,8 @@ vector<int> VCFRecall::get_gt(
             splitStr = "/";
         } else if (gt.find("|") != string::npos) {  // Determine that '|' is the separator
             splitStr = "|";
-        } else {  // Return a null value if you do not know
+        } else {  // If the delimiter is not known, use 0|0 instead
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: Genotype does not contain '\\' or '|', replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
             gtVec = {0, 0};
             return gtVec;
         }
@@ -1501,7 +1502,7 @@ tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
             seqLenVec.push_back(qryLenTmp);  // Add the length of qry
         } else {  // Index and list length do not match The Times error
             cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "Warning: Incorrect index for haplotype length -> " << qrySeqs << endl;
+                << "Error: Incorrect index for haplotype length -> " << qrySeqs << endl;
             exit(1);
         }
     }
