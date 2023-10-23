@@ -140,6 +140,9 @@ def run_index(
     # change working path
     os.chdir(index_dir)
 
+    # index path
+    index_dir_file = os.path.join(index_dir, "out")
+
     stdout, stderr, log_out, vcf_out_file = check_index(
         vcf_file,
         env_path, 
@@ -150,7 +153,7 @@ def run_index(
     if log_out:
         return stdout, stderr, log_out, ""
     
-    cmd = f"PanGenie-index -r {reference_file} -v {vcf_out_file} -t {threads} -o out"
+    cmd = f"PanGenie-index -r {reference_file} -v {vcf_out_file} -t {threads} -o {index_dir_file}"
 
     # submit task
     stdout, stderr, log_out = run_cmd.run(cmd, "PanGenie-index", env_path)

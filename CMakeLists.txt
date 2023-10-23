@@ -51,8 +51,10 @@ target_compile_options(fastAQ PRIVATE -O3)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # target_compile_options(graphvcf PRIVATE -O3 -Wall -Wextra -Werror -pedantic-errors -march=native)
     # target_compile_options(fastAQ PRIVATE -O3 -Wall -Wextra -Werror -pedantic-errors -march=native)
-    target_compile_options(graphvcf PRIVATE -O3 -Wall -Wextra -march=native)
-    target_compile_options(fastAQ PRIVATE -O3 -Wall -Wextra -march=native)
+    # target_compile_options(graphvcf PRIVATE -O3 -Wall -Wextra -march=native)
+    # target_compile_options(fastAQ PRIVATE -O3 -Wall -Wextra -march=native)
+    target_compile_options(graphvcf PRIVATE -O3 -Wall -Wextra)
+    target_compile_options(fastAQ PRIVATE -O3 -Wall -Wextra)
 endif()
 
 
