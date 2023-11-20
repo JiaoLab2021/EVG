@@ -147,8 +147,7 @@ void Convert::build_reference_index()
     // Chromosome name output, graphtyper required
     ofstream outFile;
     outFile.open("CHROMOSOME.NAME", ios::out);
-    if(!outFile.is_open())
-    {
+    if(!outFile.is_open()) {
         cerr << "[" << __func__ << "::" << getTime() << "] " 
             << "'CHROMOSOME.NAME': No such file or directory." 
             << endl;
@@ -159,25 +158,22 @@ void Convert::build_reference_index()
     gzFile gzfp = gzopen(refFileName_.c_str(), "rb");
 
     // open file
-    if(!gzfp)
-    {
+    if(!gzfp) {
         cerr << "[" << __func__ << "::" << getTime() << "] "
             << "'" << refFileName_ << "': No such file or directory." << endl;
         exit(1);
-    }
-    else
-    {
+    } else {
         kseq_t *ks;
         ks = kseq_init(gzfp);
     
-        while( kseq_read(ks) >= 0 )
-        {
+        while(kseq_read(ks) >= 0) {
             string chromosome = ks->name.s;
             uint32_t chrLen = ks->seq.l;
             string sequence = ks->seq.s;
 
             refIndexS_.chrLenTxt += "##contig=<ID=" + chromosome + ",length=" + to_string(chrLen) + ">\n";
-            refIndexS_.sequenceMap[chromosome] = sequence;
+            refIndexS_.chrSeqMap[chromosome] = sequence;
+            refIndexS_.chrLenMap[chromosome] = chrLen;
 
             // Output chromosome name
             outFile << chromosome + "\n";
@@ -209,6 +205,7 @@ void Convert::build_reference_index()
  * 13. Change the/in genotype to |. (PanGenie)
  * 14. Retain only the diploid variation in the genotype.
  * 15. Check if GT has more sequences than qry.
+ * 16. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
 **/
 /**
  * @brief Convert vcf to the format required by graph genome tools
@@ -225,7 +222,8 @@ void Convert::vcf_convert()
     check_vcf_sort(vcfFileName_);
 
     // Sequence information on the genome
-    const map<string, string>& seqMap = refIndexS_.sequenceMap;
+    const map<string, string>& chrSeqMap = refIndexS_.chrSeqMap;
+    const map<string, uint32_t>& chrLenMap = refIndexS_.chrLenMap;
 
     // Output file stream
     SAVE SAVECLASS(outFileName_);
@@ -306,7 +304,7 @@ void Convert::vcf_convert()
 
 
         // Check if there is corresponding chromosome information in the submitted genome
-        if (seqMap.find(INFOSTRUCTTMP.CHROM) == seqMap.end()) {
+        if (chrSeqMap.find(INFOSTRUCTTMP.CHROM) == chrSeqMap.end() || chrLenMap.find(INFOSTRUCTTMP.CHROM) == chrLenMap.end()) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: '"
                 << INFOSTRUCTTMP.CHROM 
@@ -337,7 +335,7 @@ void Convert::vcf_convert()
         
 
         // 4. The sequence must correspond to reference.
-        if (seqMap.at(INFOSTRUCTTMP.CHROM).size() < (INFOSTRUCTTMP.END)) {  // Check that the chromosome length is correct
+        if (chrLenMap.at(INFOSTRUCTTMP.CHROM) < (INFOSTRUCTTMP.END)) {  // Check that the chromosome length is correct
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: The variant end position is greater than the chromosome length -> " 
                 << INFOSTRUCTTMP.CHROM << "\t" 
@@ -345,7 +343,7 @@ void Convert::vcf_convert()
             exit(1);
         }
 
-        string trueRefSeq = seqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
+        string trueRefSeq = chrSeqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
         if (trueRefSeq != INFOSTRUCTTMP.REF) {  // If it is different from the sequence in the reference genome, it is replaced with the sequence in the reference genome
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: sequence difference between refgenome and vcf, replace by refgenome sequence -> "
@@ -376,7 +374,7 @@ void Convert::vcf_convert()
                 INFOSTRUCTTMP.POS = INFOSTRUCTTMP.POS - 1;
                 INFOSTRUCTTMP.lineVec[1] = to_string(INFOSTRUCTTMP.POS);
                 INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.LEN + 1;
-                INFOSTRUCTTMP.REF = seqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN); // Reextract sequence information
+                INFOSTRUCTTMP.REF = chrSeqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN); // Reextract sequence information
                 INFOSTRUCTTMP.lineVec[3] = INFOSTRUCTTMP.REF; // Assigns a value to the Vector
 
                 // Add 'refSeq[0]' to all sequences in 'INFOSTRUCTTMP.ALTVec'
@@ -513,7 +511,18 @@ void Convert::vcf_convert()
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
+
+
+        // 16. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
+        if (chrLenMap.at(INFOSTRUCTTMP.CHROM) == (INFOSTRUCTTMP.END)) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                << "Warning: variant end position == chromosome length, skip this site -> " 
+                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.POS << endl;
+            continue;
+        }
         
+
         // Reassign preRefStart
         preRefStart = INFOSTRUCTTMP.POS;
 

@@ -68,22 +68,27 @@ bool VCFOPEN::read(
 ) {
     INFOSTRUCTTMP.clear();
 
-    string info = ""; // temporary string
-    char line[1024]; // Read only 1024 bytes of data at a time
+    uint32_t bufferSize = 1 * 1024 * 1024;  // 1 Mb
 
-    if(gzgets(gzfpI, line, 1024)) {
+    string info = ""; // temporary string
+    char *line = new char[bufferSize]; // Read only bufferSize bytes of data at a time
+
+    if(gzgets(gzfpI, line, bufferSize)) {
         info += line;
 
         // empty line
-        memset(line, '\0', sizeof(line));
+        memset(line, 0, bufferSize);
 
         // If there is no newline character, it means that the line is not over, continue to read
-        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line, 1024)) {
+        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line, bufferSize)) {
             info += line;
 
             // empty line
-            memset(line, '\0', sizeof(line));
+            memset(line, 0, bufferSize);
         }
+
+        // Release dynamically allocated memory
+        delete[] line;
         
         // remove line breaks
         if (info.size() > 0) {
@@ -117,7 +122,7 @@ bool VCFOPEN::read(
         INFOSTRUCTTMP.ID = INFOSTRUCTTMP.lineVec[2];  // ID
         INFOSTRUCTTMP.REF = INFOSTRUCTTMP.lineVec[3];  // REF
         INFOSTRUCTTMP.ALT = INFOSTRUCTTMP.lineVec[4];  // ALT
-        INFOSTRUCTTMP.ALTVec = split(INFOSTRUCTTMP.ALT, ",");  // 'ALT' µÄ 'vec'
+        INFOSTRUCTTMP.ALTVec = split(INFOSTRUCTTMP.ALT, ",");  // 'ALT' 'vec'
 
         if (isdigit(INFOSTRUCTTMP.lineVec[5][0])) {  // Assign QUAL if it is a number, otherwise 0.0
             INFOSTRUCTTMP.QUAL = stod(INFOSTRUCTTMP.lineVec[5]);  // QUAL
@@ -131,11 +136,14 @@ bool VCFOPEN::read(
 
         INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.REF.size();  // REF length
         INFOSTRUCTTMP.END = INFOSTRUCTTMP.POS + INFOSTRUCTTMP.LEN - 1;  // end position
+
+        return true;
     } else {  // Return false directly after traversing
+        // Release dynamically allocated memory
+        delete[] line;
+
         return false;
     }
-
-    return true;
 }
 
 
@@ -239,8 +247,9 @@ map<int, vector<string> > VCFOPEN::get_gt(
  * 
  * @return vector<gt>
 **/
-vector<string> VCFOPEN::gt_split(const string & gtTxt)
-{
+vector<string> VCFOPEN::gt_split(
+    const string & gtTxt
+) {
     // Temporary gt list
     vector<string> gtVecTmp;
 
@@ -249,8 +258,18 @@ vector<string> VCFOPEN::gt_split(const string & gtTxt)
     } else if (gtTxt.find("|") != string::npos) {
         gtVecTmp = split(gtTxt, "|");
     } else {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
-        exit(1);
+        try {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: sample has only one genotype, attempting to correct to diploid -> " << gtTxt << endl;
+            stoul(gtTxt);
+            gtVecTmp.push_back(gtTxt);
+            gtVecTmp.push_back(gtTxt);
+        } catch (const std::invalid_argument&) {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
+            exit(1);
+        } catch (const std::out_of_range&) {
+            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
+            exit(1);
+        }
     }
 
     return gtVecTmp;

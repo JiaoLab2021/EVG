@@ -25,9 +25,9 @@ void help_convert(char** argv);
 int main_convert(int argc, char** argv);
 
 
-struct refIndexStruct
-{
-    map<string, string> sequenceMap;  // map<chromosome, sequence>
+struct refIndexStruct {
+    map<string, string> chrSeqMap;  // map<chromosome, sequence>
+    map<string, uint32_t> chrLenMap;  // map<chromosome, length>
     string chrLenTxt;  // Store the contig length and save it to the vcf header
 
     refIndexStruct() : chrLenTxt("") {}
@@ -89,6 +89,7 @@ public:
      * 13. Change the/in genotype to |. (PanGenie)
      * 14. Retain only the diploid variation in the genotype.
      * 15. Check if GT has more sequences than qry.
+     * 16. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
     **/
     /**
      * @brief Convert vcf to the format required by graph genome tools
