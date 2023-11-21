@@ -64,6 +64,10 @@ private:
 
     // Input file stream
     gzFile gzfpI;
+
+    // buffer size
+    uint32_t bufferSize_ ;
+    char *line_;
 public:
     VCFOPEN(
         const string & vcfFileName

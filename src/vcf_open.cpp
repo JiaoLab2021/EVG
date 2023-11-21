@@ -21,6 +21,10 @@ VCFOPEN::VCFOPEN(
             << "'" << vcfFileName_ << "': No such file or directory." << endl;
         exit(1);
     }
+
+    // buffer size
+    bufferSize_ = 1 * 1024 * 1024;  // 1 Mb
+    line_ = new char[bufferSize_];  // Read only bufferSize_ bytes of data at a time
 }
 
 /**
@@ -31,6 +35,9 @@ VCFOPEN::VCFOPEN(
 VCFOPEN::~VCFOPEN() {
     // Close file
     gzclose(gzfpI);
+
+    // Release dynamically allocated memory
+    delete[] line_;
 }
 
 
@@ -68,27 +75,24 @@ bool VCFOPEN::read(
 ) {
     INFOSTRUCTTMP.clear();
 
-    uint32_t bufferSize = 1 * 1024 * 1024;  // 1 Mb
-
     string info = ""; // temporary string
-    char *line = new char[bufferSize]; // Read only bufferSize bytes of data at a time
 
-    if(gzgets(gzfpI, line, bufferSize)) {
-        info += line;
+    // empty line_
+    memset(line_, 0, bufferSize_);
 
-        // empty line
-        memset(line, 0, bufferSize);
+    if(gzgets(gzfpI, line_, bufferSize_)) {
+        info += line_;
+
+        // empty line_
+        memset(line_, 0, bufferSize_);
 
         // If there is no newline character, it means that the line is not over, continue to read
-        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line, bufferSize)) {
-            info += line;
+        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line_, bufferSize_)) {
+            info += line_;
 
-            // empty line
-            memset(line, 0, bufferSize);
+            // empty line_
+            memset(line_, 0, bufferSize_);
         }
-
-        // Release dynamically allocated memory
-        delete[] line;
         
         // remove line breaks
         if (info.size() > 0) {
@@ -107,7 +111,7 @@ bool VCFOPEN::read(
         }
         
 
-        // non-comment lines
+        // non-sample lines
         if (INFOSTRUCTTMP.lineVec.size() < 9) { // Check the file first, if it is wrong, it will jump out of the code
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: '"
@@ -139,9 +143,6 @@ bool VCFOPEN::read(
 
         return true;
     } else {  // Return false directly after traversing
-        // Release dynamically allocated memory
-        delete[] line;
-
         return false;
     }
 }
