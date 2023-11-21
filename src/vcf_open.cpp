@@ -263,7 +263,6 @@ vector<string> VCFOPEN::gt_split(
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: sample has only one genotype, attempting to correct to diploid -> " << gtTxt << endl;
             stoul(gtTxt);
             gtVecTmp.push_back(gtTxt);
-            gtVecTmp.push_back(gtTxt);
         } catch (const std::invalid_argument&) {
             cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
             exit(1);
