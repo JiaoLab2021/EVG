@@ -214,17 +214,15 @@ void VCFRecall::build_true_index()
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
-
-        string gt = join(gtVec, "/");
-
-        // Help document
-        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
+        // Filter by genotype
+        if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is empty, skip this site -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << "Warning: The genotype of the variant is all 0 or all ., skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
+
 
         // Gets the length of the ref and haplotype
         uint32_t refLen;
@@ -403,7 +401,7 @@ void VCFRecall::evulate_gt()
         if (INFOSTRUCTTMP.FILTER != "PASS") {  // If not (PASS), skip directly
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: '" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -412,15 +410,15 @@ void VCFRecall::evulate_gt()
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
-        string gt = join(gtVec, "/");
         // Filter by genotype
-        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
+        if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is empty, skip this site -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << "Warning: The genotype of the variant is all 0 or all ., skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
+
 
         /* --------------------------------- roc ------------------------------------ */
         float rocNum = 0.0;
@@ -800,7 +798,7 @@ void VCFRecall::evulate_recall()
         if (INFOSTRUCTTMP.FILTER != "PASS") {  // Skip comment line
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: '" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -809,12 +807,11 @@ void VCFRecall::evulate_recall()
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
-        string gt = join(gtVec, "/");
         // Filter by genotype
-        if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
+        if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is empty, skip this site -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << "Warning: The genotype of the variant is all 0 or all ., skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -871,7 +868,7 @@ void VCFRecall::evulate_recall()
 
         uint32_t genotypeTrueNum = 0;  // 0->misCall >0 && <gtVec.size()->recall  >=gtVec.size()->trueGenotype
 
-        // recalled  trueRefStart, trueRefLen, trueSvLen¡¢truevcfInfo
+        // recalled  trueRefStart, trueRefLen, trueSvLenï¿½ï¿½truevcfInfo
         uint32_t trueRefStart;
         uint32_t trueRefLen;
         int32_t trueSvLen;
@@ -951,7 +948,7 @@ void VCFRecall::evulate_recall()
 
                             goto stop;
                         }
-                    } else if (refLen < 50 && qryLen >= 50) {  // ²åÈë
+                    } else if (refLen < 50 && qryLen >= 50) {  // ï¿½ï¿½ï¿½ï¿½
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=200) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
@@ -1288,10 +1285,9 @@ vector<int> VCFRecall::get_gt(
         // Once you find gt, split it by splitStr and loop
         auto splitResult = split(gt, splitStr);
         for (auto it : splitResult) {
-            // If it is '.', skip this site
+            // If it is '.', replace it to 0
             if (it == ".") {
-                gtVec = {0, 0};
-                return gtVec;
+                it = "0";
             }
             // Prevent error in stof(it) conversion
             try {

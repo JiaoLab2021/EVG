@@ -317,8 +317,8 @@ void Convert::vcf_convert()
         if (INFOSTRUCTTMP.lineVec[4].find("<") != string::npos) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: The query sequence contains the '>' symbol, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << "\t" 
-                << INFOSTRUCTTMP.POS << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
+                << INFOSTRUCTTMP.POS << " " 
                 << INFOSTRUCTTMP.lineVec[4] << endl;
             continue;
         }
@@ -328,7 +328,7 @@ void Convert::vcf_convert()
         if (static_cast<uint32_t>(readLen_) > INFOSTRUCTTMP.POS) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: Start of variation is less than read length, skip this site -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -338,7 +338,7 @@ void Convert::vcf_convert()
         if (chrLenMap.at(INFOSTRUCTTMP.CHROM) < (INFOSTRUCTTMP.END)) {  // Check that the chromosome length is correct
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Error: The variant end position is greater than the chromosome length -> " 
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             exit(1);
         }
@@ -347,7 +347,7 @@ void Convert::vcf_convert()
         if (trueRefSeq != INFOSTRUCTTMP.REF) {  // If it is different from the sequence in the reference genome, it is replaced with the sequence in the reference genome
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: sequence difference between refgenome and vcf, replace by refgenome sequence -> "
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
 
             INFOSTRUCTTMP.lineVec[3] = trueRefSeq;
@@ -389,7 +389,7 @@ void Convert::vcf_convert()
             if (qrySeq == INFOSTRUCTTMP.REF) {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: Sequence same in REF and ALT, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 INFOSTRUCTTMP.line.clear();
                 break;
@@ -401,7 +401,7 @@ void Convert::vcf_convert()
             if (regex_search(qrySeq, results, atgcReg)) {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: Sequence contains non-ATGCNatgcn characters, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 INFOSTRUCTTMP.line.clear();
                 break;
@@ -418,7 +418,7 @@ void Convert::vcf_convert()
             if (count(INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end(), it) > 1) {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: Allelic repeat, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 INFOSTRUCTTMP.line.clear();
                 break;
@@ -435,7 +435,7 @@ void Convert::vcf_convert()
         if (INFOSTRUCTTMP.POS == preRefStart) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: multiple variants observed, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -496,7 +496,7 @@ void Convert::vcf_convert()
         else {  // Skip the site
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: GT not in FORMAT column, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -507,7 +507,7 @@ void Convert::vcf_convert()
         if (INFOSTRUCTTMP.ALTVec.size() < maxGT) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: there are more GTs than qry sequences: " 
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
@@ -517,7 +517,7 @@ void Convert::vcf_convert()
         if (chrLenMap.at(INFOSTRUCTTMP.CHROM) == (INFOSTRUCTTMP.END)) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
                 << "Warning: variant end position == chromosome length, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << "\t" 
+                << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }

@@ -66,7 +66,7 @@ private:
     gzFile gzfpI;
 
     // buffer size
-    uint32_t bufferSize_ ;
+    size_t bufferSize_ ;
     char *line_;
 public:
     VCFOPEN(

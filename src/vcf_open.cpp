@@ -77,25 +77,22 @@ bool VCFOPEN::read(
 
     string info = ""; // temporary string
 
-    // empty line_
-    memset(line_, 0, bufferSize_);
-
     if(gzgets(gzfpI, line_, bufferSize_)) {
         info += line_;
 
         // empty line_
-        memset(line_, 0, bufferSize_);
+        memset(line_, 0, min(strlen(line_), bufferSize_));
 
         // If there is no newline character, it means that the line is not over, continue to read
         while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line_, bufferSize_)) {
             info += line_;
 
             // empty line_
-            memset(line_, 0, bufferSize_);
+            memset(line_, 0, min(strlen(line_), bufferSize_));
         }
         
         // remove line breaks
-        if (info.size() > 0) {
+        if (!info.empty()) {
             info = strip(info, '\n');
         } else {  // false
             return false;

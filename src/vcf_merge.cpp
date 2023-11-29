@@ -564,11 +564,7 @@ void VCFMerge::build_softwarefile_index(
             // If so, find the sample_name index
             if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
                 // Gets the number of columns corresponding to sample
-                if (software == "Paragraph") {  // Because paragraph keeps the original column, find sample after the original column  mergeVcfStruct_.colNum
-                    sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+mergeVcfStruct_.colNum, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // Gets the index location of the sample
-                } else {  // All the other programs start from column 10 and find FORMAT in column 9
-                    sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+9, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // Gets the index location of the sample
-                }
+                sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+9, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // Gets the index location of the sample
                 
                 // If not, report an error and exit the code
                 if (sampleIdx == INFOSTRUCTTMP.lineVec.size()) {
@@ -608,7 +604,7 @@ void VCFMerge::build_softwarefile_index(
             if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
                 cerr << "[" << __func__ << "::" << getTime() << "] "
                     << "Warning: The genotype of the variant is empty, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << "\t" 
+                    << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 continue;
             }
