@@ -438,6 +438,12 @@ void Convert::vcf_convert()
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
+        } else if (INFOSTRUCTTMP.POS < preRefStart) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                << "Warning: the starting position is smaller than the previous one, skip this site -> " 
+                << INFOSTRUCTTMP.CHROM << " " 
+                << INFOSTRUCTTMP.POS << endl;
+            continue;
         }
 
 
