@@ -42,10 +42,95 @@ struct VCFINFOSTRUCT
     uint32_t LEN;  // REF length
     uint32_t END;  // ALT length
 
-    VCFINFOSTRUCT() : line(""), CHROM(""), POS(0), ID(""), REF(""), ALT(""), QUAL(0.0), FILTER(""), INFO(""), FORMAT("") {}
+    VCFINFOSTRUCT() : POS(0), QUAL(0.0), LEN(0), END(0) {}
 
     // clear
-    void clear();
+    void clear() {
+        VCFINFOSTRUCT temp;
+        swap(temp);
+    }
+
+    // swap
+    void swap(VCFINFOSTRUCT& other) {
+        using std::swap;
+        swap(line, other.line);
+        swap(lineVec, other.lineVec);
+        swap(ALTVec, other.ALTVec);
+        swap(CHROM, other.CHROM);
+        swap(POS, other.POS);
+        swap(ID, other.ID);
+        swap(REF, other.REF);
+        swap(ALT, other.ALT);
+        swap(QUAL, other.QUAL);
+        swap(FILTER, other.FILTER);
+        swap(INFO, other.INFO);
+        swap(FORMAT, other.FORMAT);
+        swap(LEN, other.LEN);
+        swap(END, other.END);
+    }
+
+    // assignment operator overloading
+    VCFINFOSTRUCT& operator=(const VCFINFOSTRUCT& other) {
+        if (this != &other) { // Prevent self-assignment
+            // Copy member variables one by one
+            line = other.line;
+            lineVec = other.lineVec;
+            ALTVec = other.ALTVec;
+            CHROM = other.CHROM;
+            POS = other.POS;
+            ID = other.ID;
+            REF = other.REF;
+            ALT = other.ALT;
+            QUAL = other.QUAL;
+            FILTER = other.FILTER;
+            INFO = other.INFO;
+            FORMAT = other.FORMAT;
+            LEN = other.LEN;
+            END = other.END;
+        }
+        return *this;
+    }
+
+    // Move constructor
+    VCFINFOSTRUCT(VCFINFOSTRUCT&& other) noexcept
+        : line(std::move(other.line)),
+        lineVec(std::move(other.lineVec)),
+        ALTVec(std::move(other.ALTVec)),
+        CHROM(std::move(other.CHROM)),
+        POS(other.POS),
+        ID(std::move(other.ID)),
+        REF(std::move(other.REF)),
+        ALT(std::move(other.ALT)),
+        QUAL(other.QUAL),
+        FILTER(std::move(other.FILTER)),
+        INFO(std::move(other.INFO)),
+        FORMAT(std::move(other.FORMAT)),
+        LEN(other.LEN),
+        END(other.END) {
+        // Optionally clear or reset the state of 'other'
+    }
+
+    // Move assignment operator
+    VCFINFOSTRUCT& operator=(VCFINFOSTRUCT&& other) noexcept {
+        if (this != &other) {
+            line = std::move(other.line);
+            lineVec = std::move(other.lineVec);
+            ALTVec = std::move(other.ALTVec);
+            CHROM = std::move(other.CHROM);
+            POS = other.POS;
+            ID = std::move(other.ID);
+            REF = std::move(other.REF);
+            ALT = std::move(other.ALT);
+            QUAL = other.QUAL;
+            FILTER = std::move(other.FILTER);
+            INFO = std::move(other.INFO);
+            FORMAT = std::move(other.FORMAT);
+            LEN = other.LEN;
+            END = other.END;
+            // Optionally clear or reset the state of 'other'
+        }
+        return *this;
+    }
 };
 
 
@@ -98,9 +183,9 @@ public:
      * @param lineVec  lineVec
      * 
      * 
-     * @return GTVecMap   map<int, vector<string> >,  map<idx, vector<GTString> >
+     * @return GTVecMap, misSampleNum   map<idx, vector<GTString> >
     **/
-    map<int, vector<string> > get_gt(
+    tuple<unordered_map<int, vector<string> >, uint32_t> get_gt(
         const vector<string> & lineVec
     );
 
@@ -112,21 +197,21 @@ public:
      * 
      * @return vector<gt>
     **/
-    vector<string> gt_split(const string & gtTxt);
+    vector<string> gt_split(string & gtTxt);
 
     
     /**
      * Calculate MAF and MISSRATE.
      *
-     * @param GTVecMap    map<int, vector<string> >,  map<idx, vector<GTString> >
-     * @param sampleNum   total number of samples
+     * @param GTVecMap      map<int, vector<string> >,  map<idx, vector<GTString> >
+     * @param misSampleNum  number of missing samples
      * 
      * 
      * @return tuple<double, double>   tuple<MAF, MISSRATE>
     **/
     tuple<double, double> calculate(
-        const map<int, vector<string> > & GTVecMap, 
-        uint32_t sampleNum
+        const unordered_map<int, vector<string> > & GTVecMap, 
+        uint32_t misSampleNum
     );
 };
 

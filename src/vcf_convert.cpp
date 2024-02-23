@@ -200,12 +200,12 @@ void Convert::build_reference_index()
  * 8. Check whether ref and qry sequences are the same and the same sites are skipped.
  * 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
  * 10. Check whether the qry after replacement is the same. If yes, skip this site.
- * 11. Check for mutations that duplicate positions.
- * 12. Combine the genotypes. Convert to.|.. (PanGenie)
- * 13. Change the/in genotype to |. (PanGenie)
- * 14. Retain only the diploid variation in the genotype.
- * 15. Check if GT has more sequences than qry.
- * 16. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
+ * 11. Combine the genotypes. Convert to.|.. (PanGenie)
+ * 12. Change the/in genotype to |. (PanGenie)
+ * 13. Retain only the diploid variation in the genotype.
+ * 14. Check if GT has more sequences than qry.
+ * 15. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
+ * 16. Duplicate positions.
 **/
 /**
  * @brief Convert vcf to the format required by graph genome tools
@@ -218,9 +218,6 @@ void Convert::vcf_convert()
     const std::regex endReg(R"(END=\d+)");
     const std::regex svlenReg(R"(SVLEN=[-\d+,]*;)");
 
-    // Whether check file is sorted
-    check_vcf_sort(vcfFileName_);
-
     // Sequence information on the genome
     const map<string, string>& chrSeqMap = refIndexS_.chrSeqMap;
     const map<string, uint32_t>& chrLenMap = refIndexS_.chrLenMap;
@@ -232,14 +229,14 @@ void Convert::vcf_convert()
     static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
     outStream.str().reserve(CACHE_SIZE);
 
-    // Record the start and chromosome number of the previous variant
-    string preChromosome;
-    uint32_t preRefStart = 0;
-
     // Input file stream
     // Store vcf information
     VCFINFOSTRUCT INFOSTRUCTTMP;
     VCFOPEN VCFOPENCLASS(vcfFileName_);
+
+    // Record the information of the previous variant
+    VCFINFOSTRUCT prePreINFOSTRUCTTMP;
+    VCFINFOSTRUCT preINFOSTRUCTTMP;
 
     // If not traversed, continue
     while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
@@ -265,6 +262,17 @@ void Convert::vcf_convert()
             continue;
         }
 
+        // Find the location of gt in the FORMAT field
+        vector<string> formatVec = split(INFOSTRUCTTMP.FORMAT, ":");
+        vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
+        // GT index
+        uint32_t gtIndex = distance(formatVec.begin(), gtItera);
+        if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
+            cerr << "[" << __func__ << "::" << getTime() << "] " 
+                 << "Warning: The FORMAT field does not contain genotype (GT) information at the following location: " 
+                 << INFOSTRUCTTMP.CHROM << ":" << INFOSTRUCTTMP.POS << endl;
+            continue;
+        }
 
         /* ************************ filter SNPs by maf and missing rate ************************ */
         // Determine whether to filter
@@ -280,19 +288,21 @@ void Convert::vcf_convert()
                 double MISSRATETMP;  // Miss rate
 
                 // Get all genotypes map<idx, vector<gtString> >
-                map<int, vector<string> > GTVecMapTmp = VCFOPENCLASS.get_gt(
+                unordered_map<int, vector<string> > GTVecMapTmp;
+                uint32_t misSampleNum;
+                tie(GTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(
                     INFOSTRUCTTMP.lineVec
                 );
 
                 // If there is only one genotype, skip.
-                if (GTVecMapTmp.empty()) {
+                if (GTVecMapTmp.size() - misSampleNum <= 1) {
                     continue;
                 }
                 
                 // The minimum allele frequency and deletion rate were calculated
                 tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
                     GTVecMapTmp, 
-                    INFOSTRUCTTMP.lineVec.size() - 9
+                    misSampleNum
                 );
 
                 // Did not pass the threshold, straight to the next loop
@@ -306,9 +316,9 @@ void Convert::vcf_convert()
         // Check if there is corresponding chromosome information in the submitted genome
         if (chrSeqMap.find(INFOSTRUCTTMP.CHROM) == chrSeqMap.end() || chrLenMap.find(INFOSTRUCTTMP.CHROM) == chrLenMap.end()) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: '"
+                << "Error: The chromosome '"
                 << INFOSTRUCTTMP.CHROM 
-                << "' is not present in '" << refFileName_ << "'" 
+                << "' is not found in the reference file '" << refFileName_ << "'" 
                 << endl;
             exit(1);
         }
@@ -316,7 +326,7 @@ void Convert::vcf_convert()
         // 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
         if (INFOSTRUCTTMP.lineVec[4].find("<") != string::npos) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The query sequence contains the '>' symbol, skip this site -> " 
+                << "Warning: The query sequence contains the symbol '<', skipping this site -> " 
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << " " 
                 << INFOSTRUCTTMP.lineVec[4] << endl;
@@ -327,7 +337,7 @@ void Convert::vcf_convert()
         // 3. The first variation is greater than the read length. (paragraph)
         if (static_cast<uint32_t>(readLen_) > INFOSTRUCTTMP.POS) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: Start of variation is less than read length, skip this site -> "
+                << "Warning: The variant's start position is less than the read length, skipping this site -> "
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -337,7 +347,7 @@ void Convert::vcf_convert()
         // 4. The sequence must correspond to reference.
         if (chrLenMap.at(INFOSTRUCTTMP.CHROM) < (INFOSTRUCTTMP.END)) {  // Check that the chromosome length is correct
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: The variant end position is greater than the chromosome length -> " 
+                << "Error: The variant's end position exceeds the length of the chromosome -> " 
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             exit(1);
@@ -346,7 +356,7 @@ void Convert::vcf_convert()
         string trueRefSeq = chrSeqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
         if (trueRefSeq != INFOSTRUCTTMP.REF) {  // If it is different from the sequence in the reference genome, it is replaced with the sequence in the reference genome
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: sequence difference between refgenome and vcf, replace by refgenome sequence -> "
+                << "Warning: Sequence discrepancy between the reference genome and the VCF, replacing with the sequence from the reference genome -> "
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
 
@@ -388,7 +398,7 @@ void Convert::vcf_convert()
             // 8. Check whether ref and qry sequences are the same and the same sites are skipped
             if (qrySeq == INFOSTRUCTTMP.REF) {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: Sequence same in REF and ALT, skip this site -> "
+                    << "Warning: The REF and ALT sequences are identical, skipping this site -> "
                     << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 INFOSTRUCTTMP.line.clear();
@@ -417,7 +427,7 @@ void Convert::vcf_convert()
         for (const auto& it : INFOSTRUCTTMP.ALTVec) {
             if (count(INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end(), it) > 1) {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: Allelic repeat, skip this site -> "
+                    << "Warning: Repeated alleles found, skipping this site -> "
                     << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 INFOSTRUCTTMP.line.clear();
@@ -426,44 +436,17 @@ void Convert::vcf_convert()
         }
 
 
-        // 11. Check for mutations that duplicate positions
-        // If it is a new chromosome, reset the starting position to zero
-        if (INFOSTRUCTTMP.CHROM != preChromosome) {
-            preChromosome = INFOSTRUCTTMP.CHROM;
-            preRefStart = 0;
-        }
-        if (INFOSTRUCTTMP.POS == preRefStart) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: multiple variants observed, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << " " 
-                << INFOSTRUCTTMP.POS << endl;
-            continue;
-        } else if (INFOSTRUCTTMP.POS < preRefStart) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: the starting position is smaller than the previous one, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << " " 
-                << INFOSTRUCTTMP.POS << endl;
-            continue;
-        }
-
-
-        // Find the location of gt in the FORMAT field
-        vector<string> formatVec = split(INFOSTRUCTTMP.FORMAT, ":");
-        vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
         uint32_t maxGT = 0; // Record the largest GT, see if there are more sequences than qry, and skip this site if there are more
         // As long as GT field
         INFOSTRUCTTMP.lineVec[8] = "GT";
 
         if (gtItera != formatVec.end()) {  // The FORMAT contains GT
-            // GT index
-            uint32_t gtIndex = distance(formatVec.begin(), gtItera);
-            
             // Loop over the GT column
             for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
                 // Find the genotype
                 string gt = split(INFOSTRUCTTMP.lineVec[i], ":")[gtIndex];
 
-                // 12. Combine the genotypes. Convert to.|.. (PanGenie)
+                // 11. Combine the genotypes. Convert to.|.. (PanGenie)
                 if (gt == ".") {
                     gt = ".|.";
                 } else if (gt == "0") {
@@ -471,7 +454,7 @@ void Convert::vcf_convert()
                 }
                 
 
-                // 13. Change the/in genotype to |. (PanGenie)
+                // 12. Change the/in genotype to |. (PanGenie)
                 if (gt.find("/") != string::npos) {
                     std::regex reg("/");
                     gt = regex_replace(string(gt), regex(reg), string("|"));
@@ -489,7 +472,7 @@ void Convert::vcf_convert()
                     }
                 }
 
-                // 14. Retain only the diploid variation in the genotype
+                // 13. Retain only the diploid variation in the genotype
                 if (gtVec.size() == 1) {
                     gt = gtVec[0] + "|0";
                 } else if (gtVec.size() > 2) {
@@ -498,47 +481,81 @@ void Convert::vcf_convert()
                 
                 INFOSTRUCTTMP.lineVec[i] = gt;
             }
-        }
-        else {  // Skip the site
+        } else {  // Skip the site
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: GT not in FORMAT column, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << " " 
-                << INFOSTRUCTTMP.POS << endl;
+                 << "Warning: Genotype (GT) not found in FORMAT column, skipping this site -> " 
+                 << INFOSTRUCTTMP.CHROM << " " 
+                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
 
-        // 15. Check if GT has more sequences than qry
+        // 14. Check if GT has more sequences than qry
         // pangenie: VariantReader::VariantReader: invalid genotype in VCF.
         if (INFOSTRUCTTMP.ALTVec.size() < maxGT) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: there are more GTs than qry sequences: " 
-                << INFOSTRUCTTMP.CHROM << " " 
-                << INFOSTRUCTTMP.POS << endl;
+                 << "Warning: The number of genotypes (GTs) exceeds the number of query sequences at: " 
+                 << INFOSTRUCTTMP.CHROM << " " 
+                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
 
-        // 16. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
+        // 15. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
         if (chrLenMap.at(INFOSTRUCTTMP.CHROM) == (INFOSTRUCTTMP.END)) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: variant end position == chromosome length, skip this site -> " 
-                << INFOSTRUCTTMP.CHROM << " " 
-                << INFOSTRUCTTMP.POS << endl;
+                 << "Warning: The variant's end position equals the chromosome length, skipping this site -> " 
+                 << INFOSTRUCTTMP.CHROM << " " 
+                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
-        
 
-        // Reassign preRefStart
-        preRefStart = INFOSTRUCTTMP.POS;
 
         // Check whether the information is cleared. If it is cleared, skip it
         if (INFOSTRUCTTMP.line.empty()) {
             continue;
         }
 
+
+        // 16. Duplicate positions
+        if (INFOSTRUCTTMP.CHROM == preINFOSTRUCTTMP.CHROM && INFOSTRUCTTMP.POS == preINFOSTRUCTTMP.POS) {
+            // Update genotype information
+            merge_loci(
+                gtIndex, 
+                preINFOSTRUCTTMP, 
+                INFOSTRUCTTMP, 
+                VCFOPENCLASS
+            );
+            continue;
+        } else if (INFOSTRUCTTMP.CHROM == prePreINFOSTRUCTTMP.CHROM && INFOSTRUCTTMP.POS == prePreINFOSTRUCTTMP.POS) {
+            // Update genotype information
+            merge_loci(
+                gtIndex,
+                prePreINFOSTRUCTTMP,
+                INFOSTRUCTTMP,
+                VCFOPENCLASS
+            );
+            continue;
+        } else if (INFOSTRUCTTMP.CHROM == prePreINFOSTRUCTTMP.CHROM && INFOSTRUCTTMP.POS > prePreINFOSTRUCTTMP.POS && INFOSTRUCTTMP.POS < preINFOSTRUCTTMP.POS) {
+            // If the current node is smaller than the previous node after replacing the coordinates, but larger than the previous node, replace the current node with the previous node.
+            INFOSTRUCTTMP.swap(preINFOSTRUCTTMP);
+        } else if (INFOSTRUCTTMP.CHROM == prePreINFOSTRUCTTMP.CHROM && INFOSTRUCTTMP.POS < prePreINFOSTRUCTTMP.POS) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                << "Warning: The variant's start position is less than the previous one. Skipping this site -> " 
+                << INFOSTRUCTTMP.CHROM << " " 
+                << INFOSTRUCTTMP.POS << endl;
+            continue;
+        }
+
+
         // Add the replaced string to outStream
-        outStream << join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
+        if (INFOSTRUCTTMP.CHROM != prePreINFOSTRUCTTMP.CHROM || prePreINFOSTRUCTTMP.POS != INFOSTRUCTTMP.POS) {
+            if (!prePreINFOSTRUCTTMP.CHROM.empty()) {
+                outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
+            }
+            prePreINFOSTRUCTTMP = std::move(preINFOSTRUCTTMP);
+            preINFOSTRUCTTMP = std::move(INFOSTRUCTTMP);
+        }
 
         if (outStream.tellp() >= CACHE_SIZE) {  // Cache size is 10mb
             string outTxt = outStream.str();
@@ -549,6 +566,9 @@ void Convert::vcf_convert()
         }
     }
 
+    outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
+    outStream << join(preINFOSTRUCTTMP.lineVec, "\t") + "\n";
+
     if (outStream.tellp() > 0) {  //Write for the last time
         string outTxt = outStream.str();
         SAVECLASS.save(outTxt);
@@ -556,4 +576,102 @@ void Convert::vcf_convert()
         outStream.str(string());
         outStream.clear();
     }
+}
+
+
+/**
+ * Update genotype information
+ * 
+ * @param gtIndex             Genotype index
+ * @param preINFOSTRUCTTMP    Previous site information
+ * @param INFOSTRUCTTMP       Current location information
+ * @param VCFOPENCLASS        
+ * 
+ * @return void
+*/
+void Convert::merge_loci(
+    const uint32_t& gtIndex, 
+    VCFINFOSTRUCT& preINFOSTRUCTTMP, 
+    VCFINFOSTRUCT& INFOSTRUCTTMP, 
+    VCFOPEN& VCFOPENCLASS
+) {
+    // if (std::abs(static_cast<int>(preINFOSTRUCTTMP.REF.size()) - static_cast<int>(INFOSTRUCTTMP.REF.size())) > 50) {
+    //     cerr << "[" << __func__ << "::" << getTime() << "] "
+    //     << "Warning: multiple variants observed, skip this site -> " 
+    //     << INFOSTRUCTTMP.CHROM << " " 
+    //     << INFOSTRUCTTMP.POS << endl;
+    //     return;
+    // }
+
+    int32_t preAltNum = preINFOSTRUCTTMP.ALTVec.size();
+
+    bool isPreLonger = preINFOSTRUCTTMP.REF.size() > INFOSTRUCTTMP.REF.size();
+    string REF = isPreLonger ? preINFOSTRUCTTMP.REF : INFOSTRUCTTMP.REF;
+    string diffREF = REF.substr(std::min(preINFOSTRUCTTMP.REF.size(), INFOSTRUCTTMP.REF.size()));
+
+    // Get all genotypes map<idx, vector<gtString> >
+    unordered_map<int, vector<string> > preGTVecMapTmp, GTVecMapTmp;
+    uint32_t misSampleNum;
+    tie(preGTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(preINFOSTRUCTTMP.lineVec);
+    tie(GTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(INFOSTRUCTTMP.lineVec);
+
+    // replace genotype
+    for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
+        vector<string> preGtVec = preGTVecMapTmp.at(i - 9);
+        vector<string> gtVec = GTVecMapTmp.at(i - 9);
+
+        // sort + uniqe + remove
+        vector<string> preGtVecTmp = sort_unique(preGtVec);
+        vector<string> gtVecTmp = sort_unique(gtVec);
+
+        // If the previous genotype is not 0 or this genotype is 0, skip
+        if ((preGtVecTmp.back() != "0" && preGtVecTmp.back() != ".") || (gtVecTmp.back() == "0" || gtVecTmp.back() == ".")) {
+            continue;
+        }
+        
+        // replace GT
+        for (size_t j = 0; j < preGtVec.size(); j++) {
+            if (gtVec[j] == "0" || gtVec[j] == "."){
+                continue;
+            }
+            preGtVec[j] = to_string(stoul(gtVec[j]) + preAltNum);
+        }
+        vector<string> sampleVec = split(preINFOSTRUCTTMP.lineVec[i], ":");
+        sampleVec[gtIndex] = join(preGtVec, "|");
+        preINFOSTRUCTTMP.lineVec[i] = join(sampleVec, ":");
+    }
+
+    // replace REF
+    preINFOSTRUCTTMP.REF = REF;
+    preINFOSTRUCTTMP.lineVec[3] = REF;
+
+    // replace ALT
+    if (isPreLonger) {
+        for (auto & altSeq : INFOSTRUCTTMP.ALTVec) {
+            altSeq += diffREF;
+        }
+    } else {
+        for (auto & altSeq : preINFOSTRUCTTMP.ALTVec) {
+            altSeq += diffREF;
+        }
+    }
+    preINFOSTRUCTTMP.ALTVec.insert(preINFOSTRUCTTMP.ALTVec.end(), INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end());
+    preINFOSTRUCTTMP.ALT = join(preINFOSTRUCTTMP.ALTVec, ",");
+    preINFOSTRUCTTMP.lineVec[4] = preINFOSTRUCTTMP.ALT;
+}
+
+/**
+ * Sort, deduplicate and delete the vector
+ * 
+ * @param vec    
+ * 
+ * @return vec
+*/
+vector<string> Convert::sort_unique(vector<string> vec) {
+    sort(vec.begin(), vec.end(), [](const string& a, const string& b) {
+        return stoul(a) < stoul(b);
+    });
+    auto last = unique(vec.begin(), vec.end());
+    vec.erase(last, vec.end());
+    return vec;
 }

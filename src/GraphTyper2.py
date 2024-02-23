@@ -8,94 +8,60 @@ from getsize import getsize
 
 # merge vcf
 def merge_vcf(
+    software_work_path, 
     env_path, 
     restart: bool
 ):
-    """
-    :param env_path: environment variable
-    :param restart: Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, vcf_file
-    """
-
     # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
-    cmd = "for i in $(ls */ | grep 'vcf.gz' | grep -v 'tbi' | head -n1); do zcat */$i | grep '#' > graphtyper.vcf; done && " \
-          "zcat */*.vcf.gz >> graphtyper.vcf"
+    output_file = os.path.join(software_work_path, "graphtyper.vcf")
+    
+    cmd = f"for i in $(ls {software_work_path}/*/ | grep 'vcf.gz' | grep -v 'tbi' | head -n1); do zcat {software_work_path}/*/$i | grep '#' > {output_file}; done && zcat {software_work_path}/*/*.vcf.gz >> {output_file}"
 
     # Check if the file exists
     if restart:
         # check file
-        file_size = getsize(
-            "graphtyper.vcf"
-        )
-        # <= 0
+        file_size = getsize("graphtyper.vcf")
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_merge", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_merge", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
-    vcf_file = os.path.abspath("graphtyper.vcf")
-
-    return stdout, stderr, log_out, vcf_file
+    return stdout, stderr, log_out, output_file
 
 
 # genotype
 def main(
+    software_work_path, 
     reference_file: str,
     vcf_file: str,
     bam2graphtyper_file: str,
     region_file: str, 
-    env_path, 
     threads: int,
+    env_path, 
     restart: bool
 ):
-    """
-    :param reference_file: reference genome
-    :param vcf_file: vcf file
-    :param bam2graphtyper_file: configure file
-    :param region_file: configure file
-    :param env_path: environment variable
-    :param threads: Threads
-    :param restart: Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, vcf_out_file
-    """
+    os.chdir(software_work_path)
 
     # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
-    cmd = "graphtyper genotype_sv {} {} --sams={} --region_file={} --output=./ " \
-          "--threads {}".\
-        format(reference_file, vcf_file, bam2graphtyper_file, region_file, threads)
+    cmd = f"graphtyper genotype_sv {reference_file} {vcf_file} --sams={bam2graphtyper_file} --region_file={region_file} --output={software_work_path} --threads {threads}"
 
     # Check if the file exists
     if restart:
-        # check file
-        file_size = getsize(
-            "graphtyper.vcf"
-        )
-        # <= 0
+        file_size = getsize("graphtyper.vcf")
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_sv", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphTyper2.genotype_sv", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, ""
 
     # Merge vcf files
-    stdout, stderr, log_out, vcf_out_file = merge_vcf(
-        env_path, 
-        restart
-    )
+    stdout, stderr, log_out, vcf_out_file = merge_vcf(software_work_path, env_path, restart)
 
     return stdout, stderr, log_out, vcf_out_file

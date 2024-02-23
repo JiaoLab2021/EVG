@@ -11,9 +11,9 @@
 #include "include/convert.hpp"
 
 // define data
-#define PROGRAM_DATA "2023/11/29"
+#define PROGRAM_DATA "2024/02/23"
 // define version
-#define PROGRAM_VERSION "1.1.3"
+#define PROGRAM_VERSION "1.1.4"
 // define author
 #define PROGRAM_AUTHOR "Zezhen Du"
 // define E-mail
@@ -72,9 +72,9 @@ void help(char** argv)
        << "author: " << PROGRAM_AUTHOR << endl
 	   << endl
        << "subcommands:" << endl
-       << "  count       calculate the number of bases and reads of fasta/q" << endl
-	   << "  sample      sample sequences by frac" << endl
-	   << "  convert     arrange fasta sequence into one line" << endl
+       << "  count          calculate the number of bases and reads of fasta/q" << endl
+	   << "  sample         sample sequences by frac" << endl
+	   << "  convert        arrange fasta sequence into one line" << endl
        << endl
        << "  -h, --help     print this help document" << endl
        << endl

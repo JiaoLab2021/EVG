@@ -217,7 +217,7 @@ void VCFRecall::build_true_index()
         // Filter by genotype
         if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is all 0 or all ., skip this site -> "
+                << "Warning: The genotype of the variant is all '0' or all '.', skip this site -> "
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -413,7 +413,7 @@ void VCFRecall::evulate_gt()
         // Filter by genotype
         if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is all 0 or all ., skip this site -> "
+                << "Warning: The genotype of the variant is all '0' or all '.', skip this site -> "
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -810,7 +810,7 @@ void VCFRecall::evulate_recall()
         // Filter by genotype
         if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is all 0 or all ., skip this site -> "
+                << "Warning: The genotype of the variant is all '0' or all '.', skip this site -> "
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -1393,14 +1393,13 @@ int32_t VCFRecall::sv_length_select(
 **/
 vector<int64_t> VCFRecall::count_num(
     vector<int64_t> length_list
-)
-{
+) {
     vector<int64_t> out_length;
     for (size_t i = 0; i < lengthVec_.size(); i++) {
         int64_t x1 = std::stoll(split(lengthVec_[i], "/")[0]);
         int64_t x2 = std::stoll(split(lengthVec_[i], "/")[1]);
 
-        vector<int64_t>::size_type result = count_if(length_list.begin(), length_list.end(), f_mod(x1, x2));
+        vector<int64_t>::size_type result = count_if(length_list.begin(), length_list.end(), f_mod_r(x1, x2));
 
         out_length.push_back(result);
     }

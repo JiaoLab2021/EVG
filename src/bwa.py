@@ -9,129 +9,90 @@ from getsize import getsize
 
 # bwa index
 def index(
-        reference_file: str, 
-        env_path, 
-        restart: bool
+    software_work_path, 
+    reference_file: str, 
+    env_path, 
+    restart: bool
 ):
-    """
-    :param reference_file:  reference genome
-    :param env_path:        env path
-    :param restart:         Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out
-    """
+    stdout = stderr = log_out = ""
 
-    # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    os.chdir(software_work_path)
 
-    # bwa index building and comparison
-    # bam file path
-    cmd = "bwa index {}".format(reference_file)
+    cmd = f"bwa index {reference_file} -p {os.path.join(software_work_path, reference_file)}"
 
     # Check if the file exists
     if restart:
-        # <= 0
-        if getsize("{}.amb".format(reference_file)) <= 0 or \
-                getsize("{}.ann".format(reference_file)) <= 0 or \
-                getsize("{}.bwt".format(reference_file)) <= 0 or \
-                getsize("{}.fai".format(reference_file)) <= 0 or \
-                getsize("{}.pac".format(reference_file)) <= 0 or \
-                getsize("{}.sa".format(reference_file)) <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "bwa.index", env_path)
+        if getsize(f"{reference_file}.amb") <= 0 or \
+                getsize(f"{reference_file}.ann") <= 0 or \
+                getsize(f"{reference_file}.bwt") <= 0 or \
+                getsize(f"{reference_file}.fai") <= 0 or \
+                getsize(f"{reference_file}.pac") <= 0 or \
+                getsize(f"{reference_file}.sa") <= 0:
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "bwa.index", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out
 
-
 # bwa mem
 def mem(
-        reference_file: str,
-        threads: int,
-        sample_name: str,
-        env_path, 
-        restart: bool,
-        fastq_file1: str,
-        fastq_file2: str = ""
+    bwa_dir, 
+    reference_file: str,
+    threads: int,
+    sample_name: str,
+    env_path, 
+    restart: bool,
+    read1: str,
+    read2: str = ""
 ):
-    """
-    :param reference_file: reference genome
-    :param threads:        Threads
-    :param sample_name:    sample name
-    :param env_path:       env path
-    :param restart: Whether to check if the file exists and skip this step
-    :param fastq_file1:    read1
-    :param fastq_file2:    read2
-    :return:
-    """
+    stdout = stderr = log_out = ""
+    
+    # change working path
+    os.chdir(bwa_dir)
 
-    # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
-
-    # bwa index building and comparison
     # bam file path
-    bam_file = os.path.abspath(sample_name + ".bam")
-    cmd = "bwa mem -R '@RG\\tID:foo\\tSM:{}\\tLB:library1' -t {} {} {} {} | samtools view -b -S | samtools " \
-          "sort -@ {} -o {} && " \
-          "samtools index {}".\
-        format(sample_name, threads, reference_file, fastq_file1,
-               fastq_file2, threads, bam_file, bam_file)
+    bam_file = os.path.join(bwa_dir, sample_name + ".bam")
+    cmd = f"bwa mem -R '@RG\\tID:foo\\tSM:{sample_name}\\tLB:library1' -t {threads} {reference_file} {read1} {read2} | samtools view -b -S | samtools sort -@ {threads} -o {bam_file} && samtools index {bam_file}"
 
     # Check if the file exists
     if restart:
-        # check file
-        file_size = getsize(
-            bam_file
-        )
-        # <= 0
+        file_size = getsize(bam_file)
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "bwa.mem", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "bwa.mem", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
-    return stdout, stderr, log_out, bam_file
-
+    return stdout, stderr, log_out, sample_name, bam_file
 
 # save result for GraphTyper2
-def bam2graphtyper(
-        bam_infos_map
-):
+def bam2graphtyper(read_infos_map):
     out_txt = ""
-    for key, value in bam_infos_map.items():
-        out_txt += value["bam_file"] + "\n"
-
+    for _, value in read_infos_map.items():
+        out_txt += value["bam"] + "\n"
     with open("bam_for_GraphTyper2.txt", "w") as f:
         f.write(out_txt)
-
     return os.path.abspath("bam_for_GraphTyper2.txt")
 
-
 # save result for BayesTyper
-def bam2bayestyper(
-    bam_infos_map
-):
+def bam2bayestyper(read_infos_map, number: int):
+    work_dir = os.getcwd()
+
     out_samplename_list = []
     out_txt_list = []
     out_txt = ""
     
-    # Only 30 samples can be processed each time
+    # 'number' samples can be processed each time
     num = 0
-    for key, value in bam_infos_map.items():
+    num_tmp = 0
+    for sample_name, value in read_infos_map.items():
         num += 1
-        out_txt += key + "\tF\t" + os.path.basename(value["bam_file"]) + "\n"
-        out_samplename_list.append(key)
-
-        if num == 30:
+        out_txt += sample_name + "\tF\t" + os.path.join(work_dir, "BayesTyper", str(num_tmp), os.path.basename(value["bam"])) + "\n"
+        out_samplename_list.append(sample_name)
+        if num == number:
             out_txt_list.append(out_txt)
             out_txt = ""
             num = 0
+            num_tmp += 1
 
     # last save
     if num > 0:
@@ -154,30 +115,21 @@ def bam2bayestyper(
 
 
 # save result for ParaGraph
-def bam2paragraph(
-    bam_infos_map
-):
+def bam2paragraph(read_infos_map, number: int):
     out_samplename_list = []
     out_txt_list = []
     head_txt = "id\tpath\tdepth\tread length\n"
 
     out_txt = ""
 
-    # Only 10 samples can be processed each time
+    # 'number' samples can be processed each time
     num = 0
-    for key, value in bam_infos_map.items():
+    for sample_name, value in read_infos_map.items():
         num += 1
-        out_txt += key + \
-                   "\t" + \
-                   value["bam_file"] + \
-                   "\t" + \
-                   str(value["real_depth"]) + \
-                   "\t" + \
-                   str(value["read_len"]) + \
-                   "\n"
-        out_samplename_list.append(key)
+        out_txt += sample_name + "\t" + value["bam"] + "\t" + str(value["depth"]) + "\t" + str(value["length"]) + "\n"
+        out_samplename_list.append(sample_name)
 
-        if num == 10:
+        if num == number:
             out_txt_list.append(out_txt)
             out_txt = ""
             num = 0

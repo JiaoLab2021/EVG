@@ -57,6 +57,10 @@ int main_count(int argc, char** argv)
     VCFCount VCFCountClass(vcfFileName);
     // count
     VCFCountClass.count();
+    // count number and length
+    VCFCountClass.count_num_len();
+    // result
+    VCFCountClass.get_result();
     
     cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
 
@@ -84,20 +88,39 @@ void help_count(char** argv)
 **/
 VCFCount::VCFCount(
     const string & vcfFileName
-) : vcfFileName_(vcfFileName) {}
+) : vcfFileName_(vcfFileName) {
+    // Variable length range
+    lengthVec_.push_back("-999999/-10000");
+    lengthVec_.push_back("-9999/-5000");
+    lengthVec_.push_back("-4999/-2500");
+    lengthVec_.push_back("-2499/-1000");
+    lengthVec_.push_back("-999/-500");
+    lengthVec_.push_back("-499/-400");
+    lengthVec_.push_back("-399/-300");
+    lengthVec_.push_back("-299/-200");
+    lengthVec_.push_back("-199/-100");
+    lengthVec_.push_back("-99/-50");
+    lengthVec_.push_back("-49/-1");
+    lengthVec_.push_back("0/0");
+    lengthVec_.push_back("1/49");
+    lengthVec_.push_back("50/99");
+    lengthVec_.push_back("100/199");
+    lengthVec_.push_back("200/299");
+    lengthVec_.push_back("300/399");
+    lengthVec_.push_back("400/499");
+    lengthVec_.push_back("500/999");
+    lengthVec_.push_back("1000/2499");
+    lengthVec_.push_back("2500/4999");
+    lengthVec_.push_back("5000/9999");
+    lengthVec_.push_back("10000/999999");
+}
 
-
-void VCFCount::count()
-{
-    // Record the number of variations
-    uint64_t snpNum = 0;
-    uint64_t indelNum = 0;
-    uint64_t insNum = 0;
-    uint64_t delNum = 0;
-    uint64_t invNum = 0;
-    uint64_t dupNum = 0;
-    uint64_t otherNum = 0;
-
+/**
+ * count
+ *
+ * @return void
+**/
+void VCFCount::count() {
     // Store vcf information
     VCFINFOSTRUCT INFOSTRUCTTMP;
 
@@ -118,30 +141,154 @@ void VCFCount::count()
             int32_t svLen = qryLen - INFOSTRUCTTMP.LEN;
             double lengthRatio = qryLen / float(INFOSTRUCTTMP.LEN);
 
+            // Allelic Type
+            bool mulAllelicBool = (INFOSTRUCTTMP.ALT.find(",") != string::npos) ? true : false;
+
+            // SNPs
             if (svLen == 0 && INFOSTRUCTTMP.LEN == 1 && qryLen == 1) {
-                snpNum++;
+                snpNum_++;
+                snpMuAllelicNum_ += mulAllelicBool;
+                snpBiAllelicNum_ += !mulAllelicBool;
+                svLenVec_.push_back(svLen);
+            // Indels
             } else if (svLen <= 49 && svLen >= -49 && INFOSTRUCTTMP.LEN <= 49 && qryLen <= 49) {
-                indelNum++;
+                indelNum_++;
+                indelMuAllelicNum_ += mulAllelicBool;
+                indelBiAllelicNum_ += !mulAllelicBool;
+                svLenVec_.push_back(svLen);
+            // Inversion
             } else if (svLen >= -2 && svLen <= 2 && INFOSTRUCTTMP.LEN > 49 && qryLen > 49 ) {
-                invNum++;
+                invNum_++;
+                invMuAllelicNum_ += mulAllelicBool;
+                invBiAllelicNum_ += !mulAllelicBool;
+                InvLenVec_.push_back(qryLen);
+            // Duplication
             } else if (lengthRatio >= 1.8 && lengthRatio <= 2.2 && INFOSTRUCTTMP.LEN > 49 && qryLen > 49) {
-                dupNum++;
+                dupNum_++;
+                dupMuAllelicNum_ += mulAllelicBool;
+                dupBiAllelicNum_ += !mulAllelicBool;
+                DupLenVec_.push_back(svLen);
+            // Deletion
             } else if (svLen < 0) {
-                delNum++;
+                delNum_++;
+                delMuAllelicNum_ += mulAllelicBool;
+                delBiAllelicNum_ += !mulAllelicBool;
+                svLenVec_.push_back(svLen);
+            // Insertion
             } else if (svLen > 0) {
-                insNum++;
+                insNum_++;
+                insMuAllelicNum_ += mulAllelicBool;
+                insBiAllelicNum_ += !mulAllelicBool;
+                svLenVec_.push_back(svLen);
+            // Other
             } else {
-                otherNum++;
+                otherNum_++;
+                otherMuAllelicNum_ += mulAllelicBool;
+                otherBiAllelicNum_ += !mulAllelicBool;
+                svLenVec_.push_back(svLen);
             }
         }
     }
+}
 
-    // Print result
-    cout << "           - SNP: " << snpNum << endl
-        << "           - InDels: " << indelNum << endl
-        << "           - Insertion: " << insNum << endl
-        << "           - Deletion: " << delNum << endl
-        << "           - Inversion: " << invNum << endl
-        << "           - Duplication: " << dupNum << endl
-        << "           - Other: " << otherNum << endl;
+/**
+ * count number and length
+ *
+ * @return void
+**/
+void VCFCount::count_num_len() {
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        // number
+        int64_t x1 = std::stoll(split(lengthVec_[i], "/")[0]);
+        int64_t x2 = std::stoll(split(lengthVec_[i], "/")[1]);
+
+        // sv
+        vector<uint64_t>::size_type result = count_if(svLenVec_.begin(), svLenVec_.end(), f_mod_c(x1, x2));
+        svNumVec_.push_back(result);
+        // total length
+        int64_t totalLen = 0;
+        for (const auto& it : svLenVec_) {
+            if (it >= x1 && it <= x2) {
+                totalLen += it;
+            }
+        }
+        svTotalLenVec_.push_back(abs(totalLen));
+
+        // Inversion
+        result = count_if(InvLenVec_.begin(), InvLenVec_.end(), f_mod_c(x1, x2));
+        InvNumVec_.push_back(result);
+        // total length
+        totalLen = 0;
+        for (const auto& it : InvLenVec_) {
+            if (it >= x1 && it <= x2) {
+                totalLen += it;
+            }
+        }
+        InvTotalLenVec_.push_back(abs(totalLen));
+
+        // Duplication
+        result = count_if(DupLenVec_.begin(), DupLenVec_.end(), f_mod_c(x1, x2));
+        DupNumVec_.push_back(result);
+        // total length
+        totalLen = 0;
+        for (const auto& it : DupLenVec_) {
+            if (it >= x1 && it <= x2) {
+                totalLen += it;
+            }
+        }
+        DupTotalLenVec_.push_back(abs(totalLen));
+    }
+}
+
+/**
+ * print
+ *
+ * @return void
+**/
+void VCFCount::get_result() {
+    // number
+    cout << "#[Type]: Variants Bi-allelic Multi-allelic\n";
+    cout << "[SNP]: " << snpNum_ << " " << snpBiAllelicNum_ << " " << snpMuAllelicNum_ << endl
+         << "[Indels]: " << indelNum_ << " " << indelBiAllelicNum_ << " " << indelMuAllelicNum_ << endl
+         << "[Insertion]: " << insNum_ << " " << insBiAllelicNum_ << " " << insMuAllelicNum_ << endl
+         << "[Deletion]: " << delNum_  << " " << delBiAllelicNum_ << " " << delMuAllelicNum_<< endl
+         << "[Inversion]: " << invNum_ << " " << invBiAllelicNum_ << " " << invMuAllelicNum_ << endl
+         << "[Duplication]: " << dupNum_ << " " << dupBiAllelicNum_ << " " << dupMuAllelicNum_ << endl
+         << "[Other]: " << otherNum_ << " " << otherBiAllelicNum_ << " " << otherMuAllelicNum_ << endl << endl;
+
+    // SV number
+    cout << "##SNPs+Indels+Deletion+Insertion\n#[Range]: Number\n";
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        cout << "[" << lengthVec_[i] << "]: " << svNumVec_[i] << endl;
+    }
+    // SV total length
+    cout << "\n#[Range]: Length\n";
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        cout << "[" << lengthVec_[i] << "]: " << svTotalLenVec_[i] << endl;
+    }
+    cout << endl << endl;
+
+    // Inversion number
+    cout << "##Inversion\n#[Range]: Number\n";
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        cout << "[" << lengthVec_[i] << "]: " << InvNumVec_[i] << endl;
+    }
+    // Inversion total length
+    cout << "\n#[Range]: Length\n";
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        cout << "[" << lengthVec_[i] << "]: " << InvTotalLenVec_[i] << endl;
+    }
+    cout << endl << endl;
+
+    // Duplication number
+    cout << "##Duplication\n#[Range]: Number\n";
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        cout << "[" << lengthVec_[i] << "]: " << DupNumVec_[i] << endl;
+    }
+    // Duplication total length
+    cout << "\n#[Range]: Length\n";
+    for (size_t i = 0; i < lengthVec_.size(); i++) {
+        cout << "[" << lengthVec_[i] << "]: " << DupTotalLenVec_[i] << endl;
+    }
+    cout << endl << endl;
 }

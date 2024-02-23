@@ -14,7 +14,6 @@
 #include "strip_split_join.hpp"
 #include "kseq.h"
 #include "get_time.hpp"
-#include "check_vcf_sort.hpp"
 #include "save.hpp"
 #include "vcf_open.hpp"
 
@@ -97,6 +96,25 @@ public:
      * @return void
     **/
     void vcf_convert();
+
+    /**
+     * Update genotype information
+     * 
+     * @param gtIndex             Genotype index
+     * @param preINFOSTRUCTTMP    Previous site information
+     * @param INFOSTRUCTTMP       Current location information
+     * @param VCFOPENCLASS        
+     * 
+     * @return void
+    */
+    void merge_loci(
+        const uint32_t& gtIndex, 
+        VCFINFOSTRUCT& preINFOSTRUCTTMP, 
+        VCFINFOSTRUCT& INFOSTRUCTTMP, 
+        VCFOPEN& VCFOPENCLASS
+    );
+
+    vector<string> sort_unique(vector<string> vec);
 };
 
 #endif

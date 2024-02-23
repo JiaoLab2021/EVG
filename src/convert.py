@@ -23,41 +23,22 @@ def convert_reference(
     env_path, 
     restart: bool
 ):
-    """
-    :param reference_file:    original reference genome
-    :param env_path:          environment variable
-    :param restart:           Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, out_reference_file
-    """
-
-    # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
     # converted filename
     out_reference_file = "convert." + os.path.basename(reference_file)
 
     # ############################# awk #############################
     # check fasta
-    cmd = '''awk '{if ($1~/>/) {print $0} else {$0=toupper($0); gsub(/[^ATGCNatgcn]/,"N"); print $0}}' ''' + \
-          reference_file + \
-          " 1>" + \
-          out_reference_file
+    cmd = '''awk '{if ($1~/>/) {print $0} else {$0=toupper($0); gsub(/[^ATGCNatgcn]/,"N"); print $0}}' ''' + reference_file + " 1>" + out_reference_file
 
     # Check if the file exists
     if restart:
-        # check file
-        file_size = getsize(
-            out_reference_file
-        )
-        # <= 0
+        file_size = getsize(out_reference_file)
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.awk", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.awk", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Check whether the log is normal, and exit early if it is not normal
     if log_out:
@@ -68,81 +49,52 @@ def convert_reference(
     cmd = f"samtools faidx {out_reference_file}"
 
     # submit task
-    stdout, stderr, log_out = run_cmd.run(cmd, "convert_reference.faidx", env_path)
+    stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
-    # Check whether the log is normal, and exit early if it is not normal
-    if log_out:
-        return stdout, stderr, log_out, out_reference_file
-
-    # Complete the path
-    out_reference_file = os.path.abspath(out_reference_file)
-
-    return stdout, stderr, log_out, out_reference_file
+    return stdout, stderr, log_out, os.path.abspath(out_reference_file)
 
 
 # Sort vcf files
 def bgzip_vcf(
     vcf_file: str,
     env_path, 
+    threads, 
     restart: bool
 ):
-    """
-    :param vcf_file:   vcf file
-    :param env_path:   environment variable
-    :param restart:    Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, out_vcf_file
-    """
+    stdout = stderr = log_out = ""
+    
+    vcf_file_gz = vcf_file + ".gz"
 
-    # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
-
-    out_vcf_file = vcf_file + ".gz"
-
-    cmd = "bgzip -f {} && tabix -f {}".format(vcf_file, out_vcf_file)
+    cmd = f"bgzip -@ {threads} -f {vcf_file} && tabix -f {vcf_file_gz}"
 
     # Check if the file exists
     if restart:
-        # <= 0
-        if getsize(out_vcf_file) <= 28 and getsize(out_vcf_file + ".tbi") <= 72:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "bgzip", env_path)
+        if getsize(vcf_file_gz) <= 28 and getsize(vcf_file_gz + ".tbi") <= 72:
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "bgzip", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
-    # Complete the path
-    out_vcf_file = os.path.abspath(out_vcf_file)
-
-    return stdout, stderr, log_out, out_vcf_file
+    return stdout, stderr, log_out, os.path.abspath(vcf_file_gz)
 
 
 # Evaluate fastq files
 def fastq_count(
     code_dir: str,
     env_path, 
-    fastq_file1: str,
-    fastq_file2: str = ""
+    read1: str,
+    read2: str = ""
 ):
-    """
-    :param code_dir:    code path
-    :param env_path:    environment variable
-    :param fastq_file1: read1
-    :param fastq_file2: read2
-    :return: stdout, stderr, log_out, fastq_base, read_num, read_len
-    """
     # code path
     code_path = os.path.join(code_dir, "fastAQ count")
 
     # Evaluate fastq size
-    if fastq_file2:  # Next-generation paired-end sequencing
-        cmd = '{} -i {} -i {}'.format(code_path, fastq_file1, fastq_file2)
+    if read2:  # Next-generation paired-end sequencing
+        cmd = f"{code_path} -i {read1} -i {read2}"
     else:  # Third-generation sequencing data or second-generation single-end sequencing
-        cmd = '{} -i {}'.format(code_path, fastq_file1)
+        cmd = f"{code_path} -i {read1}"
 
     # submit task
-    stdout, stderr, log_out = run_cmd.run(cmd, "fastAQ count", env_path)
+    stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     fastq_base = 0
     read_num = 0
@@ -159,7 +111,6 @@ def fastq_count(
     if fastq_base == 0 or read_num == 0 or read_len == 0:
         log = '[EVG.fastAQ count] The fastq file is wrong, please check the parameters.\n'
         logger.error(log)
-        raise Exception(log)
 
     return stdout, stderr, log_out, fastq_base, read_num, read_len
 
@@ -170,20 +121,14 @@ def fasta_count(
     env_path, 
     reference_file: str
 ):
-    """
-    :param code_dir:       code path
-    :param env_path:       environment variable
-    :param reference_file: reference genome
-    :return: stdout, stderr, log_out, fasta_base
-    """
     # code path
     code_path = os.path.join(code_dir, "fastAQ count")
 
     # Assess fasta size
-    cmd = '{} -i {}'.format(code_path, reference_file)
+    cmd = f"{code_path} -i {reference_file}"
 
     # submit task
-    stdout, stderr, log_out = run_cmd.run(cmd, "fastAQ count", env_path)
+    stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     fasta_base = 0
     for i in stdout.split("\n"):
@@ -199,30 +144,17 @@ def fasta_count(
 
 # Downsample fastq files
 def downsample(
-        code_dir: str,
-        fastq_file1: str,
-        fastq_file2: str,
-        fastq_base: int,
-        fasta_base: int,
-        need_depth: float,
-        env_path, 
-        restart: bool
+    code_dir: str,
+    read1: str,
+    read2: str,
+    fastq_base: int,
+    fasta_base: int,
+    need_depth: float,
+    env_path, 
+    restart: bool
 ):
-    """
-    :param code_dir:       code path
-    :param fastq_file1:    read1
-    :param fastq_file2:    read2
-    :param fastq_base:     the base of fastq
-    :param fasta_base:     the base of fasta
-    :param need_depth:     need depth
-    :param env_path:       environment variable
-    :param restart: Whether to check if the file exists and skip this step
-    :return:
-    """
     # Initialize log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
     # code path
     code_path = os.path.join(code_dir, "fastAQ sample")
@@ -233,41 +165,31 @@ def downsample(
     read_depth = fastq_base / fasta_base
 
     if need_ratio >= 1:  # If the sequencing data is less than the set value, it will be skipped and no downsampling will be performed
-        log = '[EVG.fastAQ sample] Insufficient sequencing data ({:.2f}×/{}×), skip downsampling step.'. \
-                  format(read_depth, need_depth)
+        log = "Insufficient sequencing data ({:.2f}x/{}x), skip downsampling step.".format(read_depth, need_depth)
         logger.error(log)
-        fastq_out_file1 = fastq_file1
-        fastq_out_file2 = fastq_file2
+        read1_out = read1
+        read2_out = read2
     else:
-        fastq_out_file1 = "sample." + str(need_ratio) + "." + os.path.basename(fastq_file1)
-        fastq_out_file1 = fastq_out_file1.replace(".gz", "").replace(".GZ", "")
-        fastq_out_file1 = os.path.abspath(fastq_out_file1)  # path completion
+        read1_out = f"sample.{need_ratio}.{os.path.basename(read1)}".replace(".gz", "").replace(".GZ", "")
+        read1_out = os.path.abspath(read1_out)
 
-        if fastq_file2:  # Next-generation paired-end sequencing
-            # Output the filename and complete the path
-            fastq_out_file2 = "sample." + str(need_ratio) + "." + os.path.basename(fastq_file2)
-            fastq_out_file2 = fastq_out_file2.replace(".gz", "").replace(".GZ", "")
-            fastq_out_file2 = os.path.abspath(fastq_out_file2)  # path completion
+        if read2:
+            read2_out = f"sample.{need_ratio}.{os.path.basename(read2)}".replace(".gz", "").replace(".GZ", "")
+            read2_out = os.path.abspath(read2_out)
 
             # Check if the file exists
             if restart:
-                # check file
-                file_size1 = getsize(
-                    fastq_out_file1
-                )
-                file_size2 = getsize(
-                    fastq_out_file2
-                )
-                # Both files exist, skip this step
+                file_size1 = getsize(read1_out)
+                file_size2 = getsize(read2_out)
                 if file_size1 > 0 and file_size2 > 0:
-                    return stdout, stderr, log_out, os.path.abspath(fastq_out_file1), os.path.abspath(fastq_out_file2)
+                    return "", "", log_out, os.path.abspath(read1_out), os.path.abspath(read2_out)
 
-            cmd1 = '{} -i {} -f {} 1>{}'.format(code_path, fastq_file1, need_ratio, fastq_out_file1)
-            cmd2 = '{} -i {} -f {} 1>{}'.format(code_path, fastq_file2, need_ratio, fastq_out_file2)
+            cmd1 = f"{code_path} -i {read1} -f {need_ratio} 1>{read1_out}"
+            cmd2 = f"{code_path} -i {read2} -f {need_ratio} 1>{read2_out}"
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 to_do = []
-                future1 = executor.submit(run_cmd.run, cmd1, "fastAQ sample", env_path)
-                future2 = executor.submit(run_cmd.run, cmd2, "fastAQ sample", env_path)
+                future1 = executor.submit(run_cmd.run, cmd1, env_path)
+                future2 = executor.submit(run_cmd.run, cmd2, env_path)
                 to_do.append(future1)
                 to_do.append(future2)
 
@@ -276,23 +198,19 @@ def downsample(
                     if log_out_tmp:
                         log_out = log_out_tmp
         else:  # Third-generation sequencing data or second-generation single-end sequencing
-            cmd = '{} -i {} -f {} 1>{}'.format(code_path, fastq_file1, need_ratio, fastq_out_file1)
-            fastq_out_file2 = ""
+            cmd = f"{code_path} -i {read1} -f {need_ratio} 1>{read1_out}"
+            read2_out = ""
 
             # Check if the file exists
             if restart:
-                # check file
-                file_size1 = getsize(
-                    fastq_out_file1
-                )
-                # file exists, skip this step
+                file_size1 = getsize(read1_out)
                 if file_size1 > 0:
-                    return stdout, stderr, log_out, os.path.abspath(fastq_out_file1), ""
+                    return stdout, stderr, log_out, os.path.abspath(read1_out), ""
 
             # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "fastAQ sample", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
-    return stdout, stderr, log_out, os.path.abspath(fastq_out_file1), os.path.abspath(fastq_out_file2)
+    return stdout, stderr, log_out, os.path.abspath(read1_out), os.path.abspath(read2_out)
 
 
 # vcf convert
@@ -305,46 +223,25 @@ def vcf_convert(
     env_path, 
     restart: bool
 ):
-    """
-    :param code_dir:            code path
-    :param reference_file:      reference genome
-    :param vcf_file:            vcf file
-    :param read_len:            read length
-    :param mode:                mode
-    :param env_path:            environment variable
-    :param restart:             Whether to check if the file exists and skip this step
-    :return: stdout, stderr, log_out, vcf_out_name, sv_out_name, region_file
-    """
-
     # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
     # code path
     code_path = os.path.join(code_dir, "graphvcf convert")
 
     # output filename of convert result
-    vcf_out_name = "convert." + os.path.basename(vcf_file.replace(".gz", ""))
+    vcf_out_name = f"""convert.{os.path.basename(vcf_file.replace(".gz", ""))}"""
 
     # ################################### graphvcf convert ###################################
     # graphvcf convert
-    cmd = '{} -r {} -v {} -l {} -o {}'.format(
-        code_path,
-        reference_file,
-        vcf_file,
-        read_len,
-        vcf_out_name)
+    cmd = f"{code_path} -r {reference_file} -v {vcf_file} -l {read_len} -o {vcf_out_name}"
 
     # Check if the file exists
     if restart:
-        # <= 0
-        if getsize(vcf_out_name) <= 0 and getsize(vcf_out_name + ".gz") <= 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf convert", env_path)
+        if getsize(vcf_out_name) <= 0 and getsize(vcf_out_name + ".gz") <= 0:
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "graphvcf convert", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code
     if log_out:
@@ -355,26 +252,14 @@ def vcf_convert(
 
     # ################################### sort ###################################
     # vcfsort
-    cmd = '''grep '#' {} > {} && grep -v '#' {} | sort --parallel=10 -k 1,1 -k 2,2n -t $'\t' | '''.format(
-        vcf_out_name,
-        vcf_out_name + ".sort",
-        vcf_out_name
-    )
-    cmd += '''awk -F "\t" '!a[$1,$2]++' 1>>{} && mv {} {}'''.format(
-        vcf_out_name + ".sort",
-        vcf_out_name + ".sort",
-        vcf_out_name
-    )
+    cmd = f"""grep '#' {vcf_out_name} > {vcf_out_name+".sort"} && grep -v '#' {vcf_out_name} | sort --parallel=10 -k 1,1 -k 2,2n -t $'\t' | awk -F "\t" '!a[$1,$2]++' 1>>{vcf_out_name+".sort"} && mv {vcf_out_name+".sort"} {vcf_out_name}"""
 
     # Check if the file exists
     if restart:
-        # <= 0
         if getsize(vcf_out_name) > 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "sort", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "sort", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code
     if log_out:
@@ -383,30 +268,15 @@ def vcf_convert(
     # vcf is divided by category
     if mode == "fast":
         sv_out_name = "sv." + vcf_out_name
-        cmd = ""
-        if getsize(vcf_out_name) > 0:
-            cmd = '''cat ''' + vcf_out_name + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
-            {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
-        elif getsize(vcf_out_name + ".gz") > 28:
-            cmd = '''zcat ''' + vcf_out_name + ".gz" + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) 
-                {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
+        cmd = f"cat {vcf_out_name}" + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
         # Check if the file exists
         if restart:
-            # check file
-            file_size = getsize(
-                sv_out_name
-            )
-            # <= 0
+            file_size = getsize(sv_out_name)
             if file_size <= 0:
-                # submit task
-                stdout, stderr, log_out = run_cmd.run(cmd, "split", env_path)
+                stdout, stderr, log_out = run_cmd.run(cmd, env_path)
         else:  # If restart is not specified, run directly
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "split", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:
         sv_out_name = vcf_out_name
 
-    vcf_out_name = os.path.abspath(vcf_out_name)
-    sv_out_name = os.path.abspath(sv_out_name)
-
-    return stdout, stderr, log_out, vcf_out_name, sv_out_name, region_file
+    return stdout, stderr, log_out, os.path.abspath(vcf_out_name), os.path.abspath(sv_out_name), region_file

@@ -42,14 +42,14 @@ struct vcfStructure
 };
 
 // Bool function that performs statistics on the variation length
-class f_mod
+class f_mod_r
 {
 private:
     int64_t dv1;
     int64_t dv2;
 
 public:
-    f_mod(int64_t d1 = 1, int64_t d2 = 2) : dv1(d1), dv2(d2) {}
+    f_mod_r(int64_t d1 = 1, int64_t d2 = 2) : dv1(d1), dv2(d2) {}
 
     bool operator() (int64_t x) {return  dv1 <= x && x <= dv2;}
 };

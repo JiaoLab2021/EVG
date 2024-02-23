@@ -9,114 +9,84 @@ from getsize import getsize
 
 # genotype
 def main(
+    bayestyper_sample_path, 
     reference_file: str,
     vcf_file: str,
     bam2bayestyper_file: str,
     bam_infos_map, 
-    env_path, 
     threads: int,
+    env_path, 
     restart: bool
 ):
-    """
-    :param reference_file:       reference genome
-    :param vcf_file:             vcf file
-    :param bam2bayestyper_file:  configure fule
-    :param bam_infos_map:        information of BAM
-    :param env_path:             env path
-    :param threads:              thread
-    :param restart:              Whether to check if the file exists and skip this step
-    :return:
-    """
+    os.chdir(bayestyper_sample_path)
 
     # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
     # ----------------------------------- ln -sf ----------------------------------- #
     # First traverse the bam file and soft-link it to the current working path
-    for key, value in bam_infos_map.items():
-        bam_file = value["bam_file"]
+    for sample_name, value in bam_infos_map.items():
+        bam_file = value["bam"]
         # ln
-        cmd = "ln -sf {} .".format(bam_file)
+        cmd = f"ln -sf {bam_file} {os.path.join(bayestyper_sample_path, os.path.basename(bam_file))}"
         # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.ln", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
         # Report an error if there is a problem with the exit code
         if log_out:
             return stdout, stderr, log_out, ""
 
     # ----------------------------------- bayesTyper k-mers ----------------------------------- #
-    # Traversing bam file hashes
-    work_dir = os.getcwd()
     try:
         with open(bam2bayestyper_file, "r") as f:
             for information in f.readlines():
                 informations_split = information.strip().split()
-                prefix = informations_split[0]
-                prefix = prefix + ".bam"  # Makefile prefix
+                prefix = informations_split[2]  # Makefile prefix
                 bam_file = informations_split[2]
 
                 # kmc
-                cmd = "kmc -k55 -ci1 -t1 -fbam {} {} {}".format(bam_file, prefix, work_dir)
+                cmd = f"kmc -k55 -ci1 -t1 -fbam {bam_file} {prefix} {bayestyper_sample_path}"
 
                 # Check if the file exists
                 if restart:
-                    # <= 0
                     if getsize(prefix + ".kmc_pre") <= 0 or getsize(prefix + ".kmc_suf") <= 0:
-                        # submit task
-                        stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.kmc", env_path)
+                        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
                 else:  # If restart is not specified, run directly
-                    # submit task
-                    stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.kmc", env_path)
+                    stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
                 # Report an error if there is a problem with the exit code
                 if log_out:
                     return stdout, stderr, log_out, ""
 
                 # bayesTyperTools makeBloom
-                cmd = "bayesTyperTools makeBloom -k {} -p {}".format(prefix, threads)
+                cmd = f"bayesTyperTools makeBloom -k {prefix} -p {threads}"
 
                 # Check if the file exists
                 if restart:
-                    # <= 0
                     if getsize(prefix + ".bloomData") <= 0 or getsize(prefix + ".bloomMeta") <= 0:
-                        # submit task
-                        stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.makeBloom", env_path)
+                        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
                 else:  # If restart is not specified, run directly
-                    # submit task
-                    stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.makeBloom", env_path)
+                    stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
                 # Report an error if there is a problem with the exit code
                 if log_out:
                     return stdout, stderr, log_out, ""
     except FileNotFoundError:
-        log_out = "[EVG.{}] FileNotFoundError: [Errno 2] No such file or directory: '{}'.\n".format(
-                        "BayesTyper",
-                        bam2bayestyper_file
-                    )
+        log_out = "FileNotFoundError: [Errno 2] No such file or directory: '{bam2bayestyper_file}'.\n"
         return "", "", log_out, ""
 
     # ----------------------------------- bayesTyper cluster ----------------------------------- #
     # bayesTyper cluster
-    cmd = "bayesTyper cluster -v {} -s {} -g {} -p {}".format(
-        vcf_file,
-        bam2bayestyper_file,
-        reference_file,
-        threads
-    )
+    cmd = f"bayesTyper cluster -v {vcf_file} -s {bam2bayestyper_file} -g {reference_file} -p {threads} -o {os.path.join(bayestyper_sample_path, 'bayestyper')}"
 
     # Check if the file exists
     if restart:
-        # <= 0
         if getsize("bayestyper_cluster_data/intercluster_regions.txt.gz") <= 0 or \
                 getsize("bayestyper_cluster_data/multigroup_kmers.bloomData") <= 0 or \
                 getsize("bayestyper_cluster_data/multigroup_kmers.bloomMeta") <= 0 or \
                 getsize("bayestyper_cluster_data/parameter_kmers.fa.gz") <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.cluster", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.cluster", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code
     if log_out:
@@ -124,49 +94,48 @@ def main(
 
     # ----------------------------------- bayesTyper genotype ----------------------------------- #
     # List all directories under the current directory starting with "bayestyper_unit_"
-    unit_folders = [folder for folder in os.listdir(".") if os.path.isdir(folder) and folder.startswith("bayestyper_unit_")]
+    unit_folders = [os.path.join(bayestyper_sample_path, folder) for folder in os.listdir(bayestyper_sample_path) if folder.startswith("bayestyper_unit_")]
 
     # If the list is empty, return null
     if len(unit_folders) == 0:
-        log_out = "[EVG.{}] Warning: BayesTyper does not generate any folders starting with 'bayestyper_unit_'.\n".format(
-                        "BayesTyper"
-                    )
+        log_out = "Warning: BayesTyper does not generate any folders starting with 'bayestyper_unit_'.\n"
         return "", "", log_out, ""
 
     # Iterate through all the unit folders and run the genotyping command
     for unit_folder in unit_folders:
-        # Define the paths of the input and output files
-        output_prefix = os.path.join(unit_folder, "bayestyper")
-
         # Define the command to run BayesTyper genotype
-        cmd = "bayesTyper genotype -v {}/variant_clusters.bin -c bayestyper_cluster_data -s {} -g {} -o {} -z -p {} --noise-genotyping".format(
-            unit_folder, bam2bayestyper_file, reference_file, output_prefix, threads
-        )
+        cmd = f"bayesTyper genotype -v {os.path.join(unit_folder, 'variant_clusters.bin')} -c {os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data')} -s {bam2bayestyper_file} -g {reference_file} -o {os.path.join(unit_folder, 'bayestyper')} -z -p {threads} --noise-genotyping"
 
         # Check if the file exists
         if restart:
-            # Check the file size of the output VCF file
             vcf_gz_file = os.path.join(unit_folder, "bayestyper.vcf.gz")
             file_size = getsize(vcf_gz_file)
-            # <= 0
             if file_size <= 0:
-                # Submit the command to the system
-                stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.genotype", env_path)
+                stdout, stderr, log_out = run_cmd.run(cmd, env_path)
         else:  # If restart is not specified, run the command directly
-            # Submit the command to the system
-            stdout, stderr, log_out = run_cmd.run(cmd, "BayesTyper.genotype", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
+
+        # Report an error if there is a problem with the exit code
+        if log_out:
+            return stdout, stderr, log_out, ""    
 
     # ----------------------------------- merge ----------------------------------- #
     # Merge the output VCF files using a shell script
     vcf_files = [os.path.join(unit_folder, "bayestyper.vcf.gz") for unit_folder in unit_folders]
-    vcf_out_file = os.path.abspath("bayestyper.vcf.gz")
+    vcf_out_file = os.path.join(bayestyper_sample_path, "bayestyper.vcf.gz")
 
     # head
-    head_cmd = "zcat {} | grep '^#' | gzip -c > {}".format(vcf_files[0], vcf_out_file)
-    stdout, stderr, log_out = run_cmd.run(head_cmd, "BayesTyper.head", env_path)
+    head_cmd = f"zcat {vcf_files[0]} | grep '^#' | gzip -c > {vcf_out_file}"
+    stdout, stderr, log_out = run_cmd.run(head_cmd, env_path)
+    # Report an error if there is a problem with the exit code
+    if log_out:
+        return stdout, stderr, log_out, ""
 
     # merge
-    merge_cmd = "zcat {} | grep -v '^#' | sort -k 1,1 -k 2,2n -t $'\t' | gzip -c >> {}".format(" ".join(vcf_files), vcf_out_file)
-    stdout, stderr, log_out = run_cmd.run(merge_cmd, "BayesTyper.merge", env_path)
+    merge_cmd = f"zcat {' '.join(vcf_files)} | grep -v '^#' | sort -k 1,1 -k 2,2n -t $'\t' | gzip -c >> {vcf_out_file}"
+    stdout, stderr, log_out = run_cmd.run(merge_cmd, env_path)
+    # Report an error if there is a problem with the exit code
+    if log_out:
+        return stdout, stderr, log_out, ""
 
     return stdout, stderr, log_out, vcf_out_file

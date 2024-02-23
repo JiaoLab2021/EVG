@@ -17,7 +17,17 @@ logger.addHandler(handler)
 
 
 # run
-def run(command, subcommands, envPath):
+def run(command, envPath):
+    """
+    Executes a command in the shell and captures the standard output, standard error, and log.
+
+    Args:
+        command (str): The command to be executed.
+        envPath (dict): The environment variables to be set for the command.
+
+    Returns:
+        tuple: A tuple containing the standard output (str), standard error (str), and log (str).
+    """
     # Create output file
     stdout_file = tempfile.NamedTemporaryFile(delete=False)
     stderr_file = tempfile.NamedTemporaryFile(delete=False)
@@ -25,7 +35,7 @@ def run(command, subcommands, envPath):
     # submit task
     proc = subprocess.Popen(command, shell=True, stdout=stdout_file, stderr=stderr_file, env=envPath)
 
-    log = f'[EVG.{subcommands}] CMD: {command}'
+    log = f'CMD: {command}'
     logger.error(log)
 
     # Reset log is used to judge whether to exit normally
@@ -52,6 +62,6 @@ def run(command, subcommands, envPath):
             "command not found" in stderr or \
             "error" in stderr or \
             "Error" in stderr:
-        log = f'[EVG.{subcommands}] Status: {exit_state} -> {stderr}.'
+        log = f'Error occurred with status code: {exit_state}. Error message: {stderr}.'
 
     return stdout, stderr, log

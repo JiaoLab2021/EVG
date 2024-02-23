@@ -41,28 +41,6 @@ VCFOPEN::~VCFOPEN() {
 }
 
 
-// Empty structure
-void VCFINFOSTRUCT::clear() {
-    // general information
-    line.clear();
-    lineVec.clear();
-    ALTVec.clear();
-
-    CHROM.clear();  //  [0]
-    POS = 0;  //  [1]
-    ID.clear();  // [2]
-    REF.clear();  //  [3]
-    ALT.clear();  // [4]
-    QUAL = 0;  //  [5]
-    FILTER.clear(); //  [6]
-    INFO.clear();  // [7]
-    FORMAT.clear();  // [8]
-
-    LEN = 0;  // REF length
-    END = 0;  // ALT length
-}
-
-
 /**
  * @brief traverse files
  * 
@@ -192,13 +170,13 @@ string VCFOPEN::get_TYPE(
  * @param lineTmpVec  lineTmpVec
  * 
  * 
- * @return GTVecMap   map<int, vector<string> >,  map<idx, vector<GTString> >
+ * @return GTVecMap, misSampleNum   map<idx, vector<GTString> >
 **/
-map<int, vector<string> > VCFOPEN::get_gt(
+tuple<unordered_map<int, vector<string> >, uint32_t> VCFOPEN::get_gt(
     const vector<string> & lineTmpVec
-)
-{
-    map<int, vector<string> > GTVecMap;  // map of all Line types, map<idx, vector<GTString> >
+) {
+    unordered_map<int, vector<string> > GTVecMap;  // map of all Line types, map<idx, vector<GTString> >
+    uint32_t misSampleNum = 0;  // number of missing samples
 
     // FORMAT column
     vector<string> formatVec = split(lineTmpVec[8], ":");  // FORMAT character split
@@ -207,33 +185,23 @@ map<int, vector<string> > VCFOPEN::get_gt(
 
     if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineTmpVec[0] << ":" << lineTmpVec[1] << endl;
-        return GTVecMap;
+        return tuple(GTVecMap, misSampleNum);
     } else {  // If it exists, save it
         string GTString;  // Store the genotype field
 
         for (size_t i = 9; i < lineTmpVec.size(); i++) {  // Start the loop in the ninth column
             GTString = split(lineTmpVec[i], ":")[gtIndex];  // gt field
+            vector<string> GTVec = gt_split(GTString);
+            GTVecMap[i - 9] = GTVec;  // Assign
 
-            // Sites with '.' are skipped
-            if (GTString.find(".") != string::npos) {
-                continue;
-            }
-            
-            string splitStr;  // Delimiter in gt
-            if (GTString.find("/") != string::npos) {  // Determine the '/' separator
-                splitStr = "/";
-            } else if (GTString.find("|") != string::npos) {  // Determine that '|' is the separator
-                splitStr = "|";
-            }
-            
-            // If you know the separator then assign it
-            if (splitStr.size() > 0) {
-                GTVecMap[i - 9] = split(GTString, splitStr);  // Assign
+            // Determine whether it is a missing sample
+            if (GTString == "." || GTString == "./." || GTString == ".|." || GTString == "././." || GTString == ".|.|." || GTString == "./././." || GTString == ".|.|.|.") {
+                misSampleNum++;
             }
         }
     }
 
-    return GTVecMap;
+    return tuple(GTVecMap, misSampleNum);
 }
 
 
@@ -246,11 +214,14 @@ map<int, vector<string> > VCFOPEN::get_gt(
  * @return vector<gt>
 **/
 vector<string> VCFOPEN::gt_split(
-    const string & gtTxt
+    string & gtTxt
 ) {
     // Temporary gt list
     vector<string> gtVecTmp;
 
+    // Replace all '.' with '0'
+    std::replace(gtTxt.begin(), gtTxt.end(), '.', '0');
+    
     if (gtTxt.find("/") != string::npos) {
         gtVecTmp = split(gtTxt, "/");
     } else if (gtTxt.find("|") != string::npos) {
@@ -276,18 +247,20 @@ vector<string> VCFOPEN::gt_split(
 /**
  * Calculate MAF and MISSRATE.
  *
- * @param GTVecMap    map<int, vector<string> >,  map<idx, vector<GTString> >
- * @param sampleNum   total number of samples
+ * @param GTVecMap      map<int, vector<string> >,  map<idx, vector<GTString> >
+ * @param misSampleNum  number of missing samples
  * 
  * 
  * @return tuple<double, double>   tuple<MAF, MISSRATE>
 **/
 tuple<double, double> VCFOPEN::calculate(
-    const map<int, vector<string> > & GTVecMap, 
-    uint32_t sampleNum
+    const unordered_map<int, vector<string> > & GTVecMap, 
+    uint32_t misSampleNum
 ) {
     double MAFTMP;  // Minimum allele frequency
     double MISSRATETMP;  // Miss rate
+
+    uint32_t sampleNum = GTVecMap.size();
 
     /* ******************************** Calculate MAF ******************************** */ 
     map<string, uint32_t> GTFreMapTmp;  // Genotype frequency map<gt, fre>
@@ -318,7 +291,7 @@ tuple<double, double> VCFOPEN::calculate(
     
     /* ******************************** Calculate MISSRATE ******************************** */ 
     // 1- number/allNumber
-    MISSRATETMP = 1 - (GTVecMap.size()/(double)sampleNum);
+    MISSRATETMP = 1 - (misSampleNum/(double)sampleNum);
 
     return make_tuple(MAFTMP, MISSRATETMP);
 }

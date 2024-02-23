@@ -158,19 +158,21 @@ void VCFFilter::vcf_filter()
             double MISSRATETMP;  // Miss rate
 
             // Get all genotypes   map<idx, vector<gtString>>
-            map<int, vector<string> > GTVecMapTmp = VCFOPENCLASS.get_gt(
+            unordered_map<int, vector<string> > GTVecMapTmp;
+            uint32_t misSampleNum;
+            tie(GTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(
                 INFOSTRUCTTMP.lineVec
             );
 
             // If there is only one genotype, skip.
-            if (GTVecMapTmp.size() <= 1) {
+            if (GTVecMapTmp.size() - misSampleNum <= 1) {
                 continue;
             }
             
             // The minimum allele frequency and deletion rate were calculated
             tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
                 GTVecMapTmp, 
-                INFOSTRUCTTMP.lineVec.size() - 9
+                misSampleNum
             );
 
             // Saved directly through the threshold

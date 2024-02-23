@@ -16,99 +16,63 @@ def vg_index(
     env_path, 
     restart: bool
 ):
-    """
-    :param reference_file: reference genome
-    :param vcf_file:       vcf file
-    :param threads:        Threads
-    :param index_dir:      the path of index
-    :param env_path:       environment variable
-    :param restart:        resume
-    :return: stdout, stderr, log_out
-    """
-
-    # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
-
     # change working path
     os.chdir(index_dir)
 
+    # log
+    stdout = stderr = log_out = ""
+
     # file prefix
-    cmd = "vg construct -t {} -r {} -v {} 1>out.vg && " \
-          "mkdir temp && vg index -t {} -b temp/ -x out.xg out.vg && rm -rf temp && " \
-          "vg snarls -t {} out.xg 1>out.snarls".format(threads, reference_file, vcf_file, threads, threads)
+    temp_dir = os.path.join(index_dir, "temp")
+    prefix = os.path.join(index_dir, "out")
+    cmd = f"vg construct -t {threads} -r {reference_file} -v {vcf_file} 1>{prefix + '.vg'} && mkdir {temp_dir} && vg index -t {threads} -b {temp_dir} -x {prefix + '.xg'} {prefix + '.vg'} && rm -rf {temp_dir} && vg snarls -t {threads} {prefix + '.xg'} 1>{prefix + '.snarls'}"
 
     # Check if the file exists
     if restart:
-        # <= 0
         if getsize("out.snarls") <= 0 or \
                 getsize("out.vg") <= 0 or \
                 getsize("out.xg") <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.index", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.index", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out
 
 
 # vg map
 def graphaligner(
+    software_work_path, 
     sample_name: str,
-    fastq_file: str,
+    read: str,
     threads: int,
     index_dir: str,
     env_path, 
     restart: bool
 ):
-    """
-    :param sample_name: sample name
-    :param fastq_file: sequencing read
-    :param threads: Threads
-    :param index_dir: index path
-    :param env_path: environment variable
-    :param restart: Whether to check if the file exists and skip this step
-    :return:
-    """
-
     # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
     # output file path
     vg_file = os.path.join(index_dir, "out.vg")
-    gam_file = os.path.abspath("{}.gam".format(sample_name))
+    gam_file = os.path.join(software_work_path, f"{sample_name}.gam")
 
     # map
-    cmd = 'GraphAligner ' \
-          '-t {} ' \
-          '-g {} ' \
-          '-x vg ' \
-          '-f {} ' \
-          '-a {}'.format(threads, vg_file, fastq_file, gam_file)
+    cmd = f"GraphAligner -t {threads} -g {vg_file} -x vg -f {read} -a {gam_file}"
 
     # Check if the file exists
     if restart:
-        # check file
-        file_size = getsize(
-            gam_file
-        )
-        # <= 0
+        file_size = getsize(gam_file)
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.graphaligner", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.graphaligner", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out
 
 
 # call
 def vg_call(
+    software_work_path, 
     sample_name: str,
     threads: int,
     depth: float,
@@ -116,104 +80,62 @@ def vg_call(
     env_path, 
     restart: bool
 ):
-    """
-    :param sample_name: sample name
-    :param threads: Threads
-    :param depth: depth
-    :param index_dir: index path
-    :param env_path: environment variable
-    :param restart: Whether to check if the file exists and skip this step
-    :return:
-    """
-
     # log
-    stdout = ""
-    stderr = ""
-    log_out = ""
+    stdout = stderr = log_out = ""
 
     # output file path
     xg_file = os.path.join(index_dir, "out.xg")
     snarls_file = os.path.join(index_dir, "out.snarls")
-    gam_file = os.path.abspath("{}.gam".format(sample_name))
-    pack_file = os.path.abspath("{}.pack".format(sample_name))
-    vcf_file = os.path.abspath(sample_name + ".vcf")
+    gam_file = os.path.join(software_work_path, f"{sample_name}.gam")
+    pack_file = os.path.join(software_work_path, f"{sample_name}.pack")
+    vcf_file = os.path.join(software_work_path, f"{sample_name}.vcf")
 
     # vg pack
     filter_depth = min(0, int(depth/2))  # Filter by comparison depth greater than 0
-    cmd = 'vg pack ' \
-          '-t {} ' \
-          '-Q {} ' \
-          '-x {} ' \
-          '-g {} ' \
-          '-o {}'.format(threads, filter_depth, xg_file, gam_file, pack_file)
+    cmd = f"vg pack -t {threads} -Q {filter_depth} -x {xg_file} -g {gam_file} -o {pack_file}"
 
     # Check if the file exists
     if restart:
-        # check file
-        file_size = getsize(
-            pack_file
-        )
-        # <= 0
+        file_size = getsize(pack_file)
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.pack", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.pack", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Check whether the log is normal, and exit early if it is not normal
     if log_out:
         return stdout, stderr, log_out, vcf_file
 
     # vg call
-    cmd = 'vg call ' \
-          '-t {} ' \
-          '-s {} ' \
-          '{} ' \
-          '-k {} ' \
-          '-r {} ' \
-          '1>{}'.format(threads, sample_name, xg_file, pack_file, snarls_file, vcf_file)
+    cmd = f"vg call -t {threads} -s {sample_name} {xg_file} -k {pack_file} -r {snarls_file} 1>{vcf_file}"
 
     # Check if the file exists
     if restart:
-        # check file
-        file_size = getsize(
-            vcf_file
-        )
-        # <= 0
+        file_size = getsize(vcf_file)
         if file_size <= 0:
-            # submit task
-            stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.call", env_path)
+            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, "GraphAligner.vg.call", env_path)
+        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, vcf_file
 
 
 def main(
+    software_work_path, 
     sample_name: str,
-    fastq_file: str,
-    threads: int,
+    read: str,
     depth: float,
     index_dir: str,
+    threads: int,
     env_path, 
     restart: bool
 ):
-    """
-    :param sample_name: sample name
-    :param fastq_file: sequencing read
-    :param threads: Threads
-    :param depth: depth
-    :param index_dir: index path
-    :param env_path: environment variable
-    :param restart: Whether to check if the file exists and skip this step
-    :return:
-    """
+    os.chdir(software_work_path)
 
     stdout, stderr, log_out = graphaligner(
+        software_work_path, 
         sample_name,
-        fastq_file,
+        read,
         threads,
         index_dir,
         env_path, 
@@ -224,6 +146,7 @@ def main(
         return stdout, stderr, log_out, ""
 
     stdout, stderr, log_out, vcf_out_file = vg_call(
+        software_work_path, 
         sample_name,
         threads,
         depth,
