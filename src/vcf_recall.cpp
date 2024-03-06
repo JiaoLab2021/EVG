@@ -123,7 +123,7 @@ void help_recall(char** argv)
        << "    -m, --model         STRING     the mode in which the software runs (recall/genotype/gramtools) [recall]" << endl
        << endl 
        << "ROC arguments:" << endl
-       << "    -s, --score-field   STRING     the name of the VCF FORMAT/INFO field to use as the ROC score (FORMAT.<name>/INFO.<name>) [FORMAT.DP]" << endl
+       << "    -s, --score-field   STRING     the name of the VCF FORMAT/INFO field to use as the ROC score (FORMAT.<name>/INFO.<name>)" << endl
        << "    -r, --roc           STRING     roc calculation rules (recall/genotype) [genotype]" << endl
        << endl
        << "    -h, --help                     print this help document" << endl;

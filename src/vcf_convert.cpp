@@ -366,7 +366,7 @@ void Convert::vcf_convert()
 
 
         // 5. Replace the 'END=' in the eighth column of the VCF. (paragrpah)
-        // paragrpah (raise Exception("{}:{} error in adding ref support.".format(start, end)))
+        // paragrpah (raise Exception("{}:{} error in adding ref support.".format(start, end))) ("{}:{} missing REF or ALT sequence.".format(start, end))
         INFOSTRUCTTMP.lineVec[7] = regex_replace(INFOSTRUCTTMP.lineVec[7], endReg, "END=" + to_string(INFOSTRUCTTMP.END));
 
 
@@ -375,50 +375,9 @@ void Convert::vcf_convert()
 
 
         // 7. The first base of refSeq is the same as the first base of qrySeq. (paragraph)
-        for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
-            string qrySeq = INFOSTRUCTTMP.ALTVec[i];
-
-            // When the first base is different, add the preceding base of refSeq to the sequence of qrySeq
-            if (qrySeq[0] != INFOSTRUCTTMP.REF[0] && (qrySeq.length() > 1 || INFOSTRUCTTMP.REF.length() > 1)) {
-                // Move the coordinates one step backward
-                INFOSTRUCTTMP.POS = INFOSTRUCTTMP.POS - 1;
-                INFOSTRUCTTMP.lineVec[1] = to_string(INFOSTRUCTTMP.POS);
-                INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.LEN + 1;
-                INFOSTRUCTTMP.REF = chrSeqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN); // Reextract sequence information
-                INFOSTRUCTTMP.lineVec[3] = INFOSTRUCTTMP.REF; // Assigns a value to the Vector
-
-                // Add 'refSeq[0]' to all sequences in 'INFOSTRUCTTMP.ALTVec'
-                for (size_t j = 0; j < INFOSTRUCTTMP.ALTVec.size(); j++) {
-                    INFOSTRUCTTMP.ALTVec[j] = INFOSTRUCTTMP.REF[0] + INFOSTRUCTTMP.ALTVec[j];
-                }
-
-                qrySeq = INFOSTRUCTTMP.ALTVec[i]; // qrySeq Reassigns a value
-            }
-
-            // 8. Check whether ref and qry sequences are the same and the same sites are skipped
-            if (qrySeq == INFOSTRUCTTMP.REF) {
-                cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: The REF and ALT sequences are identical, skipping this site -> "
-                    << INFOSTRUCTTMP.CHROM << " " 
-                    << INFOSTRUCTTMP.POS << endl;
-                INFOSTRUCTTMP.line.clear();
-                break;
-            }
-
-            // 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
-            smatch results;
-            std::regex atgcReg("[^ATGCNatgcn]");
-            if (regex_search(qrySeq, results, atgcReg)) {
-                cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: Sequence contains non-ATGCNatgcn characters, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << " " 
-                    << INFOSTRUCTTMP.POS << endl;
-                INFOSTRUCTTMP.line.clear();
-                break;
-            }
-        }
-        // Replace the qry sequence
-        INFOSTRUCTTMP.lineVec[4] = join(INFOSTRUCTTMP.ALTVec, ",");
+        // 8. Check whether ref and qry sequences are the same and the same sites are skipped
+        // 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
+        processSequences(INFOSTRUCTTMP, chrSeqMap);
 
 
         // 10. Check whether the qry after replacement is the same. If yes, skip this site.
@@ -524,7 +483,8 @@ void Convert::vcf_convert()
                 gtIndex, 
                 preINFOSTRUCTTMP, 
                 INFOSTRUCTTMP, 
-                VCFOPENCLASS
+                VCFOPENCLASS, 
+                chrSeqMap
             );
             continue;
         } else if (INFOSTRUCTTMP.CHROM == prePreINFOSTRUCTTMP.CHROM && INFOSTRUCTTMP.POS == prePreINFOSTRUCTTMP.POS) {
@@ -533,7 +493,8 @@ void Convert::vcf_convert()
                 gtIndex,
                 prePreINFOSTRUCTTMP,
                 INFOSTRUCTTMP,
-                VCFOPENCLASS
+                VCFOPENCLASS, 
+                chrSeqMap
             );
             continue;
         } else if (INFOSTRUCTTMP.CHROM == prePreINFOSTRUCTTMP.CHROM && INFOSTRUCTTMP.POS > prePreINFOSTRUCTTMP.POS && INFOSTRUCTTMP.POS < preINFOSTRUCTTMP.POS) {
@@ -586,6 +547,7 @@ void Convert::vcf_convert()
  * @param preINFOSTRUCTTMP    Previous site information
  * @param INFOSTRUCTTMP       Current location information
  * @param VCFOPENCLASS        
+ * @param chrSeqMap           A map from chromosome names to sequences.
  * 
  * @return void
 */
@@ -593,7 +555,8 @@ void Convert::merge_loci(
     const uint32_t& gtIndex, 
     VCFINFOSTRUCT& preINFOSTRUCTTMP, 
     VCFINFOSTRUCT& INFOSTRUCTTMP, 
-    VCFOPEN& VCFOPENCLASS
+    VCFOPEN& VCFOPENCLASS, 
+    const std::map<std::string, std::string>& chrSeqMap
 ) {
     // if (std::abs(static_cast<int>(preINFOSTRUCTTMP.REF.size()) - static_cast<int>(INFOSTRUCTTMP.REF.size())) > 50) {
     //     cerr << "[" << __func__ << "::" << getTime() << "] "
@@ -645,6 +608,9 @@ void Convert::merge_loci(
     preINFOSTRUCTTMP.REF = REF;
     preINFOSTRUCTTMP.lineVec[3] = REF;
 
+    // replace LEN
+    preINFOSTRUCTTMP.LEN = preINFOSTRUCTTMP.REF.size();
+
     // replace ALT
     if (isPreLonger) {
         for (auto & altSeq : INFOSTRUCTTMP.ALTVec) {
@@ -658,10 +624,78 @@ void Convert::merge_loci(
     preINFOSTRUCTTMP.ALTVec.insert(preINFOSTRUCTTMP.ALTVec.end(), INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end());
     preINFOSTRUCTTMP.ALT = join(preINFOSTRUCTTMP.ALTVec, ",");
     preINFOSTRUCTTMP.lineVec[4] = preINFOSTRUCTTMP.ALT;
+
+    // replace END
+    preINFOSTRUCTTMP.END = preINFOSTRUCTTMP.POS + preINFOSTRUCTTMP.REF.size() - 1;
+
+    // replace INFO
+    static const std::regex endReg(R"(END=\d+)");  // Regular expression
+    preINFOSTRUCTTMP.lineVec[7] = regex_replace(preINFOSTRUCTTMP.lineVec[7], endReg, "END=" + to_string(preINFOSTRUCTTMP.END));
+
+    // 7. The first base of refSeq is the same as the first base of qrySeq. (paragraph)
+    processSequences(preINFOSTRUCTTMP, chrSeqMap);
 }
 
 /**
- * Sort, deduplicate and delete the vector
+ * @brief Process the sequences in the given VCFINFOSTRUCT.
+ * 
+ * This function processes the sequences in the given VCFINFOSTRUCT. It adjusts the position and length of the sequences,
+ * replaces the reference sequence if necessary, and checks for identical reference and alternate sequences. It also
+ * checks for non-ATGCNatgcn characters in the sequences. If any of these checks fail, it clears the line and breaks
+ * the loop.
+ * 
+ * @param INFOSTRUCTTMP The VCFINFOSTRUCT to process.
+ * @param chrSeqMap A map from chromosome names to sequences.
+*/
+void Convert::processSequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std::string, std::string>& chrSeqMap) {
+    for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
+        string qrySeq = INFOSTRUCTTMP.ALTVec[i];
+
+        // 7. The first base of refSeq is the same as the first base of qrySeq. (paragraph)
+        if (qrySeq[0] != INFOSTRUCTTMP.REF[0] && (qrySeq.length() > 1 || INFOSTRUCTTMP.REF.length() > 1)) {
+            // Move the coordinates one step backward
+            INFOSTRUCTTMP.POS = INFOSTRUCTTMP.POS - 1;
+            INFOSTRUCTTMP.lineVec[1] = to_string(INFOSTRUCTTMP.POS);
+            INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.LEN + 1;
+            INFOSTRUCTTMP.REF = chrSeqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);
+            INFOSTRUCTTMP.lineVec[3] = INFOSTRUCTTMP.REF;  // Assigns a value to the Vector
+
+            // Add 'refSeq[0]' to all sequences in 'INFOSTRUCTTMP.ALTVec'
+            for (size_t j = 0; j < INFOSTRUCTTMP.ALTVec.size(); j++) {
+                INFOSTRUCTTMP.ALTVec[j] = INFOSTRUCTTMP.REF[0] + INFOSTRUCTTMP.ALTVec[j];
+            }
+
+            qrySeq = INFOSTRUCTTMP.ALTVec[i];
+        }
+
+        // 8. Check whether ref and qry sequences are the same and the same sites are skipped
+        if (qrySeq == INFOSTRUCTTMP.REF) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                 << "Warning: The REF and ALT sequences are the same, skipping this site -> "
+                 << INFOSTRUCTTMP.CHROM << " " 
+                 << INFOSTRUCTTMP.POS << endl;
+            INFOSTRUCTTMP.line.clear();
+            break;
+        }
+
+        // 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
+        smatch results;
+        std::regex atgcReg("[^ATGCNatgcn]");
+        if (regex_search(qrySeq, results, atgcReg)) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                 << "Warning: Sequence contains non-ATGCNatgcn characters, skip this site -> "
+                 << INFOSTRUCTTMP.CHROM << " " 
+                 << INFOSTRUCTTMP.POS << endl;
+            INFOSTRUCTTMP.line.clear();
+            break;
+        }
+    }
+
+    INFOSTRUCTTMP.lineVec[4] = join(INFOSTRUCTTMP.ALTVec, ",");
+}
+
+/**
+ * @brief Sort, deduplicate and delete the vector
  * 
  * @param vec    
  * 

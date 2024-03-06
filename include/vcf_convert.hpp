@@ -104,6 +104,7 @@ public:
      * @param preINFOSTRUCTTMP    Previous site information
      * @param INFOSTRUCTTMP       Current location information
      * @param VCFOPENCLASS        
+     * @param chrSeqMap A map from chromosome names to sequences.
      * 
      * @return void
     */
@@ -111,9 +112,30 @@ public:
         const uint32_t& gtIndex, 
         VCFINFOSTRUCT& preINFOSTRUCTTMP, 
         VCFINFOSTRUCT& INFOSTRUCTTMP, 
-        VCFOPEN& VCFOPENCLASS
+        VCFOPEN& VCFOPENCLASS, 
+        const std::map<std::string, std::string>& chrSeqMap
     );
 
+    /**
+     * @brief Process the sequences in the given VCFINFOSTRUCT.
+     * 
+     * This function processes the sequences in the given VCFINFOSTRUCT. It adjusts the position and length of the sequences,
+     * replaces the reference sequence if necessary, and checks for identical reference and alternate sequences. It also
+     * checks for non-ATGCNatgcn characters in the sequences. If any of these checks fail, it clears the line and breaks
+     * the loop.
+     * 
+     * @param INFOSTRUCTTMP The VCFINFOSTRUCT to process.
+     * @param chrSeqMap A map from chromosome names to sequences.
+    */
+    void processSequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std::string, std::string>& chrSeqMap);
+
+    /**
+     * @brief Sort, deduplicate and delete the vector
+     * 
+     * @param vec    
+     * 
+     * @return vec
+    */
     vector<string> sort_unique(vector<string> vec);
 };
 
