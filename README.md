@@ -165,11 +165,58 @@ graphvcf merge -v merged.vcf.gz --Paragraph xx.vcf.gz --BayesTyper xx.vcf.gz --V
 
 ## Citation
 
-[article_url]: https://www.biorxiv.org/content/10.1101/2023.07.19.549631v1
+[evg_article]: https://www.biorxiv.org/content/10.1101/2023.07.19.549631v1
+[bwa_article]: https://arxiv.org/abs/1303.3997v2
+[vg-map_article]: https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-1941-7
+[vg-giraffe-article]: https://www.science.org/doi/10.1126/science.abg8871
+[GraphAligner_article]: https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02157-2
+[Paragraph_article]: https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1909-7#citeas
+[BayesTyper_article]: https://www.nature.com/articles/s41588-018-0145-5
+[GraphTyper2_article]: https://www.nature.com/articles/s41467-019-13341-9
+[samtools_article]: https://academic.oup.com/gigascience/article/10/2/giab008/6137722?login=false
+[PanGenie_article]: https://www.nature.com/articles/s41588-022-01043-w
 
-Please cite:
+When using the following tools, please cite the corresponding articles:
 
-[A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline][article_url]
+*  `EVG`:
+
+    *  [A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline][evg_article]
+
+*  `vg map`: 
+
+    *  [Hickey, G., Heller, D., Monlong, J. et al. Genotyping structural variants in pangenome graphs using the vg toolkit. Genome Biol 21, 35 (2020).][vg-map_article]
+
+*  `vg giraffe`: 
+
+    *  [Jouni Sirén et al. Pangenomics enables genotyping of known structural variants in 5202 diverse genomes. Science 374, abg8871 (2021).][vg-giraffe-article]
+
+*  `GraphAligner`: 
+
+    *  [Rautiainen, M., Marschall, T. GraphAligner: rapid and versatile sequence-to-graph alignment. Genome Biol 21, 253 (2020).][GraphAligner_article]
+
+*  `Paragraph`: 
+
+    *  [Chen, S., Krusche, P., Dolzhenko, E. et al. Paragraph: a graph-based structural variant genotyper for short-read sequence data. Genome Biol 20, 291 (2019).][Paragraph_article]
+
+    *  [Li, H. Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv: Genomics. (2013).][bwa_article]
+
+*  `BayesTyper`: 
+
+    *  [Sibbesen, J.A., Maretty, L., The Danish Pan-Genome Consortium. et al. Accurate genotyping across variant classes and lengths using variant graphs. Nat Genet 50, 1054–1059 (2018).][BayesTyper_article]
+
+    *  [Li, H. Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv: Genomics. (2013).][bwa_article]
+
+*  `GraphTyper2`: 
+
+    *  [Eggertsson, H.P., Kristmundsdottir, S., Beyter, D. et al. GraphTyper2 enables population-scale genotyping of structural variation using pangenome graphs. Nat Commun 10, 5402 (2019).][GraphTyper2_article]
+
+    *  [Li, H. Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv: Genomics. (2013).][bwa_article]
+
+    *  [Danecek, P., Bonfield, J. K., Liddle, J. et al. Twelve years of SAMtools and BCFtools, GigaScience, Volume 10, Issue 2, February 2021, giab008][samtools_article]
+
+*  `PanGenie`: 
+
+    *  [Ebler, J., Ebert, P., Clarke, W.E. et al. Pangenome-based genome inference allows efficient and accurate genotyping across a wide spectrum of variant classes. Nat Genet 54, 518–525 (2022).][PanGenie_article]
 
 ## License
 

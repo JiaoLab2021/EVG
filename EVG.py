@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2024/03/06"
-__version__ = "1.1.4"
+__data__ = "2024/03/14"
+__version__ = "1.1.5"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -162,11 +162,9 @@ class MyEVG(MyParser):
             with open(self.samples_file, 'r') as f:
                 samples_list = f.readlines()
         except IOError as e:
-            logging.error(f'Error occurred while reading the file {self.samples_file}: {e}')
-            raise
+            raise ValueError(f'Error occurred while reading the file {self.samples_file}: {e}')
 
         if not samples_list:
-            logging.error(f'Error: The file {self.samples_file} is empty.')
             raise ValueError(f'Empty file: {self.samples_file}')
 
         for sample in samples_list:
@@ -174,11 +172,13 @@ class MyEVG(MyParser):
                 continue
 
             sample_list = sample.split()
-            if len(sample_list) > 1:
+            if len(sample_list) >= 2:
                 name = sample_list[0]
                 read1_path = os.path.abspath(sample_list[1])
                 read2_path = os.path.abspath(sample_list[2]) if len(sample_list) > 2 else ""
                 self.samples_map[name] = [read1_path, read2_path]
+            else:
+                raise ValueError(f"Invalid entry in samples file. Expected 2 or 3 fields, got: {sample}")
 
     # Convert reads files
     def read_convert(self, work_path: str, sample_name: str, read1: str, read2: str):

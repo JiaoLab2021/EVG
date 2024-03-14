@@ -10,6 +10,8 @@
 #include "zlib.h"
 #include <getopt.h>
 #include <sstream>
+#include <unordered_set>
+#include <set>
 
 #include "strip_split_join.hpp"
 #include "kseq.h"
@@ -127,7 +129,16 @@ public:
      * @param INFOSTRUCTTMP The VCFINFOSTRUCT to process.
      * @param chrSeqMap A map from chromosome names to sequences.
     */
-    void processSequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std::string, std::string>& chrSeqMap);
+    void process_sequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std::string, std::string>& chrSeqMap);
+
+    /**
+     * @brief Trim ALT alleles not seen in the genotype fields and update the genotypes accordingly.
+     * 
+     * @param VCFOPENCLASS The VCFOPEN object containing the VCF data.
+     * @param INFOSTRUCTTMP The INFOSTRUCTTMP object containing the VCF data.
+     * @param gtIndex The index of the GT field in the FORMAT column.
+    */
+    void trim_update_alt_alleles(VCFOPEN& VCFOPENCLASS, VCFINFOSTRUCT& INFOSTRUCTTMP, const uint32_t& gtIndex);
 
     /**
      * @brief Sort, deduplicate and delete the vector

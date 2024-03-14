@@ -200,20 +200,22 @@ void Convert::build_reference_index()
  * 8. Check whether ref and qry sequences are the same and the same sites are skipped.
  * 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
  * 10. Check whether the qry after replacement is the same. If yes, skip this site.
- * 11. Combine the genotypes. Convert to.|.. (PanGenie)
+ * 11. Combine the genotypes. Convert to.|. (PanGenie)
  * 12. Change the/in genotype to |. (PanGenie)
  * 13. Retain only the diploid variation in the genotype.
  * 14. Check if GT has more sequences than qry.
  * 15. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
  * 16. Duplicate positions.
+ * 17. Trim ALT alleles not seen in the genotype fields and update the genotypes accordingly.
 **/
 /**
  * @brief Convert vcf to the format required by graph genome tools
  * 
  * @return void
 **/
-void Convert::vcf_convert()
-{
+void Convert::vcf_convert() {
+    uint32_t gtIndex = 0;  // Genotype index
+
     // Regular expression
     const std::regex endReg(R"(END=\d+)");
     const std::regex svlenReg(R"(SVLEN=[-\d+,]*;)");
@@ -266,7 +268,7 @@ void Convert::vcf_convert()
         vector<string> formatVec = split(INFOSTRUCTTMP.FORMAT, ":");
         vector<string>::iterator gtItera = find(formatVec.begin(), formatVec.end(), "GT");
         // GT index
-        uint32_t gtIndex = distance(formatVec.begin(), gtItera);
+        gtIndex = distance(formatVec.begin(), gtItera);
         if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
             cerr << "[" << __func__ << "::" << getTime() << "] " 
                  << "Warning: The FORMAT field does not contain genotype (GT) information at the following location: " 
@@ -326,7 +328,7 @@ void Convert::vcf_convert()
         // 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
         if (INFOSTRUCTTMP.lineVec[4].find("<") != string::npos) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The query sequence contains the symbol '<', skipping this site -> " 
+                << "Warning: The query sequence contains the symbol '<'. Skipping this site -> " 
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << " " 
                 << INFOSTRUCTTMP.lineVec[4] << endl;
@@ -337,7 +339,7 @@ void Convert::vcf_convert()
         // 3. The first variation is greater than the read length. (paragraph)
         if (static_cast<uint32_t>(readLen_) > INFOSTRUCTTMP.POS) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The variant's start position is less than the read length, skipping this site -> "
+                << "Warning: The variant's start position is less than the read length. Skipping this site -> "
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -377,7 +379,7 @@ void Convert::vcf_convert()
         // 7. The first base of refSeq is the same as the first base of qrySeq. (paragraph)
         // 8. Check whether ref and qry sequences are the same and the same sites are skipped
         // 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
-        processSequences(INFOSTRUCTTMP, chrSeqMap);
+        process_sequences(INFOSTRUCTTMP, chrSeqMap);
 
 
         // 10. Check whether the qry after replacement is the same. If yes, skip this site.
@@ -386,7 +388,7 @@ void Convert::vcf_convert()
         for (const auto& it : INFOSTRUCTTMP.ALTVec) {
             if (count(INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end(), it) > 1) {
                 cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: Repeated alleles found, skipping this site -> "
+                    << "Warning: Repeated alleles found. Skipping this site -> "
                     << INFOSTRUCTTMP.CHROM << " " 
                     << INFOSTRUCTTMP.POS << endl;
                 INFOSTRUCTTMP.line.clear();
@@ -442,7 +444,7 @@ void Convert::vcf_convert()
             }
         } else {  // Skip the site
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                 << "Warning: Genotype (GT) not found in FORMAT column, skipping this site -> " 
+                 << "Warning: Genotype (GT) not found in FORMAT column. Skipping this site -> " 
                  << INFOSTRUCTTMP.CHROM << " " 
                  << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -463,7 +465,7 @@ void Convert::vcf_convert()
         // 15. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
         if (chrLenMap.at(INFOSTRUCTTMP.CHROM) == (INFOSTRUCTTMP.END)) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                 << "Warning: The variant's end position equals the chromosome length, skipping this site -> " 
+                 << "Warning: The variant's end position equals the chromosome length. Skipping this site -> " 
                  << INFOSTRUCTTMP.CHROM << " " 
                  << INFOSTRUCTTMP.POS << endl;
             continue;
@@ -512,6 +514,8 @@ void Convert::vcf_convert()
         // Add the replaced string to outStream
         if (INFOSTRUCTTMP.CHROM != prePreINFOSTRUCTTMP.CHROM || prePreINFOSTRUCTTMP.POS != INFOSTRUCTTMP.POS) {
             if (!prePreINFOSTRUCTTMP.CHROM.empty()) {
+                // 17. Trim ALT alleles not seen in the genotype fields and update the genotypes accordingly.
+                trim_update_alt_alleles(VCFOPENCLASS, prePreINFOSTRUCTTMP, gtIndex);
                 outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
             }
             prePreINFOSTRUCTTMP = std::move(preINFOSTRUCTTMP);
@@ -526,6 +530,10 @@ void Convert::vcf_convert()
             outStream.clear();
         }
     }
+
+    // 17. Trim ALT alleles not seen in the genotype fields and update the genotypes accordingly.
+    trim_update_alt_alleles(VCFOPENCLASS, prePreINFOSTRUCTTMP, gtIndex);
+    trim_update_alt_alleles(VCFOPENCLASS, preINFOSTRUCTTMP, gtIndex);
 
     outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
     outStream << join(preINFOSTRUCTTMP.lineVec, "\t") + "\n";
@@ -591,7 +599,7 @@ void Convert::merge_loci(
         if ((preGtVecTmp.back() != "0" && preGtVecTmp.back() != ".") || (gtVecTmp.back() == "0" || gtVecTmp.back() == ".")) {
             continue;
         }
-        
+
         // replace GT
         for (size_t j = 0; j < preGtVec.size(); j++) {
             if (gtVec[j] == "0" || gtVec[j] == "."){
@@ -633,7 +641,7 @@ void Convert::merge_loci(
     preINFOSTRUCTTMP.lineVec[7] = regex_replace(preINFOSTRUCTTMP.lineVec[7], endReg, "END=" + to_string(preINFOSTRUCTTMP.END));
 
     // 7. The first base of refSeq is the same as the first base of qrySeq. (paragraph)
-    processSequences(preINFOSTRUCTTMP, chrSeqMap);
+    process_sequences(preINFOSTRUCTTMP, chrSeqMap);
 }
 
 /**
@@ -647,7 +655,7 @@ void Convert::merge_loci(
  * @param INFOSTRUCTTMP The VCFINFOSTRUCT to process.
  * @param chrSeqMap A map from chromosome names to sequences.
 */
-void Convert::processSequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std::string, std::string>& chrSeqMap) {
+void Convert::process_sequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std::string, std::string>& chrSeqMap) {
     for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
         string qrySeq = INFOSTRUCTTMP.ALTVec[i];
 
@@ -671,7 +679,7 @@ void Convert::processSequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std:
         // 8. Check whether ref and qry sequences are the same and the same sites are skipped
         if (qrySeq == INFOSTRUCTTMP.REF) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                 << "Warning: The REF and ALT sequences are the same, skipping this site -> "
+                 << "Warning: The REF and ALT sequences are the same. Skipping this site -> "
                  << INFOSTRUCTTMP.CHROM << " " 
                  << INFOSTRUCTTMP.POS << endl;
             INFOSTRUCTTMP.line.clear();
@@ -692,6 +700,94 @@ void Convert::processSequences(VCFINFOSTRUCT& INFOSTRUCTTMP, const std::map<std:
     }
 
     INFOSTRUCTTMP.lineVec[4] = join(INFOSTRUCTTMP.ALTVec, ",");
+}
+
+
+/**
+ * @brief Trim ALT alleles not seen in the genotype fields and update the genotypes accordingly.
+ * 
+ * @param VCFOPENCLASS The VCFOPEN object containing the VCF data.
+ * @param INFOSTRUCTTMP The INFOSTRUCTTMP object containing the VCF data.
+ * @param gtIndex The index of the GT field in the FORMAT column.
+ */
+void Convert::trim_update_alt_alleles(VCFOPEN& VCFOPENCLASS, VCFINFOSTRUCT& INFOSTRUCTTMP, const uint32_t& gtIndex) {
+    // Create a set to store the alleles that appear in the genotypes
+    set<uint32_t> allelesInGenotypes;
+    allelesInGenotypes.insert(0);  // Add the reference allele
+
+    // Iterate over the samples
+    for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
+        // Split the genotype field
+        string gt = split(INFOSTRUCTTMP.lineVec[i], ":")[gtIndex];
+
+        // Split the alleles
+        vector<string> alleles = VCFOPENCLASS.gt_split(gt);
+
+        // Add the alleles to the set
+        for (const string& allele : alleles) {
+            try {
+                allelesInGenotypes.insert(stoul(allele));
+            } catch (const std::invalid_argument& e) {
+                // Ignore non-integer alleles
+            }
+        }
+    }
+
+    // If the number of alleles in the genotypes is equal to the number of alleles (REF + ALT), there is no need to trim
+    if (allelesInGenotypes.size() == INFOSTRUCTTMP.ALTVec.size() + 1) {
+        return;
+    }
+
+    // Remove the alleles that do not appear in any genotype and update the genotypes
+    vector<string> newALTVec;
+    set<uint32_t> allelesToRemove;
+    for (size_t i = 0; i < INFOSTRUCTTMP.ALTVec.size(); i++) {
+        uint32_t alleleIndex = i + 1;  // +1 because REF is 0
+        if (allelesInGenotypes.count(alleleIndex) == 0) {
+            allelesToRemove.insert(alleleIndex);
+        } else {
+            newALTVec.push_back(INFOSTRUCTTMP.ALTVec[i]);
+        }
+    }
+
+    // Update the ALT field
+    INFOSTRUCTTMP.ALTVec = newALTVec;
+    // Update the ALT field in the line vector
+    INFOSTRUCTTMP.lineVec[4] = join(INFOSTRUCTTMP.ALTVec, ",");
+
+    // Update the genotypes
+    for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
+        // Split the genotype field
+        vector<string> gtVec = split(INFOSTRUCTTMP.lineVec[i], ":");
+        string gt = gtVec[gtIndex];
+
+        // Split the alleles
+        vector<string> alleles = VCFOPENCLASS.gt_split(gt);
+
+        // Update the alleles
+        for (string& allele : alleles) {
+            try {
+                uint32_t oldAlleleNumber = stoul(allele);
+                uint32_t newAlleleNumber = oldAlleleNumber;
+
+                // For each allele to remove, if it is less than the current allele, decrement the new allele number
+                for (const auto& alleleToRemove : allelesToRemove) {
+                    if (alleleToRemove < oldAlleleNumber) {
+                        --newAlleleNumber;
+                    }
+                }
+
+                // Update the allele
+                allele = to_string(newAlleleNumber);
+            } catch (const std::invalid_argument& e) {
+                // Ignore non-integer alleles
+            }
+        }
+
+        // Update the genotype field
+        gtVec[gtIndex] = join(alleles, "|");
+        INFOSTRUCTTMP.lineVec[i] = join(gtVec, ":");
+    }
 }
 
 /**
