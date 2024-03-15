@@ -199,7 +199,7 @@ void Convert::build_reference_index()
  * 7. The first base of refSeq is the same as the first base of qrySeq.
  * 8. Check whether ref and qry sequences are the same and the same sites are skipped.
  * 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
- * 10. Check whether the qry after replacement is the same. If yes, skip this site.
+ * 10. Check whether the qry after replacement is the same. If yes, skip this site. (BayesTyper, Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed)
  * 11. Combine the genotypes. Convert to.|. (PanGenie)
  * 12. Change the/in genotype to |. (PanGenie)
  * 13. Retain only the diploid variation in the genotype.
@@ -218,7 +218,9 @@ void Convert::vcf_convert() {
 
     // Regular expression
     const std::regex endReg(R"(END=\d+)");
-    const std::regex svlenReg(R"(SVLEN=[-\d+,]*;)");
+    const std::regex svlenReg1(R"(SVLEN=[-\d+,]*;)");
+    const std::regex svlenReg2(R"(;SVLEN=[-\d+,]*)");
+    const std::regex svlenReg3(R"(SVLEN=[-\d+,]*)");
 
     // Sequence information on the genome
     const map<string, string>& chrSeqMap = refIndexS_.chrSeqMap;
@@ -373,7 +375,9 @@ void Convert::vcf_convert() {
 
 
         // 6. Graphtyper2 will report an error when it encounters SVLEN=1,2.
-        INFOSTRUCTTMP.lineVec[7] = regex_replace(INFOSTRUCTTMP.lineVec[7], svlenReg, "");
+        INFOSTRUCTTMP.lineVec[7] = regex_replace(INFOSTRUCTTMP.lineVec[7], svlenReg1, "");
+        INFOSTRUCTTMP.lineVec[7] = regex_replace(INFOSTRUCTTMP.lineVec[7], svlenReg2, "");
+        INFOSTRUCTTMP.lineVec[7] = regex_replace(INFOSTRUCTTMP.lineVec[7], svlenReg3, ".");
 
 
         // 7. The first base of refSeq is the same as the first base of qrySeq. (paragraph)
@@ -382,19 +386,8 @@ void Convert::vcf_convert() {
         process_sequences(INFOSTRUCTTMP, chrSeqMap);
 
 
-        // 10. Check whether the qry after replacement is the same. If yes, skip this site.
-        // bayestyper Requirements (A ATG,TGT,ATG)
-        // Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed.
-        for (const auto& it : INFOSTRUCTTMP.ALTVec) {
-            if (count(INFOSTRUCTTMP.ALTVec.begin(), INFOSTRUCTTMP.ALTVec.end(), it) > 1) {
-                cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: Repeated alleles found. Skipping this site -> "
-                    << INFOSTRUCTTMP.CHROM << " " 
-                    << INFOSTRUCTTMP.POS << endl;
-                INFOSTRUCTTMP.line.clear();
-                break;
-            }
-        }
+        // 10. Check whether the qry after replacement is the same. If yes, skip this site. (BayesTyper, Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed)
+        check_repeated_alleles(INFOSTRUCTTMP);
 
 
         uint32_t maxGT = 0; // Record the largest GT, see if there are more sequences than qry, and skip this site if there are more
@@ -473,9 +466,7 @@ void Convert::vcf_convert() {
 
 
         // Check whether the information is cleared. If it is cleared, skip it
-        if (INFOSTRUCTTMP.line.empty()) {
-            continue;
-        }
+        if (INFOSTRUCTTMP.line.empty()) continue;
 
 
         // 16. Duplicate positions
@@ -516,7 +507,13 @@ void Convert::vcf_convert() {
             if (!prePreINFOSTRUCTTMP.CHROM.empty()) {
                 // 17. Trim ALT alleles not seen in the genotype fields and update the genotypes accordingly.
                 trim_update_alt_alleles(VCFOPENCLASS, prePreINFOSTRUCTTMP, gtIndex);
-                outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
+
+                // 10. Check whether the qry after replacement is the same. If yes, skip this site. (BayesTyper, Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed)
+                check_repeated_alleles(prePreINFOSTRUCTTMP);
+
+                if (!prePreINFOSTRUCTTMP.line.empty()) {
+                    outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
+                }
             }
             prePreINFOSTRUCTTMP = std::move(preINFOSTRUCTTMP);
             preINFOSTRUCTTMP = std::move(INFOSTRUCTTMP);
@@ -535,8 +532,16 @@ void Convert::vcf_convert() {
     trim_update_alt_alleles(VCFOPENCLASS, prePreINFOSTRUCTTMP, gtIndex);
     trim_update_alt_alleles(VCFOPENCLASS, preINFOSTRUCTTMP, gtIndex);
 
-    outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
-    outStream << join(preINFOSTRUCTTMP.lineVec, "\t") + "\n";
+    // 10. Check whether the qry after replacement is the same. If yes, skip this site. (BayesTyper, Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed)
+    check_repeated_alleles(prePreINFOSTRUCTTMP);
+    check_repeated_alleles(preINFOSTRUCTTMP);
+
+    if (!prePreINFOSTRUCTTMP.line.empty()) {
+        outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
+    }
+    if (!preINFOSTRUCTTMP.line.empty()) {
+        outStream << join(preINFOSTRUCTTMP.lineVec, "\t") + "\n";
+    }
 
     if (outStream.tellp() > 0) {  //Write for the last time
         string outTxt = outStream.str();
@@ -789,6 +794,32 @@ void Convert::trim_update_alt_alleles(VCFOPEN& VCFOPENCLASS, VCFINFOSTRUCT& INFO
         INFOSTRUCTTMP.lineVec[i] = join(gtVec, ":");
     }
 }
+
+
+/**
+ * @brief Checks for repeated alleles in the given INFOSTRUCT object and clears the line if any are found.
+ * 
+ * @param infoStruct An INFOSTRUCT object that contains the alleles to be checked.
+ * 
+ * This function iterates over the ALTVec member of the given INFOSTRUCT object. If it finds any repeated alleles,
+ * it prints a warning message to the standard error stream, clears the line member of the INFOSTRUCT object, and
+ * then breaks out of the loop.
+ * 
+ * Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed (BayesTyper)
+ */
+void Convert::check_repeated_alleles(VCFINFOSTRUCT& infoStruct) {
+    for (const auto& it : infoStruct.ALTVec) {
+        if (count(infoStruct.ALTVec.begin(), infoStruct.ALTVec.end(), it) > 1) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                << "Warning: Repeated alleles found. Skipping this site -> "
+                << infoStruct.CHROM << " " 
+                << infoStruct.POS << endl;
+            infoStruct.line.clear();
+            break;
+        }
+    }
+}
+
 
 /**
  * @brief Sort, deduplicate and delete the vector

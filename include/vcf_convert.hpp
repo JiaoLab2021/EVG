@@ -141,6 +141,19 @@ public:
     void trim_update_alt_alleles(VCFOPEN& VCFOPENCLASS, VCFINFOSTRUCT& INFOSTRUCTTMP, const uint32_t& gtIndex);
 
     /**
+     * @brief Checks for repeated alleles in the given INFOSTRUCT object and clears the line if any are found.
+     * 
+     * @param infoStruct An INFOSTRUCT object that contains the alleles to be checked.
+     * 
+     * This function iterates over the ALTVec member of the given INFOSTRUCT object. If it finds any repeated alleles,
+     * it prints a warning message to the standard error stream, clears the line member of the INFOSTRUCT object, and
+     * then breaks out of the loop.
+     * 
+     * Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed (BayesTyper)
+     */
+    void check_repeated_alleles(VCFINFOSTRUCT& infoStruct);
+
+    /**
      * @brief Sort, deduplicate and delete the vector
      * 
      * @param vec    
