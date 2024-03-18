@@ -170,22 +170,26 @@ def downsample(
         read1_out = read1
         read2_out = read2
     else:
-        read1_out = f"sample.{need_ratio}.{os.path.basename(read1)}".replace(".gz", "").replace(".GZ", "")
+        read1_out = f"sample.{need_ratio}.{os.path.basename(read1)}"
+        if not read1_out.endswith(('.gz', '.GZ')):
+            read1_out += ".gz"
         read1_out = os.path.abspath(read1_out)
 
         if read2:
-            read2_out = f"sample.{need_ratio}.{os.path.basename(read2)}".replace(".gz", "").replace(".GZ", "")
+            read2_out = f"sample.{need_ratio}.{os.path.basename(read2)}"
+            if not read2_out.endswith(('.gz', '.GZ')):
+                read2_out += ".gz"
             read2_out = os.path.abspath(read2_out)
 
             # Check if the file exists
             if restart:
                 file_size1 = getsize(read1_out)
                 file_size2 = getsize(read2_out)
-                if file_size1 > 0 and file_size2 > 0:
+                if file_size1 > 22 and file_size2 > 22:
                     return "", "", log_out, os.path.abspath(read1_out), os.path.abspath(read2_out)
 
-            cmd1 = f"{code_path} -i {read1} -f {need_ratio} 1>{read1_out}"
-            cmd2 = f"{code_path} -i {read2} -f {need_ratio} 1>{read2_out}"
+            cmd1 = f"{code_path} -i {read1} -f {need_ratio} 2>/dev/stderr | gzip > {read1_out}"
+            cmd2 = f"{code_path} -i {read2} -f {need_ratio} 2>/dev/stderr | gzip > {read2_out}"
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 to_do = []
                 future1 = executor.submit(run_cmd.run, cmd1, env_path)
@@ -198,13 +202,13 @@ def downsample(
                     if log_out_tmp:
                         log_out = log_out_tmp
         else:  # Third-generation sequencing data or second-generation single-end sequencing
-            cmd = f"{code_path} -i {read1} -f {need_ratio} 1>{read1_out}"
+            cmd = f"{code_path} -i {read1} -f {need_ratio} 2>/dev/stderr | gzip > {read1_out}"
             read2_out = ""
 
             # Check if the file exists
             if restart:
                 file_size1 = getsize(read1_out)
-                if file_size1 > 0:
+                if file_size1 > 22:
                     return stdout, stderr, log_out, os.path.abspath(read1_out), ""
 
             # submit task
