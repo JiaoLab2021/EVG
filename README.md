@@ -115,10 +115,10 @@ EVG -r test.fa -v test.vcf.gz -s sample.txt --software VG-MAP VG-Giraffe GraphAl
 
 ```shell
 # Sample File
-sample1 path_to_sample1_read1 path_to_sample1_read2
-sample2 path_to_sample2_read1 path_to_sample2_read2
+sample1 sample1.r1.fq.gz sample1.r2.fq.gz
+sample2 sample2.r1.fq.gz sample2.r2.fq.gz
 ...
-sampleN path_to_sampleN_read1 path_to_sampleN_read2
+sampleN sampleN.r1.fq.gz sampleN.r2.fq.gz
 ```
 
 Please note that the Sample file must be formatted exactly as shown above, where each sample is listed with its corresponding read files.
@@ -163,6 +163,10 @@ If you already have results from different genotyping software and do not need t
 graphvcf merge -v merged.vcf.gz --Paragraph xx.vcf.gz --BayesTyper xx.vcf.gz --VG-Giraffe xx.vcf.gz -n sample1 -o sample.vcf.gz
 ```
 
+[graphvcf_url]: https://github.com/JiaoLab2021/EVG/wiki/graphvcf-usage
+
+Detailed instructions for using `graphvcf` can be found on the [Wiki page][graphvcf_url].
+
 ## Citation
 
 [evg_article]: https://www.biorxiv.org/content/10.1101/2023.07.19.549631v1
@@ -184,39 +188,39 @@ When using the following tools, please cite the corresponding articles:
 
 *  `vg map`: 
 
-    *  [Hickey, G., Heller, D., Monlong, J. et al. Genotyping structural variants in pangenome graphs using the vg toolkit. Genome Biol 21, 35 (2020).][vg-map_article]
+    *  Hickey, G., Heller, D., Monlong, J. et al. [Genotyping structural variants in pangenome graphs using the vg toolkit.][vg-map_article] Genome Biol 21, 35 (2020).
 
 *  `vg giraffe`: 
 
-    *  [Jouni Sirén et al. Pangenomics enables genotyping of known structural variants in 5202 diverse genomes. Science 374, abg8871 (2021).][vg-giraffe-article]
+    *  Jouni Sirén et al. [Pangenomics enables genotyping of known structural variants in 5202 diverse genomes.][vg-giraffe-article] Science 374, abg8871 (2021).
 
 *  `GraphAligner`: 
 
-    *  [Rautiainen, M., Marschall, T. GraphAligner: rapid and versatile sequence-to-graph alignment. Genome Biol 21, 253 (2020).][GraphAligner_article]
+    *  Rautiainen, M., Marschall, T. [GraphAligner: rapid and versatile sequence-to-graph alignment.][GraphAligner_article] Genome Biol 21, 253 (2020).
 
 *  `Paragraph`: 
 
-    *  [Chen, S., Krusche, P., Dolzhenko, E. et al. Paragraph: a graph-based structural variant genotyper for short-read sequence data. Genome Biol 20, 291 (2019).][Paragraph_article]
+    *  Chen, S., Krusche, P., Dolzhenko, E. et al. [Paragraph: a graph-based structural variant genotyper for short-read sequence data.][Paragraph_article] Genome Biol 20, 291 (2019).
 
-    *  [Li, H. Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv: Genomics. (2013).][bwa_article]
+    *  Li, H. [Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM.][bwa_article] arXiv: Genomics. (2013).
 
 *  `BayesTyper`: 
 
-    *  [Sibbesen, J.A., Maretty, L., The Danish Pan-Genome Consortium. et al. Accurate genotyping across variant classes and lengths using variant graphs. Nat Genet 50, 1054–1059 (2018).][BayesTyper_article]
+    *  Sibbesen, J.A., Maretty, L., [The Danish Pan-Genome Consortium. et al. Accurate genotyping across variant classes and lengths using variant graphs.][BayesTyper_article] Nat Genet 50, 1054–1059 (2018).
 
-    *  [Li, H. Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv: Genomics. (2013).][bwa_article]
+    *  Li, H. [Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM.][bwa_article] arXiv: Genomics. (2013).
 
 *  `GraphTyper2`: 
 
-    *  [Eggertsson, H.P., Kristmundsdottir, S., Beyter, D. et al. GraphTyper2 enables population-scale genotyping of structural variation using pangenome graphs. Nat Commun 10, 5402 (2019).][GraphTyper2_article]
+    *  Eggertsson, H.P., Kristmundsdottir, S., Beyter, D. et al. [GraphTyper2 enables population-scale genotyping of structural variation using pangenome graphs.][GraphTyper2_article] Nat Commun 10, 5402 (2019).
 
-    *  [Li, H. Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv: Genomics. (2013).][bwa_article]
+    *  Li, H. [Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM.][bwa_article] arXiv: Genomics. (2013).
 
-    *  [Danecek, P., Bonfield, J. K., Liddle, J. et al. Twelve years of SAMtools and BCFtools, GigaScience, Volume 10, Issue 2, February 2021, giab008][samtools_article]
+    *  Danecek, P., Bonfield, J. K., Liddle, J. et al. [Twelve years of SAMtools and BCFtools.][samtools_article] GigaScience, Volume 10, Issue 2, February 2021, giab008
 
 *  `PanGenie`: 
 
-    *  [Ebler, J., Ebert, P., Clarke, W.E. et al. Pangenome-based genome inference allows efficient and accurate genotyping across a wide spectrum of variant classes. Nat Genet 54, 518–525 (2022).][PanGenie_article]
+    *  Ebler, J., Ebert, P., Clarke, W.E. et al. [Pangenome-based genome inference allows efficient and accurate genotyping across a wide spectrum of variant classes.][PanGenie_article] Nat Genet 54, 518–525 (2022).
 
 ## License
 
