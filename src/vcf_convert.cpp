@@ -511,7 +511,7 @@ void Convert::vcf_convert() {
                 // 10. Check whether the qry after replacement is the same. If yes, skip this site. (BayesTyper, Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed)
                 check_repeated_alleles(prePreINFOSTRUCTTMP);
 
-                if (!prePreINFOSTRUCTTMP.line.empty()) {
+                if (!prePreINFOSTRUCTTMP.line.empty() && !prePreINFOSTRUCTTMP.ALTVec.empty()) {  // (BayesTyper, Assertion `!alt_allele->empty()' failed)
                     outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
                 }
             }
@@ -536,10 +536,10 @@ void Convert::vcf_convert() {
     check_repeated_alleles(prePreINFOSTRUCTTMP);
     check_repeated_alleles(preINFOSTRUCTTMP);
 
-    if (!prePreINFOSTRUCTTMP.line.empty()) {
+    if (!prePreINFOSTRUCTTMP.line.empty() && !prePreINFOSTRUCTTMP.ALTVec.empty()) {
         outStream << join(prePreINFOSTRUCTTMP.lineVec, "\t") + "\n";
     }
-    if (!preINFOSTRUCTTMP.line.empty()) {
+    if (!preINFOSTRUCTTMP.line.empty() && !preINFOSTRUCTTMP.ALTVec.empty()) {
         outStream << join(preINFOSTRUCTTMP.lineVec, "\t") + "\n";
     }
 

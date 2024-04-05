@@ -255,7 +255,7 @@ void VCFMerge::build_basefile_index() {
             if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
                 // Annotation information
                 mergeVcfStruct_.headInfo += "##FORMAT=<ID=SO,Number=1,Type=String,Description=\"Software\">\n";
-                mergeVcfStruct_.headInfo += "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Total filtered read depth used for genotyping.\">\n";
+                mergeVcfStruct_.headInfo += "##FORMAT=<ID=DP,Number=1,Type=Float,Description=\"Total filtered read depth used for genotyping.\">\n";
                 mergeVcfStruct_.headInfo += "##FORMAT=<ID=ADP,Number=1,Type=Float,Description=\"Average depth\">\n";
                 mergeVcfStruct_.headInfo += "##FORMAT=<ID=NDP,Number=1,Type=Float,Description=\"Depth after z-score normalization\">\n";
 
