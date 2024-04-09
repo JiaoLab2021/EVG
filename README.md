@@ -169,7 +169,7 @@ Detailed instructions for using `graphvcf` can be found on the [Wiki page][graph
 
 ## Citation
 
-[evg_article]: https://www.biorxiv.org/content/10.1101/2023.07.19.549631v1
+[evg_article]: https://doi.org/10.1186/s13059-024-03239-1
 [bwa_article]: https://arxiv.org/abs/1303.3997v2
 [vg-map_article]: https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-1941-7
 [vg-giraffe-article]: https://www.science.org/doi/10.1126/science.abg8871
@@ -184,7 +184,7 @@ When using the following tools, please cite the corresponding articles:
 
 *  `EVG`:
 
-    *  [A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline][evg_article]
+    *  Du, ZZ., He, JB. & Jiao, WB. [A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline.][evg_article] Genome Biol 25, 91 (2024).
 
 *  `vg map`: 
 
