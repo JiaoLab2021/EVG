@@ -84,6 +84,10 @@ conda update pysam
 
 The default version of `PanGenie` installed by conda is `2.1.0`, but `EVG` requires version `3.0` or higher. If you choose `PanGenie` as your downstream tool, please remove the current `PanGenie` from your conda environment and manually install the latest version of `PanGenie`, then add it to your environment variables.
 
+**Note**
+
+The default version of `PanGenie` installed by conda is `2.1.0`, but `EVG` requires version `3.0` or higher. If you choose `PanGenie` as your downstream tool, please remove the current `PanGenie` from your conda environment and manually install the latest version of `PanGenie`, then add it to your environment variables.
+
 **Test**
 
 To verify that the software has been installed correctly, perform a test run using the following steps:
