@@ -80,9 +80,6 @@ conda install -c bioconda -c conda-forge -c kdm801 tabix bwa samtools vg graphal
 # "ModuleNotFoundError: No module named 'pysam.bcftools'", therefore it is recommended to upgrade pysam in this case
 conda update pysam
 ```
-**Note**
-
-The default version of `PanGenie` installed by conda is `2.1.0`, but `EVG` requires version `3.0` or higher. If you choose `PanGenie` as your downstream tool, please remove the current `PanGenie` from your conda environment and manually install the latest version of `PanGenie`, then add it to your environment variables.
 
 **Note**
 
