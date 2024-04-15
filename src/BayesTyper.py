@@ -23,25 +23,22 @@ def main(
     # log
     stdout = stderr = log_out = ""
 
-    # ----------------------------------- ln -sf ----------------------------------- #
-    # First traverse the bam file and soft-link it to the current working path
-    for sample_name, value in bam_infos_map.items():
-        bam_file = value["bam"]
-        # ln
-        cmd = f"ln -sf {bam_file} {os.path.join(bayestyper_sample_path, os.path.basename(bam_file))}"
-        # submit task
-        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-        # Report an error if there is a problem with the exit code
-        if log_out:
-            return stdout, stderr, log_out, ""
-
     # ----------------------------------- bayesTyper k-mers ----------------------------------- #
     try:
         with open(bam2bayestyper_file, "r") as f:
             for information in f.readlines():
                 informations_split = information.strip().split()
+                sample_name = informations_split[0]  # Sample name
                 prefix = informations_split[2]  # Makefile prefix
                 bam_file = informations_split[2]
+
+                # ----------------------------------- ln -sf ----------------------------------- #
+                cmd = f"ln -sf {bam_infos_map[sample_name]['bam']} {bam_file}"
+                # submit task
+                stdout, stderr, log_out = run_cmd.run(cmd, env_path)
+                # Report an error if there is a problem with the exit code
+                if log_out:
+                    return stdout, stderr, log_out, ""
 
                 # kmc
                 cmd = f"kmc -k55 -ci1 -t1 -fbam {bam_file} {prefix} {bayestyper_sample_path}"

@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2024/04/05"
-__version__ = "1.1.6"
+__data__ = "2024/04/15"
+__version__ = "1.1.7"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -458,6 +458,10 @@ class MyEVG(MyParser):
 
     # bwa
     def run_bwa(self):
+        # Check whether bwa needs to be run
+        if not any(s in self.args.software for s in ["GraphTyper2", "BayesTyper", "Paragraph"]):
+            return
+
         self.logger.error("")
         self.logger.error(f"{self.flag} BWA MEM {self.flag}")
 

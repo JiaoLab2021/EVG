@@ -84,7 +84,8 @@ def bam2bayestyper(read_infos_map, number: int):
     # 'number' samples can be processed each time
     num = 0
     num_tmp = 0
-    for sample_name, value in read_infos_map.items():
+    for sample_name in sorted(read_infos_map.keys()):
+        value = read_infos_map[sample_name]
         num += 1
         out_txt += sample_name + "\tF\t" + os.path.join(work_dir, "BayesTyper", str(num_tmp), os.path.basename(value["bam"])) + "\n"
         out_samplename_list.append(sample_name)
@@ -124,7 +125,8 @@ def bam2paragraph(read_infos_map, number: int):
 
     # 'number' samples can be processed each time
     num = 0
-    for sample_name, value in read_infos_map.items():
+    for sample_name in sorted(read_infos_map.keys()):
+        value = read_infos_map[sample_name]
         num += 1
         out_txt += sample_name + "\t" + value["bam"] + "\t" + str(value["depth"]) + "\t" + str(value["length"]) + "\n"
         out_samplename_list.append(sample_name)
