@@ -31,6 +31,12 @@ Please note the following requirements before building and running the software:
 * C++ compiler that supports `C++17` or higher, and the `zlib` library installed (we recommend using GCC version `"7.3.0"` or newer) for building `graphvcf` and `fastAQ`
 * The following dependencies must also be installed: [tabix][tabix_url], [bwa][bwa_url], [samtools][samtools_url], [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
+## Recent major updates:
+
+(2024/05/06, v1.1.8)
+
+* In version `v1.1.7`, the final merging process was unable to locate the positions of samples in Paragraph and BayesTyper. This issue has been fixed in version `v1.1.8`.
+
 ## Installation
 
 **Install via Anaconda**

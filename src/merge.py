@@ -15,9 +15,6 @@ def main(
     sample_name: str,
     genotype_vcf_file_list: list,
     select_software_list: list, 
-    bam2bayestyper_samplename_list: list, 
-    bam2paragraph_samplename_list: list, 
-    number: int, 
     env_path, 
     restart: bool
 ):
@@ -35,26 +32,10 @@ def main(
     cmd = f"{code_path} -v {line_vcf_file} "
 
     for index in range(len(genotype_vcf_file_list)):
-
         file = genotype_vcf_file_list[index]
         software = select_software_list[index]
 
-        if software == "BayesTyper":
-            try:
-                fileIndex = bam2bayestyper_samplename_list.index(sample_name)
-                fileTmp = file[fileIndex//number]
-                cmd += f"--{software} {fileTmp} "
-            except IndexError:
-                continue
-        elif software == "Paragraph":
-            try:
-                fileIndex = bam2paragraph_samplename_list.index(sample_name)
-                fileTmp = file[fileIndex//number]
-                cmd += f"--{software} {fileTmp} "
-            except IndexError:
-                continue
-        else:
-            cmd += f"--{software} {file} "
+        cmd += f"--{software} {file} "
             
     cmd += f"-n {sample_name} -o {merge_vcf_file}"
 

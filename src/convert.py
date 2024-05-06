@@ -165,7 +165,7 @@ def downsample(
     read_depth = fastq_base / fasta_base
 
     if need_ratio >= 1:  # If the sequencing data is less than the set value, it will be skipped and no downsampling will be performed
-        log = "Insufficient sequencing data ({:.2f}x/{}x), skip downsampling step.".format(read_depth, need_depth)
+        log = "Insufficient sequencing data ({:.2f}x/{}x), skip downsampling step: {}, {}".format(read_depth, need_depth, os.path.basename(read1), os.path.basename(read2) if read2 else "")
         logger.error(log)
         read1_out = read1
         read2_out = read2
@@ -256,7 +256,7 @@ def vcf_convert(
 
     # ################################### sort ###################################
     # vcfsort
-    cmd = f"""grep '#' {vcf_out_name} > {vcf_out_name+".sort"} && grep -v '#' {vcf_out_name} | sort --parallel=10 -k 1,1 -k 2,2n -t $'\t' | awk -F "\t" '!a[$1,$2]++' 1>>{vcf_out_name+".sort"} && mv {vcf_out_name+".sort"} {vcf_out_name}"""
+    cmd = f"""grep '#' {vcf_out_name} > {vcf_out_name+".sort"} && grep -v '#' {vcf_out_name} | sort -k 1,1 -k 2,2n -t $'\t' | awk -F "\t" '!a[$1,$2]++' 1>>{vcf_out_name+".sort"} && mv {vcf_out_name+".sort"} {vcf_out_name}"""
 
     # Check if the file exists
     if restart:
@@ -275,9 +275,14 @@ def vcf_convert(
         cmd = f"cat {vcf_out_name}" + ''' | awk -F '\t' 'BEGIN{FS=OFS="\t"} {if($0~/#/) {print $0} else if(length($4)<50 && length($5)<50) {pass} else {print $0}}' > ''' + sv_out_name
         # Check if the file exists
         if restart:
-            file_size = getsize(sv_out_name)
-            if file_size <= 0:
+            # If vcf_out_name does not exist but vcf_out_name+gz does, indicating it's a file compressed using bgzip, then use zcat to open the file.
+            if getsize(vcf_out_name) <= 0 and getsize(vcf_out_name + ".gz") > 28:
+                cmd = "z" + cmd
+
+            if getsize(sv_out_name) <= 0 and (getsize(vcf_out_name) > 0 or getsize(vcf_out_name + ".gz") > 28):
                 stdout, stderr, log_out = run_cmd.run(cmd, env_path)
+            else:
+                sv_out_name = vcf_out_name
         else:  # If restart is not specified, run directly
             stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:

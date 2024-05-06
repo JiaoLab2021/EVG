@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2024/04/15"
-__version__ = "1.1.7"
+__data__ = "2024/05/06"
+__version__ = "1.1.8"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -112,8 +112,8 @@ class MyEVG(MyParser):
         # Converted file path
         self.convert_file_map = {}  # map<sample_name, reference: "refernece", vcf: "vcf", sv: "sv", region: "region", map_index: "map_index", giraffe_index: "giraffe_index", GraphAligner_index "GraphAligner_index", PanGenie_index: "PanGenie_index">
         # genotype vcf path
-        self.bam2bayestyper_samplename_list = []
-        self.bam2paragraph_samplename_list = []
+        self.bayestyper_vcf_map = {}  # map<sample_name, vcf_path>
+        self.paragraph_vcf_map = {}  # map<sample_name, vcf_path>
         self.genotype_vcf_map = {}  # map<sample_name, map<software, vcf_path> >
         # merge vcf path
         self.merge_vcf_map = {}
@@ -517,9 +517,9 @@ class MyEVG(MyParser):
         if "GraphTyper2" in self.args.software:
             bam2graphtyper_file = bwa.bam2graphtyper(self.read_infos_map)
         if "BayesTyper" in self.args.software:
-            self.bam2bayestyper_samplename_list, bam2bayestyper_file_list = bwa.bam2bayestyper(self.read_infos_map, self.args.number)
+            self.bayestyper_vcf_map, bam2bayestyper_file_list = bwa.bam2bayestyper(self.read_infos_map, self.args.number)
         if "Paragraph" in self.args.software:
-            self.bam2paragraph_samplename_list, bam2paragraph_file_list = bwa.bam2paragraph(self.read_infos_map, self.args.number)
+            self.paragraph_vcf_map, bam2paragraph_file_list = bwa.bam2paragraph(self.read_infos_map, self.args.number)
 
         # ################################### genotype ###################################
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.jobs) as executor:
@@ -651,16 +651,12 @@ class MyEVG(MyParser):
                     if log_out:
                         raise SystemExit(log_out.strip())
                     # update genotype_vcf_map
-                    if software in ["VG-MAP", "VG-Giraffe", "GraphAligner", "PanGenie"]:
+                    if software in ["VG-MAP", "VG-Giraffe", "GraphAligner", "PanGenie", "BayesTyper", "Paragraph"]:
                         if software not in self.genotype_vcf_map:
                             self.genotype_vcf_map[software] = {}
                         self.genotype_vcf_map[software][sample_name] = vcf_file
                     elif software == "GraphTyper2":
                         self.genotype_vcf_map[software] = vcf_file
-                    else:
-                        if software not in self.genotype_vcf_map:
-                            self.genotype_vcf_map[software] = []
-                        self.genotype_vcf_map[software].append(vcf_file)
                 except Exception as exc:
                     self.logger.error(f'{software} execution for {sample_name} generated an exception: {exc}')
 
@@ -677,7 +673,7 @@ class MyEVG(MyParser):
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.jobs) as executor:
             future_to_sample = {}  # Used to track the sample name corresponding to each future
 
-            sample_name_tmp_list = self.read_infos_map.keys()  # Get all samples_name first
+            sample_name_tmp_list = sorted(self.read_infos_map.keys())  # Get all samples_name first
             for sample_name_tmp in sample_name_tmp_list:
                 vcf_out_tmp_list = []  # Temporary list for submitting tasks
                 software_tmp_list = []  # Temporary list for submitting tasks
@@ -687,10 +683,21 @@ class MyEVG(MyParser):
                         continue
                     software_tmp_list.append(software)
                     if isinstance(self.genotype_vcf_map[software], dict):
-                        if sample_name_tmp not in self.genotype_vcf_map[software].keys():  # sample_name is not in the result file
-                            self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
-                            continue
-                        vcf_out_tmp_list.append(self.genotype_vcf_map[software][sample_name_tmp])
+                        if software == "BayesTyper":
+                            if sample_name_tmp not in self.bayestyper_vcf_map.keys():
+                                self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
+                                continue
+                            vcf_out_tmp_list.append(self.bayestyper_vcf_map[sample_name_tmp])
+                        elif software == "Paragraph":
+                            if sample_name_tmp not in self.paragraph_vcf_map.keys():
+                                self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
+                                continue
+                            vcf_out_tmp_list.append(self.paragraph_vcf_map[sample_name_tmp])
+                        else:
+                            if sample_name_tmp not in self.genotype_vcf_map[software].keys():  # sample_name is not in the result file
+                                self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
+                                continue
+                            vcf_out_tmp_list.append(self.genotype_vcf_map[software][sample_name_tmp])
                     else:
                         vcf_out_tmp_list.append(self.genotype_vcf_map[software])
 
@@ -703,9 +710,6 @@ class MyEVG(MyParser):
                     sample_name_tmp,
                     vcf_out_tmp_list,
                     software_tmp_list,
-                    self.bam2bayestyper_samplename_list,
-                    self.bam2paragraph_samplename_list, 
-                    self.args.number, 
                     self.env_path,
                     self.args.restart
                 )

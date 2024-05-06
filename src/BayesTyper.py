@@ -3,6 +3,8 @@
 # -*- coding: utf-8 -*-
 
 import os
+import shutil
+import glob
 import run_cmd
 from getsize import getsize
 
@@ -81,6 +83,10 @@ def main(
                 getsize("bayestyper_cluster_data/multigroup_kmers.bloomData") <= 0 or \
                 getsize("bayestyper_cluster_data/multigroup_kmers.bloomMeta") <= 0 or \
                 getsize("bayestyper_cluster_data/parameter_kmers.fa.gz") <= 0:
+            if os.path.exists(os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data')):
+                shutil.rmtree(os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data'))
+            for folder in glob.glob(os.path.join(bayestyper_sample_path, 'bayestyper_unit_*')):
+                shutil.rmtree(folder)
             stdout, stderr, log_out = run_cmd.run(cmd, env_path)
     else:  # If restart is not specified, run directly
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)

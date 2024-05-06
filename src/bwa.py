@@ -77,7 +77,7 @@ def bam2graphtyper(read_infos_map):
 def bam2bayestyper(read_infos_map, number: int):
     work_dir = os.getcwd()
 
-    out_samplename_list = []
+    out_samplename_map = {}
     out_txt_list = []
     out_txt = ""
     
@@ -88,7 +88,7 @@ def bam2bayestyper(read_infos_map, number: int):
         value = read_infos_map[sample_name]
         num += 1
         out_txt += sample_name + "\tF\t" + os.path.join(work_dir, "BayesTyper", str(num_tmp), os.path.basename(value["bam"])) + "\n"
-        out_samplename_list.append(sample_name)
+        out_samplename_map[sample_name] = os.path.join(work_dir, "BayesTyper", str(num_tmp), "bayestyper.vcf.gz")
         if num == number:
             out_txt_list.append(out_txt)
             out_txt = ""
@@ -112,12 +112,12 @@ def bam2bayestyper(read_infos_map, number: int):
         with open(out_file, "w") as f:
             f.write(out_txt)
 
-    return out_samplename_list, out_file_list
+    return out_samplename_map, out_file_list
 
 
 # save result for ParaGraph
 def bam2paragraph(read_infos_map, number: int):
-    out_samplename_list = []
+    out_samplename_map = {}
     out_txt_list = []
     head_txt = "id\tpath\tdepth\tread length\n"
 
@@ -125,16 +125,17 @@ def bam2paragraph(read_infos_map, number: int):
 
     # 'number' samples can be processed each time
     num = 0
+    num_tmp = 0
     for sample_name in sorted(read_infos_map.keys()):
         value = read_infos_map[sample_name]
         num += 1
         out_txt += sample_name + "\t" + value["bam"] + "\t" + str(value["depth"]) + "\t" + str(value["length"]) + "\n"
-        out_samplename_list.append(sample_name)
-
+        out_samplename_map[sample_name] = os.path.join(os.getcwd(), "Paragraph", str(num_tmp), "genotypes.vcf.gz")
         if num == number:
             out_txt_list.append(out_txt)
             out_txt = ""
             num = 0
+            num_tmp += 1
 
     # last save
     if num > 0:
@@ -153,4 +154,4 @@ def bam2paragraph(read_infos_map, number: int):
         with open(out_file, "w") as f:
             f.write(head_txt + out_txt)
 
-    return out_samplename_list, out_file_list
+    return out_samplename_map, out_file_list
