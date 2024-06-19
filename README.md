@@ -33,7 +33,7 @@ Please note the following requirements before building and running the software:
 
 ## Recent major updates:
 
-(2024/05/06, v1.1.8)
+(2024/06/12, v1.1.8)
 
 * In version `v1.1.7`, the final merging process was unable to locate the positions of samples in Paragraph and BayesTyper. This issue has been fixed in version `v1.1.8`.
 

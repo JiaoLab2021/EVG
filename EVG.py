@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2024/05/06"
-__version__ = "1.1.8"
+__data__ = "2024/06/12"
+__version__ = "1.1.9"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -248,6 +248,9 @@ class MyEVG(MyParser):
 
         # convert
         stdout, stderr, log_out, vcf_file, sv_file, region_file = convert.vcf_convert(code_dir, self.reference_file, self.vcf_file, 350, self.args.mode, self.env_path, self.args.restart)
+        # Report an error if there is a problem with the exit code
+        if log_out:
+            return stdout, stderr, log_out
 
         # bgzip
         if sv_file != vcf_file:  # If the two files are the same, sv_file will not be compressed, otherwise an error will be reported

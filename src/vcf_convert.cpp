@@ -5,8 +5,7 @@
 using namespace std;
 
 
-int main_convert(int argc, char** argv)
-{
+int main_convert(int argc, char** argv) {
     // Enter the file and parameters
     string refFileName;
     string vcfFileName;
@@ -80,7 +79,6 @@ int main_convert(int argc, char** argv)
 
     // If the length of "raed" is greater than 1000, there's no need to filter by read length because we don't have to process paragraph
     readLen = (readLen > 1000) ? 0 : readLen;
-    
 
     // init
     Convert ConvertClass(refFileName, vcfFileName, readLen, MAF, MISSRATE, outFileName);
@@ -96,8 +94,7 @@ int main_convert(int argc, char** argv)
 }
 
 // Help document
-void help_convert(char** argv)
-{
+void help_convert(char** argv) {
   cerr << "usage: " << argv[0] << " " << argv[1] << " -r FILE -v FILE [options]" << endl
        << "convert VCF files to the required format for genome graph software." << endl
        << endl
@@ -142,8 +139,7 @@ Convert::Convert(
  * 
  * @return void
 **/
-void Convert::build_reference_index()
-{
+void Convert::build_reference_index() {
     // Chromosome name output, graphtyper required
     ofstream outFile;
     outFile.open("CHROMOSOME.NAME", ios::out);
@@ -294,14 +290,10 @@ void Convert::vcf_convert() {
                 // Get all genotypes map<idx, vector<gtString> >
                 unordered_map<int, vector<string> > GTVecMapTmp;
                 uint32_t misSampleNum;
-                tie(GTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(
-                    INFOSTRUCTTMP.lineVec
-                );
+                tie(GTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(INFOSTRUCTTMP.lineVec);
 
                 // If there is only one genotype, skip.
-                if (GTVecMapTmp.size() - misSampleNum <= 1) {
-                    continue;
-                }
+                if (GTVecMapTmp.size() - misSampleNum <= 1) continue;
                 
                 // The minimum allele frequency and deletion rate were calculated
                 tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
@@ -310,9 +302,7 @@ void Convert::vcf_convert() {
                 );
 
                 // Did not pass the threshold, straight to the next loop
-                if (MAFTMP < MAF_ || MISSRATETMP > MISSRATE_) {
-                    continue;
-                }
+                if (MAFTMP < MAF_ || MISSRATETMP > MISSRATE_) continue;
             }
         }
 
@@ -320,11 +310,11 @@ void Convert::vcf_convert() {
         // Check if there is corresponding chromosome information in the submitted genome
         if (chrSeqMap.find(INFOSTRUCTTMP.CHROM) == chrSeqMap.end() || chrLenMap.find(INFOSTRUCTTMP.CHROM) == chrLenMap.end()) {
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: The chromosome '"
+                << "Warning: The chromosome '"
                 << INFOSTRUCTTMP.CHROM 
                 << "' is not found in the reference file '" << refFileName_ << "'" 
                 << endl;
-            exit(1);
+            continue;
         }
 
         // 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
@@ -351,10 +341,10 @@ void Convert::vcf_convert() {
         // 4. The sequence must correspond to reference.
         if (chrLenMap.at(INFOSTRUCTTMP.CHROM) < (INFOSTRUCTTMP.END)) {  // Check that the chromosome length is correct
             cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: The variant's end position exceeds the length of the chromosome -> " 
+                << "Warning: The variant's end position exceeds the length of the chromosome -> " 
                 << INFOSTRUCTTMP.CHROM << " " 
                 << INFOSTRUCTTMP.POS << endl;
-            exit(1);
+            continue;
         }
 
         string trueRefSeq = chrSeqMap.at(INFOSTRUCTTMP.CHROM).substr(INFOSTRUCTTMP.POS - 1, INFOSTRUCTTMP.LEN);

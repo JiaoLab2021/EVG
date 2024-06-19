@@ -185,7 +185,9 @@ tuple<unordered_map<int, vector<string> >, uint32_t> VCFOPEN::get_gt(
 
     if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
         cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineTmpVec[0] << ":" << lineTmpVec[1] << endl;
-        return tuple(GTVecMap, misSampleNum);
+        for (size_t i = 9; i < lineTmpVec.size(); i++) {  // Start the loop in the ninth column
+            GTVecMap[i - 9] = {"0", "0"};  // Assign
+        }
     } else {  // If it exists, save it
         string GTString;  // Store the genotype field
 

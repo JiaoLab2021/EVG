@@ -1,4 +1,4 @@
-// g++ graphvcf.cpp -o graphvcf -lpthread -lz -O3
+// g++ graphvcf.cpp -c src/*.cpp -o graphvcf -lpthread -lz -O3 -march=native
 #include <fstream>
 #include <string>
 #include <iostream>
@@ -19,9 +19,9 @@
 using namespace std;
 
 // define data
-#define PROGRAM_DATA "2024/05/06"
+#define PROGRAM_DATA "2024/06/12"
 // define version
-#define PROGRAM_VERSION "1.1.8"
+#define PROGRAM_VERSION "1.1.9"
 // define author
 #define PROGRAM_AUTHOR "Zezhen Du"
 // define E-mail
