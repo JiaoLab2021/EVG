@@ -1,7 +1,7 @@
 # EVG
 
 <!-- [![GitHub Downloads](https://img.shields.io/github/downloads/JiaoLab2021/EVG/total.svg?style=social&logo=github&label=Download)](https://github.com/JiaoLab2021/EVG/releases) -->
-[![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg)
+<!-- [![BioConda Install](https://img.shields.io/conda/dn/duzezhen/evg.svg?style=flag&label=BioConda%20install)](https://anaconda.org/DuZeZhen/evg) -->
 [![GitHub last commit](https://img.shields.io/github/last-commit/JiaoLab2021/evg.svg?label=Last%20commit&logo=github&style=flat)](https://github.com/JiaoLab2021/EVG/releases)
 [![Build Status](https://github.com/JiaoLab2021/EVG/actions/workflows/ci.yaml/badge.svg)](https://github.com/JiaoLab2021/EVG/actions)
 
@@ -33,7 +33,11 @@ Please note the following requirements before building and running the software:
 
 ## Recent major updates:
 
-(2024/06/12, v1.1.8)
+(2024/06/23, v1.2.0)
+
+* If a sample's genotype information is missing in the VCF file, the previous version would throw a segmentation fault. In version `v1.2.0`, it will be replaced with 0|0.
+
+(2024/05/06, v1.1.8)
 
 * In version `v1.1.7`, the final merging process was unable to locate the positions of samples in Paragraph and BayesTyper. This issue has been fixed in version `v1.1.8`.
 

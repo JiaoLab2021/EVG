@@ -186,6 +186,7 @@ void Convert::build_reference_index() {
 
 
 /**
+ * 0. Check Line number consistency
  * 1. Head plus chromosome length. (bayestyper)
  * 2. Check if qrySeq contains any '<'. If it does, skip it. (<INS>;<DUP>)
  * 3. The first variation is greater than the read length. (paragraph)
@@ -197,7 +198,7 @@ void Convert::build_reference_index() {
  * 9. Check whether refSeq and qrySeq contain characters other than atgcnATGCN. If yes, skip this site.
  * 10. Check whether the qry after replacement is the same. If yes, skip this site. (BayesTyper, Assertion `count(alt_alleles.begin() + i + 1, alt_alleles.end(), alt_alleles.at(i)) == 0' failed)
  * 11. Combine the genotypes. Convert to.|. (PanGenie)
- * 12. Change the/in genotype to |. (PanGenie)
+ * 12. Change the / in genotype to |. (PanGenie)
  * 13. Retain only the diploid variation in the genotype.
  * 14. Check if GT has more sequences than qry.
  * 15. If the variant end position is greater than or equal to the chromosome length, skip the mutation. (Paragrpah)
@@ -234,6 +235,8 @@ void Convert::vcf_convert() {
     VCFINFOSTRUCT INFOSTRUCTTMP;
     VCFOPEN VCFOPENCLASS(vcfFileName_);
 
+    uint32_t lineNum = 0;  // Line number
+
     // Record the information of the previous variant
     VCFINFOSTRUCT prePreINFOSTRUCTTMP;
     VCFINFOSTRUCT preINFOSTRUCTTMP;
@@ -244,6 +247,8 @@ void Convert::vcf_convert() {
         if (INFOSTRUCTTMP.line.empty()) {
             continue;
         }
+
+        uint32_t thisLineNum = INFOSTRUCTTMP.lineVec.size();
         
         // comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
@@ -253,12 +258,25 @@ void Convert::vcf_convert() {
 
                 // save header
                 outStream << INFOSTRUCTTMP.line + "\n";
+
+                // Line number
+                lineNum = thisLineNum;
             }
             // Skip if the vcf contains chromosome length information
             else if (INFOSTRUCTTMP.line.find(",length") == string::npos) {
                 outStream << INFOSTRUCTTMP.line + "\n";
             }
 
+            continue;
+        }
+
+
+        // 0. Check Line number consistency
+        if (lineNum > 0 && lineNum != thisLineNum) {
+            cerr << "[" << __func__ << "::" << getTime() << "] "
+                 << "Warning: The number of columns in the VCF file is inconsistent. Skipping this site -> " 
+                 << INFOSTRUCTTMP.CHROM << " " 
+                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
@@ -383,12 +401,22 @@ void Convert::vcf_convert() {
         uint32_t maxGT = 0; // Record the largest GT, see if there are more sequences than qry, and skip this site if there are more
         // As long as GT field
         INFOSTRUCTTMP.lineVec[8] = "GT";
-
         if (gtItera != formatVec.end()) {  // The FORMAT contains GT
             // Loop over the GT column
-            for (size_t i = 9; i < INFOSTRUCTTMP.lineVec.size(); i++) {
-                // Find the genotype
-                string gt = split(INFOSTRUCTTMP.lineVec[i], ":")[gtIndex];
+            for (size_t i = 9; i < thisLineNum; i++) {
+                string gt;
+
+                string genotypeInfo = INFOSTRUCTTMP.lineVec[i];
+                if (genotypeInfo.empty()) {
+                    cerr << "[" << __func__ << "::" << getTime() << "] "
+                        << "Warning: Genotype (GT) is empty ->" 
+                        << INFOSTRUCTTMP.CHROM << " " 
+                        << INFOSTRUCTTMP.POS << endl;
+                    gt = "0|0";
+                } else {
+                    // Find the genotype
+                    gt = split(genotypeInfo, ":")[gtIndex];
+                }
 
                 // 11. Combine the genotypes. Convert to.|.. (PanGenie)
                 if (gt == ".") {
@@ -396,9 +424,9 @@ void Convert::vcf_convert() {
                 } else if (gt == "0") {
                     gt = "0|0";
                 }
-                
 
-                // 12. Change the/in genotype to |. (PanGenie)
+
+                // 12. Change the / in genotype to |. (PanGenie)
                 if (gt.find("/") != string::npos) {
                     std::regex reg("/");
                     gt = regex_replace(string(gt), regex(reg), string("|"));
