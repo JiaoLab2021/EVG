@@ -33,9 +33,9 @@ Please note the following requirements before building and running the software:
 
 ## Recent major updates:
 
-(2024/06/23, v1.2.0)
+(2024/06/25, v1.2.0)
 
-* If a sample's genotype information is missing in the VCF file, the previous version would throw a segmentation fault. In version `v1.2.0`, it will be replaced with 0|0.
+* If a sample's genotype information is missing in the VCF file, the previous version would throw a segmentation fault. In version `v1.2.0`, it will be replaced with `0|0`.
 
 (2024/05/06, v1.1.8)
 

@@ -11,7 +11,7 @@
 #include "include/convert.hpp"
 
 // define data
-#define PROGRAM_DATA "2024/06/24"
+#define PROGRAM_DATA "2024/06/26"
 // define version
 #define PROGRAM_VERSION "1.2.0"
 // define author

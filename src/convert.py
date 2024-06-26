@@ -214,7 +214,7 @@ def downsample(
             # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
-    return stdout, stderr, log_out, os.path.abspath(read1_out), os.path.abspath(read2_out)
+    return stdout, stderr, log_out, os.path.abspath(read1_out), os.path.abspath(read2_out) if read2_out else ""
 
 
 # vcf convert
