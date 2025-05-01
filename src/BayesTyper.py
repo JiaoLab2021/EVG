@@ -45,11 +45,8 @@ def main(
                 # kmc
                 cmd = f"kmc -k55 -ci1 -t1 -fbam {bam_file} {prefix} {bayestyper_sample_path}"
 
-                # Check if the file exists
-                if restart:
-                    if getsize(prefix + ".kmc_pre") <= 0 or getsize(prefix + ".kmc_suf") <= 0:
-                        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-                else:  # If restart is not specified, run directly
+                # Check if restart is True and file is empty or non-existent, or restart is not specified
+                if (restart and (getsize(prefix + ".kmc_pre") <= 0 or getsize(prefix + ".kmc_suf") <= 0)) or (not restart):
                     stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
                 # Report an error if there is a problem with the exit code
@@ -59,11 +56,8 @@ def main(
                 # bayesTyperTools makeBloom
                 cmd = f"bayesTyperTools makeBloom -k {prefix} -p {threads}"
 
-                # Check if the file exists
-                if restart:
-                    if getsize(prefix + ".bloomData") <= 0 or getsize(prefix + ".bloomMeta") <= 0:
-                        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-                else:  # If restart is not specified, run directly
+                # Check if restart is True and file is empty or non-existent, or restart is not specified
+                if (restart and (getsize(prefix + ".bloomData") <= 0 or getsize(prefix + ".bloomMeta") <= 0)) or (not restart):
                     stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
                 # Report an error if there is a problem with the exit code
@@ -78,17 +72,17 @@ def main(
     cmd = f"bayesTyper cluster -v {vcf_file} -s {bam2bayestyper_file} -g {reference_file} -p {threads} -o {os.path.join(bayestyper_sample_path, 'bayestyper')}"
 
     # Check if the file exists
-    if restart:
-        if getsize("bayestyper_cluster_data/intercluster_regions.txt.gz") <= 0 or \
-                getsize("bayestyper_cluster_data/multigroup_kmers.bloomData") <= 0 or \
-                getsize("bayestyper_cluster_data/multigroup_kmers.bloomMeta") <= 0 or \
-                getsize("bayestyper_cluster_data/parameter_kmers.fa.gz") <= 0:
-            if os.path.exists(os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data')):
-                shutil.rmtree(os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data'))
-            for folder in glob.glob(os.path.join(bayestyper_sample_path, 'bayestyper_unit_*')):
-                shutil.rmtree(folder)
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    if restart and (
+        getsize("bayestyper_cluster_data/intercluster_regions.txt.gz") <= 0 or \
+        getsize("bayestyper_cluster_data/multigroup_kmers.bloomData") <= 0 or \
+        getsize("bayestyper_cluster_data/multigroup_kmers.bloomMeta") <= 0 or \
+        getsize("bayestyper_cluster_data/parameter_kmers.fa.gz") <= 0 or \
+        len(glob.glob(os.path.join(bayestyper_sample_path, 'bayestyper_unit_*'))) == 0
+    ) or (not restart):
+        if os.path.exists(os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data')):
+            shutil.rmtree(os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data'))
+        for folder in glob.glob(os.path.join(bayestyper_sample_path, 'bayestyper_unit_*')):
+            shutil.rmtree(folder)
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code
@@ -109,13 +103,8 @@ def main(
         # Define the command to run BayesTyper genotype
         cmd = f"bayesTyper genotype -v {os.path.join(unit_folder, 'variant_clusters.bin')} -c {os.path.join(bayestyper_sample_path, 'bayestyper_cluster_data')} -s {bam2bayestyper_file} -g {reference_file} -o {os.path.join(unit_folder, 'bayestyper')} -z -p {threads} --noise-genotyping"
 
-        # Check if the file exists
-        if restart:
-            vcf_gz_file = os.path.join(unit_folder, "bayestyper.vcf.gz")
-            file_size = getsize(vcf_gz_file)
-            if file_size <= 0:
-                stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-        else:  # If restart is not specified, run the command directly
+        # Check if restart is True and file is empty or non-existent, or restart is not specified
+        if (restart and getsize(os.path.join(unit_folder, "bayestyper.vcf.gz")) <= 28) or (not restart):
             stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
         # Report an error if there is a problem with the exit code

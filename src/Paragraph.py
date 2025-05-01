@@ -29,12 +29,8 @@ def main(
 
     vcf_out_file = os.path.join(paragraph_sample_path, "genotypes.vcf.gz")
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(vcf_out_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(vcf_out_file) <= 28) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, vcf_out_file

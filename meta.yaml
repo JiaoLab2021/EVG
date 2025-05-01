@@ -1,6 +1,6 @@
 package:
   name: evg
-  version: 1.2.0
+  version: 1.2.1
 
 source:
   path: .
@@ -23,7 +23,7 @@ requirements:
     - vg
     - graphaligner
     - paragraph
-    - bayestyper
+    - bayestyper ==1.5=h176a8bc_0
     - graphtyper
     - kmc
     - pangenie

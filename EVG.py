@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2024/06/26"
-__version__ = "1.2.0"
+__data__ = "2025/05/01"
+__version__ = "1.2.1"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -21,7 +21,7 @@ import logging
 code_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(code_dir, "src/"))
 import convert, select_software, merge, bwa, GraphTyper2, \
-    GraphAligner, BayesTyper, Paragraph, VG_MAP_Giraffe, PanGenie, check_software
+    GraphAligner, BayesTyper, Paragraph, VG_MAP_Giraffe, PanGenie, check_software, run_cmd
 
 # get parser
 class MyParser:
@@ -291,6 +291,13 @@ class MyEVG(MyParser):
         # run select_software
         if isinstance(self.args.software, str):  # Program Automatic Judgment Software
             self.args.software = select_software.main(depth_min, read_len_min, self.refgenome_base)
+
+        # check PanGenie version
+        if "PanGenie" in self.args.software:
+            pangenie_version = run_cmd.get_version("PanGenie", self.env_path)
+            if pangenie_version < "3.0.0": # PanGenie version is less than 3.0.0
+                self.args.software.remove("PanGenie")
+                self.logger.warning(f"PanGenie version ({pangenie_version}) is below 3.0.0. It will be skipped. Please upgrade PanGenie if you wish to use it.")
 
         # The temporary list is used to determine whether to build an index
         select_software_tmp_list = list(set(self.args.software) & {"VG-MAP", "VG-Giraffe"})

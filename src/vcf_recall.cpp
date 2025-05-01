@@ -156,9 +156,11 @@ VCFRecall::VCFRecall(
     lengthVec_.push_back("-299/-200");
     lengthVec_.push_back("-199/-100");
     lengthVec_.push_back("-99/-50");
-    lengthVec_.push_back("-49/-1");
+    lengthVec_.push_back("-49/-20");
+    lengthVec_.push_back("-19/-1");
     lengthVec_.push_back("0/0");
-    lengthVec_.push_back("1/49");
+    lengthVec_.push_back("1/19");
+    lengthVec_.push_back("20/49");
     lengthVec_.push_back("50/99");
     lengthVec_.push_back("100/199");
     lengthVec_.push_back("200/299");
@@ -714,8 +716,7 @@ void VCFRecall::evulate_gt()
                 << all_length_count[i] - genotype_length_count[i] - misgenotype_length_count[i] << "/" 
                 << all_length_count[i] << endl;
         
-        if ( 10 <= i && i <= 12)
-        {
+        if (10 <= i && i <= 14) {
             sv_genotype_recall -= genotype_length_count[i];
             sv_misgenotype_recall -= misgenotype_length_count[i];
             sv_mis_call -= mis_call_length_count[i];
@@ -1212,7 +1213,7 @@ void VCFRecall::evulate_recall()
                 << allNumVec[i] - recallNumVec[i] << "/"
                 << allNumVec[i] << endl;
         
-        if (10 <= i && i <= 12) {
+        if (10 <= i && i <= 14) {
             all_num -= allNumVec[i];
             call_num -= callNumVec[i];
             recall_num -= recallNumVec[i];

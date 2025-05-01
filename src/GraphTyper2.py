@@ -19,13 +19,8 @@ def merge_vcf(
     
     cmd = f"for i in $(ls {software_work_path}/*/ | grep 'vcf.gz' | grep -v 'tbi' | head -n1); do zcat {software_work_path}/*/$i | grep '#' > {output_file}; done && zcat {software_work_path}/*/*.vcf.gz >> {output_file}"
 
-    # Check if the file exists
-    if restart:
-        # check file
-        file_size = getsize("graphtyper.vcf")
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize("graphtyper.vcf") <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, output_file
@@ -49,12 +44,8 @@ def main(
 
     cmd = f"graphtyper genotype_sv {reference_file} {vcf_file} --sams={bam2graphtyper_file} --region_file={region_file} --output={software_work_path} --threads {threads}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize("graphtyper.vcf")
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize("graphtyper.vcf") <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code

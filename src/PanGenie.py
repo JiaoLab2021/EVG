@@ -26,12 +26,8 @@ def check_vcf(
     else:
         cmd = f"cat {vcf_file} | {awk_cmd} 1>{vcf_out_file}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(vcf_out_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(vcf_out_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, vcf_out_file
@@ -62,12 +58,8 @@ def check_read(
         else:
             cmd += f" && cat {read2} 1>>{read_out}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(read_out)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(read_out) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, read_out
@@ -124,12 +116,8 @@ def main(
     # output vcf path
     out_vcf_file = os.path.join(software_work_path, f"{sample_name}_genotyping.vcf")
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(out_vcf_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(out_vcf_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     os.remove(read)

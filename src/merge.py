@@ -39,12 +39,8 @@ def main(
             
     cmd += f"-n {sample_name} -o {merge_vcf_file}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(merge_vcf_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(merge_vcf_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, os.path.join(work_path, merge_vcf_file)

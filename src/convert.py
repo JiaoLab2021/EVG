@@ -32,12 +32,8 @@ def convert_reference(
     # check fasta
     cmd = '''awk '{if ($1~/>/) {print $0} else {$0=toupper($0); gsub(/[^ATGCNatgcn]/,"N"); print $0}}' ''' + reference_file + " 1>" + out_reference_file
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(out_reference_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(out_reference_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Check whether the log is normal, and exit early if it is not normal
@@ -67,11 +63,8 @@ def bgzip_vcf(
 
     cmd = f"bgzip -@ {threads} -f {vcf_file} && tabix -f {vcf_file_gz}"
 
-    # Check if the file exists
-    if restart:
-        if getsize(vcf_file_gz) <= 28 and getsize(vcf_file_gz + ".tbi") <= 72:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and (getsize(vcf_file_gz) <= 28 or getsize(vcf_file_gz + ".tbi") <= 72)) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, os.path.abspath(vcf_file_gz)
@@ -182,11 +175,8 @@ def downsample(
             read2_out = os.path.abspath(read2_out)
 
             # Check if the file exists
-            if restart:
-                file_size1 = getsize(read1_out)
-                file_size2 = getsize(read2_out)
-                if file_size1 > 22 and file_size2 > 22:
-                    return "", "", log_out, os.path.abspath(read1_out), os.path.abspath(read2_out)
+            if restart and getsize(read1_out) > 22 and getsize(read2_out) > 22:
+                return "", "", log_out, os.path.abspath(read1_out), os.path.abspath(read2_out)
 
             cmd1 = f"{code_path} -i {read1} -f {need_ratio} 2>/dev/stderr | gzip > {read1_out}"
             cmd2 = f"{code_path} -i {read2} -f {need_ratio} 2>/dev/stderr | gzip > {read2_out}"
@@ -206,10 +196,8 @@ def downsample(
             read2_out = ""
 
             # Check if the file exists
-            if restart:
-                file_size1 = getsize(read1_out)
-                if file_size1 > 22:
-                    return stdout, stderr, log_out, os.path.abspath(read1_out), ""
+            if restart and getsize(read1_out) > 22:
+                return stdout, stderr, log_out, os.path.abspath(read1_out), ""
 
             # submit task
             stdout, stderr, log_out = run_cmd.run(cmd, env_path)
@@ -236,33 +224,27 @@ def vcf_convert(
     # output filename of convert result
     vcf_out_name = f"""convert.{os.path.basename(vcf_file.replace(".gz", ""))}"""
 
+    # path completion
+    region_file = os.path.abspath("CHROMOSOME.NAME")
+
     # ################################### graphvcf convert ###################################
     # graphvcf convert
     cmd = f"{code_path} -r {reference_file} -v {vcf_file} -l {read_len} -o {vcf_out_name}"
 
-    # Check if the file exists
-    if restart:
-        if getsize(vcf_out_name) <= 0 and getsize(vcf_out_name + ".gz") <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and (getsize(vcf_out_name) <= 0 or getsize(region_file) <= 0)) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code
     if log_out:
         return stdout, stderr, log_out, vcf_out_name, "", ""
 
-    # path completion
-    region_file = os.path.abspath("CHROMOSOME.NAME")
-
     # ################################### sort ###################################
     # vcfsort
     cmd = f"""grep '#' {vcf_out_name} > {vcf_out_name+".sort"} && grep -v '#' {vcf_out_name} | sort -k 1,1 -k 2,2n -t $'\t' | awk -F "\t" '!a[$1,$2]++' 1>>{vcf_out_name+".sort"} && mv {vcf_out_name+".sort"} {vcf_out_name}"""
 
-    # Check if the file exists
-    if restart:
-        if getsize(vcf_out_name) > 0:  # If the file compressed by vcf or bgzip exists, it will be skipped
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(vcf_out_name) > 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Report an error if there is a problem with the exit code

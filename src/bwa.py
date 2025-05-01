@@ -20,16 +20,17 @@ def index(
 
     cmd = f"bwa index {reference_file} -p {os.path.join(software_work_path, reference_file)}"
 
-    # Check if the file exists
-    if restart:
-        if getsize(f"{reference_file}.amb") <= 0 or \
-                getsize(f"{reference_file}.ann") <= 0 or \
-                getsize(f"{reference_file}.bwt") <= 0 or \
-                getsize(f"{reference_file}.fai") <= 0 or \
-                getsize(f"{reference_file}.pac") <= 0 or \
-                getsize(f"{reference_file}.sa") <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (
+        restart and (
+            getsize(f"{reference_file}.amb") <= 0 or 
+            getsize(f"{reference_file}.ann") <= 0 or 
+            getsize(f"{reference_file}.bwt") <= 0 or 
+            getsize(f"{reference_file}.fai") <= 0 or 
+            getsize(f"{reference_file}.pac") <= 0 or 
+            getsize(f"{reference_file}.sa") <= 0
+        )
+    ) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out
@@ -54,12 +55,8 @@ def mem(
     bam_file = os.path.join(bwa_dir, sample_name + ".bam")
     cmd = f"bwa mem -R '@RG\\tID:foo\\tSM:{sample_name}\\tLB:library1' -t {threads} {reference_file} {read1} {read2} | samtools view -b -S | samtools sort -@ {threads} -o {bam_file} && samtools index {bam_file}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(bam_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and (getsize(bam_file) <= 0 or getsize(bam_file + ".bai") <= 0)) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, sample_name, bam_file

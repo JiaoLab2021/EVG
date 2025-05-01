@@ -4,7 +4,7 @@
 
 
 __data__ = "2024/06/23"
-__version__ = "1.2.0"
+__version__ = "1.0.1"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -40,6 +40,8 @@ def cal_ratio(len_list, ratio_len_list, type_cal, ratio_type_list, file):
         'sv': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
         'del': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
         'indel': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
+        'smallIndel': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
+        'lagerIndel': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
         'snp': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
         'ins': {'all': 0, 'genotype': 0, 'recall': 0, 'call': 0},
     }
@@ -93,7 +95,22 @@ def cal_ratio(len_list, ratio_len_list, type_cal, ratio_type_list, file):
             stats['sv']['genotype'] += genotype_number
             stats['sv']['recall'] += recall_number
             stats['sv']['call'] += call_number
-        elif -49 <= length_left < 0 and -49 <= length_right < 0:
+        elif -19 <= length_left <= -1 and -19 <= length_right <= -1:
+            stats['smallIndel']['all'] += all_number
+            stats['smallIndel']['genotype'] += genotype_number
+            stats['smallIndel']['recall'] += recall_number
+            stats['smallIndel']['call'] += call_number
+
+            stats['indel']['all'] += all_number
+            stats['indel']['genotype'] += genotype_number
+            stats['indel']['recall'] += recall_number
+            stats['indel']['call'] += call_number
+        elif -49 <= length_left <= -20 and -49 <= length_right <= -20:
+            stats['lagerIndel']['all'] += all_number
+            stats['lagerIndel']['genotype'] += genotype_number
+            stats['lagerIndel']['recall'] += recall_number
+            stats['lagerIndel']['call'] += call_number
+
             stats['indel']['all'] += all_number
             stats['indel']['genotype'] += genotype_number
             stats['indel']['recall'] += recall_number
@@ -103,7 +120,22 @@ def cal_ratio(len_list, ratio_len_list, type_cal, ratio_type_list, file):
             stats['snp']['genotype'] += genotype_number
             stats['snp']['recall'] += recall_number
             stats['snp']['call'] += call_number
-        elif 0 < length_left <= 49 and 0 < length_right <= 49:
+        elif 1 <= length_left <= 19 and 1 <= length_right <= 19:
+            stats['smallIndel']['all'] += all_number
+            stats['smallIndel']['genotype'] += genotype_number
+            stats['smallIndel']['recall'] += recall_number
+            stats['smallIndel']['call'] += call_number
+
+            stats['indel']['all'] += all_number
+            stats['indel']['genotype'] += genotype_number
+            stats['indel']['recall'] += recall_number
+            stats['indel']['call'] += call_number
+        elif 20 <= length_left <= 49 and 20 <= length_right <= 49:
+            stats['lagerIndel']['all'] += all_number
+            stats['lagerIndel']['genotype'] += genotype_number
+            stats['lagerIndel']['recall'] += recall_number
+            stats['lagerIndel']['call'] += call_number
+
             stats['indel']['all'] += all_number
             stats['indel']['genotype'] += genotype_number
             stats['indel']['recall'] += recall_number
@@ -137,7 +169,7 @@ def out_merge(file, ratio_all_list, len_list, type_cal, ratio_len_list, ratio_ty
         informations = f.read().strip().split("\n")
 
         # recall
-        if len(informations) == 42:
+        if len(informations) == 44:
             # snp+indel+sv
             genotype_recall_all = float(informations[1].strip().split(":")[1])
             recall_all = float(informations[3].strip().split(":")[1])
@@ -154,10 +186,10 @@ def out_merge(file, ratio_all_list, len_list, type_cal, ratio_len_list, ratio_ty
             )
 
             # sv
-            genotype_recall_sv = float(informations[35].strip().split(":")[1])
-            recall_sv = float(informations[37].strip().split(":")[1])
-            call_sv = float(informations[39].strip().split(":")[1])
-            all_sv = float(informations[41].strip().split(":")[1])
+            genotype_recall_sv = float(informations[37].strip().split(":")[1])
+            recall_sv = float(informations[39].strip().split(":")[1])
+            call_sv = float(informations[41].strip().split(":")[1])
+            all_sv = float(informations[43].strip().split(":")[1])
 
             # Calculate proportion
             recall_ratio_sv, recall_precision_ratio_sv, genotype_recall_ratio_sv, genotype_precision_ratio_sv = cal_ratio_fun(
@@ -173,19 +205,19 @@ def out_merge(file, ratio_all_list, len_list, type_cal, ratio_len_list, ratio_ty
 
             # len_list.append
             line_num = 0
-            for info in informations[9:33]:
+            for info in informations[9:35]:
                 parts1 = info.split(":")[0].strip().replace("/", "|")
                 parts2 = info.split(":")[1].strip().split("/")
                 new_list = [parts1, parts2[6], parts2[0], parts2[2], parts2[4]]
 
-                if len(len_list) < 24:
+                if len(len_list) < 26:
                     len_list.append(new_list)
                 else:
                     len_list[line_num] += new_list[1:]
 
                 line_num += 1
         else:
-            print("The number of lines in the file is incorrect (42): {}".format(str(len(informations))))
+            print("The number of lines in the file is incorrect (44): {}".format(str(len(informations))))
             exit(1)
 
         ratio_len_list, ratio_type_list = cal_ratio(len_list, ratio_len_list, type_cal, ratio_type_list, file)

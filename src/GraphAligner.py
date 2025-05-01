@@ -27,13 +27,14 @@ def vg_index(
     prefix = os.path.join(index_dir, "out")
     cmd = f"vg construct -t {threads} -r {reference_file} -v {vcf_file} 1>{prefix + '.vg'} && mkdir {temp_dir} && vg index -t {threads} -b {temp_dir} -x {prefix + '.xg'} {prefix + '.vg'} && rm -rf {temp_dir} && vg snarls -t {threads} {prefix + '.xg'} 1>{prefix + '.snarls'}"
 
-    # Check if the file exists
-    if restart:
-        if getsize("out.snarls") <= 0 or \
-                getsize("out.vg") <= 0 or \
-                getsize("out.xg") <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (
+        restart and (
+            getsize("out.snarls") <= 0 or \
+            getsize("out.vg") <= 0 or \
+            getsize("out.xg") <= 0
+        )
+    ) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out
@@ -59,12 +60,8 @@ def graphaligner(
     # map
     cmd = f"GraphAligner -t {threads} -g {vg_file} -x vg -f {read} -a {gam_file}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(gam_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(gam_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out
@@ -94,12 +91,8 @@ def vg_call(
     filter_depth = min(0, int(depth/2))  # Filter by comparison depth greater than 0
     cmd = f"vg pack -t {threads} -Q {filter_depth} -x {xg_file} -g {gam_file} -o {pack_file}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(pack_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(pack_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     # Check whether the log is normal, and exit early if it is not normal
@@ -109,12 +102,8 @@ def vg_call(
     # vg call
     cmd = f"vg call -t {threads} -s {sample_name} {xg_file} -k {pack_file} -r {snarls_file} 1>{vcf_file}"
 
-    # Check if the file exists
-    if restart:
-        file_size = getsize(vcf_file)
-        if file_size <= 0:
-            stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-    else:  # If restart is not specified, run directly
+    # Check if restart is True and file is empty or non-existent, or restart is not specified
+    if (restart and getsize(vcf_file) <= 0) or (not restart):
         stdout, stderr, log_out = run_cmd.run(cmd, env_path)
 
     return stdout, stderr, log_out, vcf_file

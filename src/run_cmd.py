@@ -5,6 +5,7 @@
 import subprocess
 import tempfile
 import os
+import re
 import logging
 
 
@@ -65,3 +66,50 @@ def run(command, envPath):
         log = f'Error occurred with status code: {exit_state}. Error message: {stderr}.'
 
     return stdout, stderr, log
+
+
+def get_version(software_name, envPath, args=""):
+    """
+    Runs a software command with optional arguments in a given environment and extracts version info.
+
+    Args:
+        software_name (str): The software command to run (e.g., 'vg', 'PanGenie').
+        envPath (dict): The environment in which to run the command.
+        args (str): Command-line arguments as a string, e.g. "-h", "--version", or other flags.
+
+    Returns:
+        str: Extracted version or full output if version not found.
+    
+    This function runs the given software command with the provided environment and arguments. It
+    attempts to extract version information from the command's output using a regular expression.
+    The function handles common output formats and returns the version number or an error message.
+    """
+    try:
+        full_cmd = f"{software_name} {args}".strip()
+
+        result = subprocess.run(
+            full_cmd, 
+            shell=True, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            env=envPath, 
+            universal_newlines=True, 
+            timeout=10
+        )
+
+        text = result.stdout + result.stderr
+
+        # Try to extract version using regex
+        match = re.search(r'version[:]?[\s]+(v?[\d+\.]+)', text, re.IGNORECASE)
+        if match:
+            version_raw = match.group(1)
+            version_clean = version_raw.lstrip("vV")
+            logger.info(f"{software_name} version: {version_clean}")
+            return version_clean
+        else:
+            logger.warning(f"Could not parse version info from {software_name}")
+            return f"Output detected, but version not found:\n{text.strip()}"
+    except subprocess.CalledProcessError as e:
+        return f"Error running {software_name}: {e.output.decode('utf-8')}"
+    except Exception as e:
+        return f"Exception: {str(e)}"
