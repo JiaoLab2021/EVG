@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 env:
@@ -15,28 +16,27 @@ jobs:
     env:
       DATA_DIR: ./test
 
+    strategy:
+      matrix:
+        cmake-version: [3.12]
+        compiler: [gcc-9]
+
     steps:
     - uses: actions/checkout@v3
       with:
         submodules: 'recursive'
+      env:
+        NODE_VERSION: 16.x
 
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake libz-dev
-
-    - name: Set GCC version to 11
-      run: |
-        sudo apt-get install -y gcc-11 g++-11
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
-        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
-        gcc --version
-        g++ --version
+        sudo apt-get install -y libz-dev
 
     - name: Build project
       run: |
-        cmake . -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-        make -j2
+        cmake . -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+        make
 
     - name: Run tests
       run: |
