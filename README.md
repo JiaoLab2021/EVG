@@ -33,13 +33,14 @@ Please note the following requirements before building and running the software:
 
 ## Recent major updates:
 
+(2025/04/30, v1.2.1)
+
+* Updated Giraffe indexing and alignment commands for vg ≥1.63.0.
+* Pinned BayesTyper to 1.5=h176a8bc_0 due to bugs in newer conda versions.
+
 (2024/06/25, v1.2.0)
 
 * If a sample's genotype information is missing in the VCF file, the previous version would throw a segmentation fault. In version `v1.2.0`, it will be replaced with `0|0`.
-
-(2024/05/06, v1.1.8)
-
-* In version `v1.1.7`, the final merging process was unable to locate the positions of samples in Paragraph and BayesTyper. This issue has been fixed in version `v1.1.8`.
 
 ## Installation
 
