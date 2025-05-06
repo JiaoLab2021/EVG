@@ -107,8 +107,8 @@ def get_version(software_name, envPath, args=""):
             logger.info(f"{software_name} version: {version_clean}")
             return version_clean
         else:
-            logger.warning(f"Could not parse version info from {software_name}")
-            return f"Output detected, but version not found:\n{text.strip()}"
+            logger.warning(f"[Warning] Could not parse version info from {software_name}")
+            return "0.0.0"
     except subprocess.CalledProcessError as e:
         return f"Error running {software_name}: {e.output.decode('utf-8')}"
     except Exception as e:

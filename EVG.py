@@ -3,8 +3,8 @@
 # -*- coding: utf-8 -*-
 
 
-__data__ = "2025/05/01"
-__version__ = "1.2.1"
+__data__ = "2025/05/06"
+__version__ = "1.2.2"
 __author__ = "Zezhen Du"
 __email__ = "dzz0539@gmail.com or dzz0539@163.com"
 
@@ -297,7 +297,7 @@ class MyEVG(MyParser):
             pangenie_version = run_cmd.get_version("PanGenie", self.env_path)
             if pangenie_version < "3.0.0": # PanGenie version is less than 3.0.0
                 self.args.software.remove("PanGenie")
-                self.logger.warning(f"PanGenie version ({pangenie_version}) is below 3.0.0. It will be skipped. Please upgrade PanGenie if you wish to use it.")
+                self.logger.warning(f"[Warning] PanGenie version ({pangenie_version}) is below 3.0.0. It will be skipped. Please upgrade PanGenie if you wish to use it.")
 
         # The temporary list is used to determine whether to build an index
         select_software_tmp_list = list(set(self.args.software) & {"VG-MAP", "VG-Giraffe"})

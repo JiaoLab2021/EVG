@@ -33,7 +33,7 @@ Please note the following requirements before building and running the software:
 
 ## Recent major updates:
 
-(2025/04/30, v1.2.1)
+(2025/04/30, v1.2.2)
 
 * Updated Giraffe indexing and alignment commands for vg ≥1.63.0.
 * Pinned BayesTyper to 1.5=h176a8bc_0 due to bugs in newer conda versions.
@@ -87,7 +87,7 @@ conda create -n evg_env
 # Activate the environment
 conda activate evg_env
 # Install software using conda
-conda install -c bioconda -c conda-forge -c kdm801 tabix bwa samtools vg graphaligner paragraph bayestyper graphtyper kmc pangenie
+conda install -c bioconda -c conda-forge -c kdm801 tabix bwa samtools vg graphaligner paragraph 'bayestyper==1.5=h176a8bc_0' graphtyper kmc pangenie
 # "ModuleNotFoundError: No module named 'pysam.bcftools'", therefore it is recommended to upgrade pysam in this case
 conda update pysam
 ```

@@ -239,18 +239,7 @@ def vcf_convert(
     if log_out:
         return stdout, stderr, log_out, vcf_out_name, "", ""
 
-    # ################################### sort ###################################
-    # vcfsort
-    cmd = f"""grep '#' {vcf_out_name} > {vcf_out_name+".sort"} && grep -v '#' {vcf_out_name} | sort -k 1,1 -k 2,2n -t $'\t' | awk -F "\t" '!a[$1,$2]++' 1>>{vcf_out_name+".sort"} && mv {vcf_out_name+".sort"} {vcf_out_name}"""
-
-    # Check if restart is True and file is empty or non-existent, or restart is not specified
-    if (restart and getsize(vcf_out_name) > 0) or (not restart):
-        stdout, stderr, log_out = run_cmd.run(cmd, env_path)
-
-    # Report an error if there is a problem with the exit code
-    if log_out:
-        return stdout, stderr, log_out, vcf_out_name, "", region_file
-
+    # ################################### fast ###################################
     # vcf is divided by category
     if mode == "fast":
         sv_out_name = "sv." + vcf_out_name
