@@ -1,0 +1,16 @@
+build/
+cmake-build*/
+.DS_Store
+.vscode/settings.json
+__pycache__/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+/graphvcf
+/fastAQ
+/EVG
+/external_build/
+/generated/
+/bin/

@@ -1,6 +1,7 @@
-#ifndef SAVE_HPP
-#define SAVE_HPP
+#pragma once
 
+#include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <string.h>
@@ -9,71 +10,38 @@
 #include <map>
 #include <tuple>
 #include <iomanip>
-#include "zlib.h"
 #include <unordered_map>
+
 #include "strip_split_join.hpp"
-#include "get_time.hpp"
+#include "logger.hpp"
 
 using namespace std;
 
-/**
- * @brief save result
- * 
- * @param outputFileName
- * 
- * @return
-**/
+struct BGZF;
+
+// Write text to a BGZF file (name contains .gz/.GZ, compression level 5), a plain file, or stdout (empty name).
+// BGZF bytes depend only on the text written, never on how it was split into calls or on the thread count.
+// A SAVE destroyed while an exception propagates removes its file (regular files only), so a failed run leaves no partial output.
 class SAVE
 {
 private:
-    // output stream
     string outputFileName_;
 
-    // file handle
     ofstream fpO;
-    gzFile gzfpO;
+    BGZF* bgzfO_;
+    int uncaughtAtOpen_;  // exceptions already propagating when the file was opened
 public:
-    SAVE() {}
-    SAVE(string aliFileName) {
-        outputFileName_ = aliFileName;
+    SAVE(
+        const string & outputFileName,
+        uint32_t threads = 1
+    );
 
-        if (outputFileName_.find(".gz") != string::npos || outputFileName_.find(".GZ") != string::npos)
-        {
-            // open file
-            gzfpO = gzopen(outputFileName_.c_str(), "wb");
-            if(!gzfpO)
-            {
-                cerr << "[" << __func__ << "::" << getTime() << "] " 
-                    << "'" << outputFileName_ << "': No such file or directory or possibly reached the maximum open file limit. You can set 'ulimit -n' to a larger value to continue." << endl;
-                exit(1);
-            }
-        }
-        else if (outputFileName_.size() > 0)
-        {
-            // open file
-            fpO.open(outputFileName_, ios::out);
-            if(!fpO)
-            {
-                cerr << "[" << __func__ << "::" << getTime() << "] " 
-                    << "'" << outputFileName_ << "': No such file or directory or possibly reached the maximum open file limit. You can set 'ulimit -n' to a larger value to continue." << endl;
-                exit(1);
-            }
-        }
-    }
-    ~SAVE() {
-        if (outputFileName_.find(".gz") != string::npos || outputFileName_.find(".GZ") != string::npos)
-        {
-            // close file
-            gzclose(gzfpO);
-        }
-        else if (outputFileName_.size() > 0)
-        {
-            // close file
-            fpO.close();
-        }
-    }
-    
-    int save(string & outTxt);
+    ~SAVE() noexcept(false);
+
+    SAVE(const SAVE&) = delete;
+    SAVE& operator=(const SAVE&) = delete;
+
+    void save(string & outTxt);
+
+    void write(const string & text);
 };
-
-#endif

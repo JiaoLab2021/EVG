@@ -1,149 +1,131 @@
-// https://wangpengcheng.github.io/2019/05/17/cplusplus_theadpool/
-#pragma once 
-#include <functional> 
-#include <future> 
-#include <mutex> 
-#include <queue> 
-#include <thread> 
-#include <utility> 
-#include <vector> 
-#include "SafeQueue.hpp" 
+#pragma once
+#include <algorithm>
+#include <vector>
+#include <thread>
+#include <future>
+#include <exception>
+#include <functional>
+#include <atomic>
+#include "logger.hpp"
+#include <type_traits>
+#include <utility>
+#include <stdexcept>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include "BlockingQueue.hpp"
 
 class ThreadPool {
-private:
-  class ThreadWorker {//内置线程工作类
-
-  private:
-    int m_id; //工作id
-
-    ThreadPool * m_pool;//所属线程池
-
-  public:
-    //构造函数
-
-    ThreadWorker(ThreadPool * pool, const int id) 
-      : m_pool(pool), m_id(id) {
-    }
-    //重载`()`操作
-
-    void operator()() {
-      std::function<void()> func; //定义基础函数类func
-      
-      bool dequeued; //是否正在取出队列中元素
-      
-      //判断线程池是否关闭，没有关闭，循环提取
-
-      while (!m_pool->m_shutdown) {
-        {
-          //为线程环境锁加锁，互访问工作线程的休眠和唤醒
-
-          std::unique_lock<std::mutex> lock(m_pool->m_conditional_mutex);
-          //如果任务队列为空，阻塞当前线程
-
-          if (m_pool->m_queue.empty()) {
-            m_pool->m_conditional_lock.wait(lock); //等待条件变量通知，开启线程
-
-          }
-          //取出任务队列中的元素
-
-          dequeued = m_pool->m_queue.dequeue(func);
-        }
-        //如果成功取出，执行工作函数
-
-        if (dequeued) {
-          func();
-        }
-      }
-    }
-  };
-
-  bool m_shutdown; //线程池是否关闭
-
-  SafeQueue<std::function<void()>> m_queue;//执行函数安全队列，即任务队列
-
-  std::vector<std::thread> m_threads; //工作线程队列
-
-  std::mutex m_conditional_mutex;//线程休眠锁互斥变量
-
-  std::condition_variable m_conditional_lock; //线程环境锁，让线程可以处于休眠或者唤醒状态
-
 public:
-    //线程池构造函数
-
-  ThreadPool(const int n_threads)
-    : m_threads(std::vector<std::thread>(n_threads)), m_shutdown(false) {
-  }
-
-  ThreadPool(const ThreadPool &) = delete; //拷贝构造函数，并且取消默认父类构造函数
-
-  ThreadPool(ThreadPool &&) = delete; // 拷贝构造函数，允许右值引用
-
-  ThreadPool & operator=(const ThreadPool &) = delete; // 赋值操作
-
-  ThreadPool & operator=(ThreadPool &&) = delete; //赋值操作
-
-  // Inits thread pool
-
-  void init() {
-    for (int i = 0; i < m_threads.size(); ++i) {
-      m_threads[i] = std::thread(ThreadWorker(this, i));//分配工作线程
-
+    explicit ThreadPool(size_t n_threads = std::thread::hardware_concurrency(), size_t queue_capacity = 0)
+        : tasks_(compute_capacity_(n_threads, queue_capacity))
+    {
+        if (n_threads == 0) n_threads = 1;
+        n_threads_ = n_threads;
+        for (size_t i = 0; i < n_threads_; ++i) {
+            workers_.emplace_back([this]{ this->worker_loop_(); });
+        }
     }
-  }
 
-  // Waits until threads finish their current task and shutdowns the pool
-
-  void shutdown() {
-    m_shutdown = true;
-    m_conditional_lock.notify_all(); //通知 唤醒所有工作线程
-    
-    for (int i = 0; i < m_threads.size(); ++i) {
-      if(m_threads[i].joinable()) { //判断线程是否正在等待
-
-        m_threads[i].join();  //将线程加入等待队列
-
-      }
+    ~ThreadPool() {
+        stop();
     }
-  }
 
-  // Submit a function to be executed asynchronously by the pool
-  //线程的主要工作函数，使用了后置返回类型，自动判断函数返回值
+    ThreadPool(const ThreadPool&)            = delete;
+    ThreadPool(ThreadPool&&)                 = delete;
+    ThreadPool& operator=(const ThreadPool&) = delete;
+    ThreadPool& operator=(ThreadPool&&)      = delete;
 
-  template<typename F, typename...Args>
-  auto submit(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
-    // Create a function with bounded parameters ready to execute
-    // 
+    template<class F, class... Args>
+    auto submit(F&& f, Args&&... args)
+        -> std::future<std::invoke_result_t<F,Args...>>
+    {
+        using R = std::invoke_result_t<F,Args...>;
+        if (stopped_.load(std::memory_order_acquire)) {
+            throw std::runtime_error("submit on stopped ThreadPool");
+        }
 
-    std::function<decltype(f(args...))()> func = std::bind(std::forward<F>(f), std::forward<Args>(args)...);//连接函数和参数定义，特殊函数类型,避免左、右值错误
+        auto task = std::make_shared<std::packaged_task<R()>>(
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+        );
+        std::future<R> fut = task->get_future();
 
-    // Encapsulate it into a shared ptr in order to be able to copy construct // assign 
-    //封装获取任务对象，方便另外一个线程查看结果
+        tasks_.push([task]{ (*task)(); });
 
-    auto task_ptr = std::make_shared<std::packaged_task<decltype(f(args...))()>>(func);
+        return fut;
+    }
 
-    // Wrap packaged task into void function
-    //利用正则表达式，返回一个函数对象
+    template<class F>
+    void parallel_for(size_t count, F&& function) {
+        if (count == 0) return;
 
-    std::function<void()> wrapper_func = [task_ptr]() {
-      (*task_ptr)(); 
-    };
+        std::atomic<size_t> next{0};
+        const size_t worker_count = std::min(count, n_threads_);
+        std::vector<std::future<void>> futures;
+        futures.reserve(worker_count);
 
-    // 队列通用安全封包函数，并压入安全队列
+        for (size_t worker = 0; worker < worker_count; ++worker) {
+            futures.emplace_back(submit([&next, count, &function] {
+                while (true) {
+                    const size_t index = next.fetch_add(1, std::memory_order_relaxed);
+                    if (index >= count) return;
+                    std::invoke(function, index);
+                }
+            }));
+        }
 
-    m_queue.enqueue(wrapper_func);
+        std::exception_ptr error;
+        for (auto& future : futures) {
+            try {
+                future.get();
+            } catch (...) {
+                if (!error) error = std::current_exception();
+            }
+        }
+        if (error) std::rethrow_exception(error);
+    }
 
-    // 唤醒一个等待中的线程
+    void stop() {
+        bool expected = false;
+        if (!stopped_.compare_exchange_strong(expected, true)) {
+            return; // already stopped
+        }
+        tasks_.shutdown();
+        for (auto& t : workers_) {
+            if (t.joinable()) t.join();
+        }
+    }
 
-    m_conditional_lock.notify_one();
+    size_t get_pending()    const { return tasks_.size(); }
+    size_t thread_count()   const { return n_threads_; }
+    size_t queue_capacity() const { return tasks_.capacity(); }
 
-    // 返回先前注册的任务指针
+private:
+    static size_t compute_capacity_(size_t& n_threads, size_t user_cap) {
+        if (n_threads == 0) n_threads = 1;
+        if (user_cap == 0) {
+            // Default capacity = 2 * n_threads
+            return 2 * n_threads;
+        }
+        return user_cap;
+    }
 
-    return task_ptr->get_future();
-  }
+    void worker_loop_( ) {
+        while (true) {
+            auto opt = tasks_.pop();
+            if (!opt) break;  // queue closed & empty
+            try {
+                (*opt)();
+            } catch (const std::exception& e) {
+                error_stream() << "Uncaught exception: " << e.what() << '\n';
+            } catch (...) {
+                error_stream() << "Unknown exception\n";
+            }
+        }
+    }
 
-  // 返回队列任务数量
-  auto get_queue()
-  {
-    return m_queue.size();
-  }
+    std::vector<std::thread>             workers_;
+    BlockingQueue<std::function<void()>> tasks_;     // bounded queue
+    std::atomic<bool>                    stopped_{false};
+    size_t                               n_threads_{0};
 };

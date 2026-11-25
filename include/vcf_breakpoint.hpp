@@ -1,5 +1,4 @@
-#ifndef VCF_BREAKPOINT_HPP
-#define VCF_BREAKPOINT_HPP
+#pragma once
 
 #include <fstream>
 #include <string>
@@ -7,45 +6,33 @@
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
-#include "zlib.h"
-#include <getopt.h>
 #include <cstdlib>
 #include <regex>
 
 #include "vcf_open.hpp"
 #include "save.hpp"
 #include "strip_split_join.hpp"
-#include "get_time.hpp"
 
 using namespace std;
 
-void help_breakpoint(char** argv);
-
-int main_breakpoint(int argc, char** argv);
-
+// Shift the start position of every variant by a fixed size.
 class VCFBreakpoint
 {
 private:
     string vcfFileName_;
     string prefix_;
     int32_t breakpointErrorSize_;
+    uint32_t threads_;
 
 public:
-    /**
-	 * init
-	 *
-	 * @param vcfFileName                     input VCF  file name
-     * @param prefix                          output file prefix
-     * @param breakpointErrorSize             breakpoint error
-     * 
-	**/
     VCFBreakpoint(
-        const string & vcfFileName, 
-        const string & prefix, 
-        const int32_t & breakpointErrorSize
+        const string & vcfFileName,
+        const string & prefix,
+        const int32_t & breakpointErrorSize,
+        uint32_t threads
     );
 
-    void vcf_breakpoint();
-};
+    void shift_breakpoints();
 
-#endif  // namespace VCF_BREAKPOINT_HPP
+    void shift_record(VCFINFOSTRUCT & INFOSTRUCTTMP, string & outLine) const;
+};

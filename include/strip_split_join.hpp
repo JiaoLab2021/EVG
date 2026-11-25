@@ -1,56 +1,19 @@
-#ifndef STRIP_SPLIT_JOIN_HPP
-#define STRIP_SPLIT_JOIN_HPP
+#pragma once
+
 #include <string>
 #include <vector>
 
 using namespace std;
 
-
-/*
- Remove special characters from both ends of a string
- str -> string
- ch -> special character
-*/
+// Remove the character ch from both ends of str.
 string strip(const string & str, char ch=' ');
 
-
-/*
- Split the string
- str -> String
- delim -> Split characters
-*/
+// Split str at every delim; empty fields are kept. The second form fills fields, reusing the strings already in it.
 vector<string> split(const string & str, const string & delim);
+void split(const string & str, const string & delim, vector<string> & fields);
 
-
-/*
- String join merging
- val -> The container to be joined
- delim -> Characters added between container elements
-*/
-string join(vector<int> & val, string delim);
-
-
-/*
- String join merging
- val -> The container to be joined
- delim -> Characters added between container elements
-*/
-string join(vector<long int> & val, string delim);
-
-
-/*
- String join merging
- val -> The container to be joined
- delim -> Characters added between container elements
-*/
-string join(vector<float> & val, string delim);
-
-
-/*
- String join merging
- val -> The container to be joined
- delim -> Characters added between container elements
-*/
-string join(vector<string> & val, string delim);
-
-#endif
+// Join numbers (std::to_string) or strings with delim.
+string join(const vector<int> & val, const string & delim);
+string join(const vector<long int> & val, const string & delim);
+string join(const vector<float> & val, const string & delim);
+string join(const vector<string> & val, const string & delim);

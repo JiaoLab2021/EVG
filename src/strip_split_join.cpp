@@ -2,142 +2,131 @@
 
 using namespace std;
 
-
-/*
- * Remove special characters from both ends of a string
- * str -> string
- * ch -> special character
-*/
+// Remove the character ch from both ends of str.
 string strip(const string & str, char ch)
 {
-	int i = 0;
-	while (str[i] == ch)  // The number of ch characters in the header is i
-		i++;
-	int j = str.size() - 1;
-	while (str[j] == ch)  // The number of ch characters at the end is str.size() -1-j
-		j--;		
-	return str.substr(i, j+1-i);
+    const size_t begin = str.find_first_not_of(ch);
+    if (begin == string::npos)
+        return string();
+    const size_t end = str.find_last_not_of(ch);
+    return str.substr(begin, end + 1 - begin);
 }
 
-
-/*
- * Split the string
- * str -> String
- * delim -> Split characters
-*/
+// Split str at every delim; empty fields are kept.
 vector<string> split(const string & str, const string & delim)
 {
-	vector<string> res;  // Stores the split substring in a vector
-	if("" == str) return  res;  // Return an empty vector if it is empty
-	
-	string strs = str + delim;  // Extend the string to retrieve the last delimited string
-	size_t pos;
-	size_t size = strs.size();
- 
-	for (size_t i = 0; i < size; ++i) {
-		pos = strs.find(delim, i); // pos indicates the position where the delimiter first appears. The string from i to pos is the delimited string
-		if( pos < size)  // If yes, if no separator is found, pos is string::npos
-		{
-			string s = strs.substr(i, pos - i);  // A substring with length pos-i starting from i
-			res.push_back(s);  // The string cut between two consecutive Spaces is an empty string, there is no judgment here whether s is empty, so the output of empty characters in the final result,
-			i = pos + delim.size() - 1;
-		}
-	}
-	return res;	
+    vector<string> res;
+    split(str, delim, res);
+    return res;
 }
 
+// Split str at every delim into fields, reusing the strings already in fields; empty fields are kept.
+void split(const string & str, const string & delim, vector<string> & fields)
+{
+    size_t count = 0;
+    if (!str.empty()) {
+        if (delim.empty()) {
+            fields.resize(1);
+            fields[0] = str;
+            return;
+        }
 
-/*
- * String join merging
- * val -> The container to be joined
- * delim -> Characters added between container elements
-*/
-string join(vector<int> & val, string delim)
+        // ------ Count the fields so the vector grows at most once ------
+        size_t fieldNum = 1;
+        for (size_t pos = str.find(delim); pos != string::npos; pos = str.find(delim, pos + delim.size())) {
+            ++fieldNum;
+        }
+        fields.reserve(fieldNum);
+
+        size_t start = 0;
+        while (true) {
+            const size_t pos = str.find(delim, start);
+            const size_t end = (pos == string::npos) ? str.size() : pos;
+            if (count < fields.size()) {
+                fields[count].assign(str, start, end - start);
+            } else {
+                fields.emplace_back(str, start, end - start);
+            }
+            ++count;
+            if (pos == string::npos) break;
+            start = pos + delim.size();
+        }
+    }
+    fields.resize(count);
+}
+
+// Join integers with delim.
+string join(const vector<int> & val, const string & delim)
 {
     std::string str;
-	int vecSize = val.size();
-	int index = 0;
-	for (auto iter : val)
-	{
-		str += to_string(iter);
-		
-		if (index != vecSize-1)
+    int vecSize = val.size();
+    int index = 0;
+    for (const auto& iter : val)
+    {
+        str += to_string(iter);
+
+        if (index != vecSize-1)
         {
             str += delim;
         }
-		index++;
-	}
+        index++;
+    }
     return str;
 }
 
-
-/*
- * String join merging
- * val -> The container to be joined
- * delim -> Characters added between container elements
-*/
-string join(vector<long int> & val, string delim)
+// Join long integers with delim.
+string join(const vector<long int> & val, const string & delim)
 {
     std::string str;
-	int vecSize = val.size();
-	int index = 0;
-	for (auto iter : val)
-	{
-		str += to_string(iter);
-		
-		if (index != vecSize-1)
+    int vecSize = val.size();
+    int index = 0;
+    for (const auto& iter : val)
+    {
+        str += to_string(iter);
+
+        if (index != vecSize-1)
         {
             str += delim;
         }
-		index++;
-	}
+        index++;
+    }
     return str;
 }
 
-
-/*
- * String join merging
- * val -> The container to be joined
- * delim -> Characters added between container elements
-*/
-string join(vector<float> & val, string delim)
+// Join floats (std::to_string) with delim.
+string join(const vector<float> & val, const string & delim)
 {
     std::string str;
-	int vecSize = val.size();
-	int index = 0;
-	for (auto iter : val)
-	{
-		str += to_string(iter);
-		
-		if (index != vecSize-1)
+    int vecSize = val.size();
+    int index = 0;
+    for (const auto& iter : val)
+    {
+        str += to_string(iter);
+
+        if (index != vecSize-1)
         {
             str += delim;
         }
-		index++;
-	}
+        index++;
+    }
     return str;
 }
 
-
-/*
- * String join merging
- * val -> The container to be joined
- * delim -> Characters added between container elements
-*/
-string join(vector<string> & val, string delim)
+// Join strings with delim.
+string join(const vector<string> & val, const string & delim)
 {
     std::string str;
-	int vecSize = val.size();
-	int index = 0;
-	for (auto iter : val)
-	{
-		str += iter;
-		
-		if (index != vecSize-1)
+    int vecSize = val.size();
+    int index = 0;
+    for (const auto& iter : val)
+    {
+        str += iter;
+
+        if (index != vecSize-1)
         {
             str += delim;
         }
-		index++;
-	}
+        index++;
+    }
     return str;
 }

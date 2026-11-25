@@ -1,22 +1,31 @@
+{% set release = load_file_regex(load_file='include/ProgramMetadata.hpp', regex_pattern='version *= *"([0-9.]+)-r([0-9]+)"', from_recipe_dir=True) %}
+
 package:
   name: evg
-  version: 1.2.2
+  version: {{ release.group(1) }}_r{{ release.group(2) }}
 
 source:
   path: .
 
 requirements:
   build:
-    - cmake >=3.12
+    - cmake >=3.15
+    - make
     - gcc >=7.3.0
     - python =3.9
     - zlib
+    - bzip2
+    - xz
+    - libdeflate
 
   run:
-    - cmake >=3.12
+    - cmake >=3.15
     - gcc >=7.3.0
     - python =3.9
     - zlib
+    - bzip2
+    - xz
+    - libdeflate
     - tabix
     - bwa
     - samtools
@@ -27,6 +36,12 @@ requirements:
     - graphtyper
     - kmc
     - pangenie
+
+test:
+  commands:
+    - EVG --version
+    - graphvcf --version
+    - fastAQ --version
 
 channels:
     - kdm801

@@ -1,206 +1,94 @@
-// g++ vcf_split.cpp -o vcf_split -lz -O2
 #include "../include/vcf_filter.hpp"
+
+#include "../include/logger.hpp"
 
 using namespace std;
 
-int main_filter(int argc, char** argv)
-{
-    // Input file
-    string vcfFileName;
-
-    // Filtering threshold
-    double MAF = 0.01;  // Minimum allele frequency
-    double MISSRATE = 0.1;  // Miss rate
-
-    // Output file name
-    string outputFileName = "";
-
-    // Input parameter
-    int c;
-    while (true)
-    {
-        static const struct option long_options[] = {
-            {"vcf", required_argument, 0, 'v'},
-
-            {"maf", required_argument, 0, '1'},
-            {"geno", required_argument, 0, '2'},
-            {"out", required_argument, 0, 'o'},
-            {"help", no_argument, 0, 'h'},
-            {0, 0, 0, 0}
-        };
-
-        int option_index = 0;
-
-        c = getopt_long (argc, argv, "v:1:2:o:h", long_options, &option_index);
-
-        if (c == -1)
-            break;
-
-        switch (c)
-        {
-        case 'v':
-            vcfFileName = optarg;
-            break;
-        case '1':
-            MAF = stod(optarg);
-            break;
-        case '2':
-            MISSRATE = stod(optarg);
-            break;
-        case 'o':
-            outputFileName = optarg;
-            break;
-        case 'h':
-        case '?':
-            help_filter(argv);
-            exit(1);
-            break;
-        default:
-            abort ();
-        }
-    }
-
-    // Check whether the parameters are correct
-    if (vcfFileName.empty())
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Parameter error.\n";
-        help_filter(argv);
-        return 1;
-    }
-
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
-    
-    // init
-    VCFFilter VCFFilterClass(
-        vcfFileName, 
-        outputFileName, 
-        MAF, 
-        MISSRATE
-    );
-    VCFFilterClass.vcf_filter();
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
-
-    return 0;
-}
-
-// Help document
-void help_filter(char** argv)
-{
-  cerr << "usage: " << argv[0] << " " << argv[1] << " -v FILE [options]" << endl
-       << "filter SNPs by maf and missing rate." << endl
-       << endl
-       << "required arguments:" << endl
-       << "    -v, --vcf        FILE      vcf file to be converted" << endl
-       << endl
-       << "optional arguments:" << endl
-       << "    --maf            FLOAT     exclude SNPs with minor allele frequency lower than threshold [0.01]" << endl
-       << "    --geno           FLOAT     exclude SNPs with missing call frequencies greater than threshold [0.1]" << endl
-       << "    -o, --out        FILE      output filename [stdout]" << endl
-       << endl
-       << "    -h, --help                 print this help document" << endl;
-}
-
-
-/**
- * init
- *
- * @param vcfFileName         input VCF  file name
- * @param outputFileName      output file name
- * @param MAF                 MAF
- * @param MISSRATE            MISSRATE
- * 
-**/
+// Store the input VCF, output name, thresholds and thread count.
 VCFFilter::VCFFilter(
-    const string & vcfFileName, 
-    const string & outputFileName, 
-    const double & MAF, 
-    const double & MISSRATE
-) : vcfFileName_(vcfFileName), outputFileName_(outputFileName), MAF_(MAF), MISSRATE_(MISSRATE) {}
+    const string & vcfFileName,
+    const string & outputFileName,
+    const double & MAF,
+    const double & MISSRATE,
+    uint32_t threads
+) : vcfFileName_(vcfFileName), outputFileName_(outputFileName), MAF_(MAF), MISSRATE_(MISSRATE), threads_(threads) {}
 
-
-
-void VCFFilter::vcf_filter()
+// Keep header lines, non-SNP records and SNPs that pass both thresholds; workers decide per record (filter_record).
+void VCFFilter::filter_vcf()
 {
-    // input file stream
-    VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(vcfFileName_);
+    VCFReader<bool> VCFOPENCLASS(vcfFileName_, threads_, [this](VCFINFOSTRUCT& INFOSTRUCTTMP, bool& keep) {
+        keep = filter_record(INFOSTRUCTTMP);
+    });
 
+    SAVE SAVECLASS(outputFileName_, threads_);
 
-    // output file stream
-    SAVE SAVECLASS(outputFileName_);
-
-
-    // Temporarily stores the output string
     string outTxt = "";
 
-    // If not, continue
-    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // empty line, skip
+    ProcessedRecord<bool> record;
+    while (VCFOPENCLASS.read(record)) {
+        const VCFINFOSTRUCT& INFOSTRUCTTMP = record.info;
+
         if (INFOSTRUCTTMP.line.empty()) {
             continue;
         }
-        
-        // If comment lines, save them directly
+
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             outTxt += INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
-        // Acquire variant type
-        INFOSTRUCTTMP.ID = VCFOPENCLASS.get_TYPE(
-            INFOSTRUCTTMP.LEN, 
-            INFOSTRUCTTMP.ALTVec
-        );
-
-        if (INFOSTRUCTTMP.ID == "SNP") {  // Determine whether to filter when SNP is displayed
-            double MAFTMP;  // Minimum allele frequency
-            double MISSRATETMP;  // Miss rate
-
-            // Get all genotypes   map<idx, vector<gtString>>
-            unordered_map<int, vector<string> > GTVecMapTmp;
-            uint32_t misSampleNum;
-            tie(GTVecMapTmp, misSampleNum) = VCFOPENCLASS.get_gt(
-                INFOSTRUCTTMP.lineVec
-            );
-
-            // If there is only one genotype, skip.
-            if (GTVecMapTmp.size() - misSampleNum <= 1) {
-                continue;
-            }
-            
-            // The minimum allele frequency and deletion rate were calculated
-            tie(MAFTMP, MISSRATETMP) = VCFOPENCLASS.calculate(
-                GTVecMapTmp, 
-                misSampleNum
-            );
-
-            // Saved directly through the threshold
-            if (MAFTMP >= MAF_ && MISSRATETMP <= MISSRATE_) {
-                outTxt += INFOSTRUCTTMP.line + "\n";
-            }
-        } else {  // Other types of variation are saved directly
-            outTxt += INFOSTRUCTTMP.line + "\n";
+        if (!record.get()) {
+            continue;
         }
+        outTxt += INFOSTRUCTTMP.line + "\n";
 
-        if (outTxt.size() >= 10 * 1024 * 1024) {  // Other types of variation are saved directly
-            // Output file stream
+        if (outTxt.size() >= 10 * 1024 * 1024) {
             SAVECLASS.save(
                 outTxt
             );
 
-            // Clear
             outTxt.clear();
         }
     }
 
-    if (outTxt.size() > 0) {  // Write for the last time
-        // Other types of variation are saved directly
+    if (outTxt.size() > 0) {
         SAVECLASS.save(
             outTxt
         );
 
-        // Clear
         string().swap(outTxt);
     }
+}
+
+// Return whether a data record is written (on a worker): non-SNP records always, SNPs with 2 called samples passing both thresholds.
+bool VCFFilter::filter_record(VCFINFOSTRUCT & INFOSTRUCTTMP) const
+{
+    INFOSTRUCTTMP.ID = VCFOPEN::get_TYPE(
+        INFOSTRUCTTMP.LEN,
+        INFOSTRUCTTMP.ALTVec
+    );
+
+    if (INFOSTRUCTTMP.ID != "SNP") {
+        return true;
+    }
+
+    double MAFTMP;
+    double MISSRATETMP;
+
+    unordered_map<int, vector<string> > GTVecMapTmp;
+    uint32_t misSampleNum;
+    tie(GTVecMapTmp, misSampleNum) = VCFOPEN::get_gt(
+        INFOSTRUCTTMP.lineVec
+    );
+
+    if (GTVecMapTmp.size() - misSampleNum <= 1) {
+        return false;
+    }
+
+    tie(MAFTMP, MISSRATETMP) = VCFOPEN::calculate(
+        INFOSTRUCTTMP.lineVec,
+        misSampleNum
+    );
+
+    return MAFTMP >= MAF_ && MISSRATETMP <= MISSRATE_;
 }

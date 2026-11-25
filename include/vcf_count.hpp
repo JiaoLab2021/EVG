@@ -1,5 +1,4 @@
-#ifndef VCF_COUNT_HPP
-#define VCF_COUNT_HPP
+#pragma once
 
 #include <fstream>
 #include <string>
@@ -7,25 +6,17 @@
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
-#include "zlib.h"
 #include <unordered_map>
 #include <cmath>
 
-#include "strip_split_join.hpp"
-#include "get_time.hpp"
-#include "sort_find.hpp"
-#include "vcf_open.hpp"
-#include <getopt.h>
 #include <cstdlib>
 
+#include "strip_split_join.hpp"
+#include "vcf_open.hpp"
 
 using namespace std;
 
-
-void help_count(char** argv);
-int main_count(int argc, char** argv);
-
-// Bool function that performs statistics on the variation length
+// True if a length lies in [d1, d2].
 class f_mod_c
 {
 private:
@@ -38,15 +29,15 @@ public:
     bool operator() (int64_t x) {return  dv1 <= x && x <= dv2;}
 };
 
+// Count alleles by variant type and length bin.
 class VCFCount
 {
 private:
     string vcfFileName_;
+    uint32_t threads_;
 
-    // Variable length range
     vector<string> lengthVec_;
 
-    // Record the number of variations
     uint64_t snpNum_ = 0;
     uint64_t indelNum_ = 0;
     uint64_t insNum_ = 0;
@@ -55,7 +46,6 @@ private:
     uint64_t dupNum_ = 0;
     uint64_t otherNum_ = 0;
 
-    // Allelic Number
     uint64_t snpBiAllelicNum_ = 0;
     uint64_t snpMuAllelicNum_ = 0;
     uint64_t indelBiAllelicNum_ = 0;
@@ -71,12 +61,10 @@ private:
     uint64_t otherBiAllelicNum_ = 0;
     uint64_t otherMuAllelicNum_ = 0;
 
-    // Record the length of variations
     vector<int32_t> svLenVec_;
     vector<int32_t> InvLenVec_;
     vector<int32_t> DupLenVec_;
 
-    // Length statistics
     vector<uint64_t> svNumVec_;
     vector<uint64_t> svTotalLenVec_;
     vector<uint64_t> InvNumVec_;
@@ -85,19 +73,11 @@ private:
     vector<uint64_t> DupTotalLenVec_;
 
 public:
-    /**
-	 * init
-	 *
-	 * @param vcfFileName       input VCF  file name
-     * 
-	**/
-    VCFCount(const string & vcfFileName);
+    VCFCount(const string & vcfFileName, uint32_t threads);
 
-    void count();
+    void count_variants();
 
-    void count_num_len();
+    void count_length_bins();
 
-    void get_result();
+    void print_result();
 };
-
-#endif

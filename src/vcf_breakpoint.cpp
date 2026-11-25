@@ -1,157 +1,59 @@
-// g++ vcf_breakpoint.cpp -o vcf_breakpoint -lz -O2
 #include "../include/vcf_breakpoint.hpp"
+
+#include "../include/logger.hpp"
 
 using namespace std;
 
-int main_breakpoint(int argc, char** argv)
-{
-    // Input file
-    string vcfFileName;
-    
-    // Output file prefix
-    string prefix = "breakpoint";
-
-    // Breakpoint error magnitude
-    int32_t breakpointErrorSize_ = 1;
-
-    // Input parameter
-    int c;
-    while (true)
-    {
-        static const struct option long_options[] = {
-            {"vcf", required_argument, 0, 'v'},
-
-            {"prefix", required_argument, 0, 'p'},
-            {"size", required_argument, 0, 's'},
-
-            {"help", no_argument, 0, 'h'},
-            {0, 0, 0, 0}
-        };
-
-        int option_index = 0;
-
-        c = getopt_long (argc, argv, "v:p:s:h", long_options, &option_index);
-
-        if (c == -1)
-            break;
-
-        switch (c)
-        {
-        case 'v':
-            vcfFileName = optarg;
-            break;
-        case 'p':
-            prefix = optarg;
-            break;;
-        case 's':
-            breakpointErrorSize_ = stol(optarg);
-            break;
-        case 'h':
-        case '?':
-            help_breakpoint(argv);
-            exit(1);
-            break;
-        default:
-            abort ();
-        }
-    }
-
-    // Check whether the parameters are correct
-    if (vcfFileName.empty())
-    {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-             << "Parameter error.\n";
-        help_breakpoint(argv);
-        return 1;
-    }
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
-
-    // init
-    VCFBreakpoint VCFBreakpointClass(vcfFileName, prefix, breakpointErrorSize_);
-    // set breakpoint
-    VCFBreakpointClass.vcf_breakpoint();
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
-
-    return 0;
-}
-
-// Help document
-void help_breakpoint(char** argv)
-{
-  cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
-       << "set error for variants breakpoints." << endl
-       << endl
-       << "required arguments (Note: vcf files must be sorted):" << endl
-       << "    -v, --vcf           FILE       vcf file to set breakpoint error" << endl
-       << endl
-	   << "optional arguments:" << endl
-       << "    -p, --prefix        STRING     output prefix [breakpoint]" << endl
-       << "    -s, --size          INT        breakpoint error size [1]" << endl
-       << endl
-       << "    -h, --help                     print this help document" << endl;
-}
-
-
-/**
- * init
- *
- * @param vcfFileName                     tinput VCF  file name
- * @param prefix                          output file prefix
- * @param breakpointErrorSize             breakpoint error
- * 
-**/
+// Store the input VCF, output prefix, error size and thread count.
 VCFBreakpoint::VCFBreakpoint(
-    const string & vcfFileName, 
-    const string & prefix, 
-    const int32_t & breakpointErrorSize
-) : vcfFileName_(vcfFileName), prefix_(prefix), breakpointErrorSize_(breakpointErrorSize) {}
+    const string & vcfFileName,
+    const string & prefix,
+    const int32_t & breakpointErrorSize,
+    uint32_t threads
+) : vcfFileName_(vcfFileName), prefix_(prefix), breakpointErrorSize_(breakpointErrorSize), threads_(threads) {}
 
-
-void VCFBreakpoint::vcf_breakpoint()
+// Subtract the error size from POS (minimum 1), update END in INFO and write <prefix>.vcf.gz; workers shift the records (shift_record).
+void VCFBreakpoint::shift_breakpoints()
 {
-    // input file stream
-    VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(vcfFileName_);
+    VCFReader<string> VCFOPENCLASS(vcfFileName_, threads_, [this](VCFINFOSTRUCT& INFOSTRUCTTMP, string& outLine) {
+        shift_record(INFOSTRUCTTMP, outLine);
+    });
 
-    // Record the result of the conversion
     string outTxt;
 
-    // ouyput file stream
-    SAVE outFile(prefix_ + ".vcf.gz");
+    SAVE outFile(prefix_ + ".vcf.gz", threads_);
 
-    while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // Check for comment lines
-            string headLine = INFOSTRUCTTMP.line + "\n";
+    ProcessedRecord<string> record;
+    while (VCFOPENCLASS.read(record)) {
+        if (record.info.line.find("#") != string::npos) {
+            string headLine = record.info.line + "\n";
             outFile.save(headLine);
         } else {
-            // Use regular expressions to extract length information
-            std::regex reg("END=(\\d+)");
-            
-            // Additive error
-            INFOSTRUCTTMP.lineVec[1] = (static_cast<int32_t>(INFOSTRUCTTMP.POS) > breakpointErrorSize_) ? to_string(static_cast<int32_t>(INFOSTRUCTTMP.POS) - breakpointErrorSize_) : "1";
+            outTxt += record.get();
 
-            // end position
-            uint32_t refEnd = stoul(INFOSTRUCTTMP.lineVec[1]) + INFOSTRUCTTMP.LEN - 1;
-            INFOSTRUCTTMP.lineVec[7] = regex_replace(string(INFOSTRUCTTMP.lineVec[7]), regex(reg), string("END=" + to_string(refEnd)));
-
-            // Adds to the output string
-            outTxt += join(INFOSTRUCTTMP.lineVec, "\t") + "\n";
-
-            // save result
-            if (outTxt.size() > 10 * 1024 * 1024) {  // It is written every 10Mb
+            if (outTxt.size() > 10 * 1024 * 1024) {
                 outFile.save(outTxt);
 
-                // Empty string
                 outTxt.clear();
             }
         }
     }
 
-    // Last write
     outFile.save(outTxt);
 
-    // Empty string
     string().swap(outTxt);
+}
+
+// Shift one data record and set outLine to the record as written (joined, '\n').
+void VCFBreakpoint::shift_record(VCFINFOSTRUCT & INFOSTRUCTTMP, string & outLine) const
+{
+    static const std::regex reg("END=(\\d+)");
+
+    INFOSTRUCTTMP.lineVec[1] = (static_cast<int32_t>(INFOSTRUCTTMP.POS) > breakpointErrorSize_) ? to_string(static_cast<int32_t>(INFOSTRUCTTMP.POS) - breakpointErrorSize_) : "1";
+
+    uint32_t refEnd = stoul(INFOSTRUCTTMP.lineVec[1]) + INFOSTRUCTTMP.LEN - 1;
+    INFOSTRUCTTMP.lineVec[7] = regex_replace(string(INFOSTRUCTTMP.lineVec[7]), reg, string("END=" + to_string(refEnd)));
+
+    outLine = join(INFOSTRUCTTMP.lineVec, "\t");
+    outLine += '\n';
 }

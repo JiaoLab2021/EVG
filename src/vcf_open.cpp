@@ -1,144 +1,151 @@
 #include "../include/vcf_open.hpp"
 
+#include <functional>
+#include <regex>
+#include <stdexcept>
+
+#include "../include/logger.hpp"
+#include "../include/vcf_sort.hpp"
+
 using namespace std;
 
+namespace {
 
-/**
- * @brief initialize
- * 
- * @param vcfFileName   the output of vcf file
- * 
-**/
-VCFOPEN::VCFOPEN(
-    const string & vcfFileName
-) {
-    vcfFileName_ = vcfFileName;
-
-    // Input file stream
-    gzfpI = gzopen(vcfFileName_.c_str(), "rb");
-    if(!gzfpI) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-            << "'" << vcfFileName_ << "': No such file or directory." << endl;
-        exit(1);
-    }
-
-    // buffer size
-    bufferSize_ = 1 * 1024 * 1024;  // 1 Mb
-    line_ = new char[bufferSize_];  // Read only bufferSize_ bytes of data at a time
-}
-
-/**
- * @brief Close file
- * 
- * @return 0
-**/
-VCFOPEN::~VCFOPEN() {
-    // Close file
-    gzclose(gzfpI);
-
-    // Release dynamically allocated memory
-    delete[] line_;
-}
-
-
-/**
- * @brief traverse files
- * 
- * @param INFOSTRUCTTMP store the contents of the line
- * 
- * @return bool
-**/
-bool VCFOPEN::read(
-    VCFINFOSTRUCT & INFOSTRUCTTMP
-) {
-    INFOSTRUCTTMP.clear();
-
-    string info = ""; // temporary string
-
-    if(gzgets(gzfpI, line_, bufferSize_)) {
-        info += line_;
-
-        // empty line_
-        memset(line_, 0, min(strlen(line_), bufferSize_));
-
-        // If there is no newline character, it means that the line is not over, continue to read
-        while ((info.find("\n") == string::npos || info == "\n") && gzgets(gzfpI, line_, bufferSize_)) {
-            info += line_;
-
-            // empty line_
-            memset(line_, 0, min(strlen(line_), bufferSize_));
+// Split a GT value into its allele tokens at every '/' and '|'.
+vector<string> split_alleles(const string & gtTxt) {
+    vector<string> alleles;
+    string allele;
+    for (const char c : gtTxt) {
+        if (c == '/' || c == '|') {
+            alleles.push_back(allele);
+            allele.clear();
+        } else {
+            allele += c;
         }
-        
-        // remove line breaks
-        if (!info.empty()) {
-            info = strip(info, '\n');
-        } else {  // false
+    }
+    alleles.push_back(allele);
+    return alleles;
+}
+
+// Return true if every allele of a GT value is '.' (any ploidy).
+bool is_missing_gt(const string & gtTxt) {
+    for (const auto& allele : split_alleles(gtTxt)) {
+        if (allele != ".") {
             return false;
         }
-        
-        // assignment
-        INFOSTRUCTTMP.line = info;
-        INFOSTRUCTTMP.lineVec = split(info, "\t");  // segmentation
-
-        // comment lines
-        if (info.find("#") != string::npos) {
-            return true;
-        }
-        
-
-        // non-sample lines
-        if (INFOSTRUCTTMP.lineVec.size() < 9) { // Check the file first, if it is wrong, it will jump out of the code
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: '"
-                << vcfFileName_ 
-                << "' -> The number of vcf columns is less than 9.\n" 
-                << INFOSTRUCTTMP.line << endl;
-            exit(1);
-        }
-
-        INFOSTRUCTTMP.CHROM = INFOSTRUCTTMP.lineVec[0];  // CHROM
-        INFOSTRUCTTMP.POS = stoul(INFOSTRUCTTMP.lineVec[1]);  // POS
-        INFOSTRUCTTMP.ID = INFOSTRUCTTMP.lineVec[2];  // ID
-        INFOSTRUCTTMP.REF = INFOSTRUCTTMP.lineVec[3];  // REF
-        INFOSTRUCTTMP.ALT = INFOSTRUCTTMP.lineVec[4];  // ALT
-        INFOSTRUCTTMP.ALTVec = split(INFOSTRUCTTMP.ALT, ",");  // 'ALT' 'vec'
-
-        if (isdigit(INFOSTRUCTTMP.lineVec[5][0])) {  // Assign QUAL if it is a number, otherwise 0.0
-            INFOSTRUCTTMP.QUAL = stod(INFOSTRUCTTMP.lineVec[5]);  // QUAL
-        } else {
-            INFOSTRUCTTMP.QUAL = 0.0;
-        }
-
-        INFOSTRUCTTMP.FILTER = INFOSTRUCTTMP.lineVec[6];  // FILTER
-        INFOSTRUCTTMP.INFO = INFOSTRUCTTMP.lineVec[7];  // [7]
-        INFOSTRUCTTMP.FORMAT = INFOSTRUCTTMP.lineVec[8];  // [8]
-
-        INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.REF.size();  // REF length
-        INFOSTRUCTTMP.END = INFOSTRUCTTMP.POS + INFOSTRUCTTMP.LEN - 1;  // end position
-
-        return true;
-    } else {  // Return false directly after traversing
-        return false;
     }
+    return true;
 }
 
+// Return the end of the last complete record in text (just after a '\n' that closes a non-blank line), looking only at '\n's from `from` on; 0 if there is none.
+size_t find_record_end(const string & text, size_t from) {
+    for (size_t pos = text.size(); pos > from; ) {
+        const size_t newline = text.rfind('\n', pos - 1);
+        if (newline == string::npos || newline < from) break;
+        if (newline > 0 && text[newline - 1] != '\n') return newline + 1;
+        pos = newline;
+    }
+    return 0;
+}
 
-/**
- * Get the type of variant
- * 
- * @param refLen  the length of REF variant
- * @param ALTVec  vector<qrySeq>
- * 
- * @return string   TYPE: SNP, InDel, Deletion, Insertion, Inversion, Duplication, Other
-**/
-string VCFOPEN::get_TYPE(
+}
+
+// Open a plain, gzip or BGZF VCF file; throw if it cannot be opened.
+VCFFile::VCFFile(
+    const string & vcfFileName,
+    uint32_t threads
+) : vcfFileName_(vcfFileName), threads_(threads), file_(vcfFileName, threads), eof_(false) {}
+
+// Read the next ~256 KB of whole records (the rest at EOF); false at the end; throw on damaged input or a missing BGZF EOF marker.
+bool VCFFile::read_chunk(
+    string & chunk
+) {
+    static constexpr size_t chunkSize = 256 << 10;
+
+    size_t end = 0;
+    while (end == 0 && !eof_) {
+        const size_t from = pending_.size();
+        pending_.resize(from + chunkSize);
+        const ssize_t bytes = file_.read(&pending_[from], chunkSize);
+        pending_.resize(from + bytes);
+        eof_ = bytes == 0;
+        end = eof_ ? pending_.size() : find_record_end(pending_, from);
+    }
+
+    chunk.swap(pending_);
+    pending_.assign(chunk, end, string::npos);
+    chunk.resize(end);
+    return !chunk.empty();
+}
+
+// Split a chunk into record lines (views; '\n' dropped, '\r' kept, a blank line joined to the next, so a final blank line is empty).
+vector<string_view> VCFFile::split_lines(
+    const string & chunk
+) {
+    vector<string_view> lines;
+    size_t pos = 0;
+    while (pos < chunk.size()) {
+        if (chunk[pos] == '\n' && ++pos == chunk.size()) {
+            lines.emplace_back();
+            break;
+        }
+        size_t end = chunk.find('\n', pos);
+        if (end == string::npos) end = chunk.size();
+        lines.emplace_back(chunk.data() + pos, end - pos);
+        pos = end + 1;
+    }
+    return lines;
+}
+
+// Fill INFOSTRUCTTMP from one record line, reusing its strings: lines containing '#' keep only line and lineVec; other lines need at least 9 columns.
+void VCFFile::parse_record(
+    string_view line,
+    VCFINFOSTRUCT & INFOSTRUCTTMP
+) const {
+    if (line.find('#') != string_view::npos) {
+        INFOSTRUCTTMP.clear();
+        INFOSTRUCTTMP.line.assign(line.data(), line.size());
+        split(INFOSTRUCTTMP.line, "\t", INFOSTRUCTTMP.lineVec);
+        return;
+    }
+
+    INFOSTRUCTTMP.line.assign(line.data(), line.size());
+    split(INFOSTRUCTTMP.line, "\t", INFOSTRUCTTMP.lineVec);
+
+    if (INFOSTRUCTTMP.lineVec.size() < 9) {
+        throw runtime_error("'" + vcfFileName_ + "' -> The number of vcf columns is less than 9.\n" + INFOSTRUCTTMP.line);
+    }
+
+    INFOSTRUCTTMP.CHROM = INFOSTRUCTTMP.lineVec[0];
+    INFOSTRUCTTMP.POS = stoul(INFOSTRUCTTMP.lineVec[1]);
+    INFOSTRUCTTMP.ID = INFOSTRUCTTMP.lineVec[2];
+    INFOSTRUCTTMP.REF = INFOSTRUCTTMP.lineVec[3];
+    INFOSTRUCTTMP.ALT = INFOSTRUCTTMP.lineVec[4];
+    split(INFOSTRUCTTMP.ALT, ",", INFOSTRUCTTMP.ALTVec);
+
+    if (isdigit(INFOSTRUCTTMP.lineVec[5][0])) {
+        INFOSTRUCTTMP.QUAL = stod(INFOSTRUCTTMP.lineVec[5]);
+    } else {
+        INFOSTRUCTTMP.QUAL = 0.0;
+    }
+
+    INFOSTRUCTTMP.FILTER = INFOSTRUCTTMP.lineVec[6];
+    INFOSTRUCTTMP.INFO = INFOSTRUCTTMP.lineVec[7];
+    INFOSTRUCTTMP.FORMAT = INFOSTRUCTTMP.lineVec[8];
+
+    INFOSTRUCTTMP.LEN = INFOSTRUCTTMP.REF.size();
+    INFOSTRUCTTMP.END = INFOSTRUCTTMP.POS + INFOSTRUCTTMP.LEN - 1;
+}
+
+// Classify a record as SNP, InDel, Inversion, Duplication, Deletion, Insertion or Other from its allele lengths.
+string VCFFile::get_TYPE(
     const uint32_t & refLen,
     const vector<string> & ALTVec
 ) {
     uint32_t qryLen = 0;
     for (const auto& it1 : ALTVec) {
         uint32_t qryLenTmp = it1.size();
-        qryLen = max(qryLen, qryLenTmp);  // Find the longest qrySeq
+        qryLen = max(qryLen, qryLenTmp);
     }
 
     int32_t svLen = qryLen - refLen;
@@ -159,141 +166,231 @@ string VCFOPEN::get_TYPE(
     } else {
         return "Other";
     }
-    
-    return "Other";
 }
 
-
-/**
- * Get a list of locus genotypes.
- *
- * @param lineTmpVec  lineTmpVec
- * 
- * 
- * @return GTVecMap, misSampleNum   map<idx, vector<GTString> >
-**/
-tuple<unordered_map<int, vector<string> >, uint32_t> VCFOPEN::get_gt(
+// Return the genotype alleles of every sample ('.' read as '0') and the number of missing samples (all alleles '.', or no GT field).
+tuple<unordered_map<int, vector<string> >, uint32_t> VCFFile::get_gt(
     const vector<string> & lineTmpVec
 ) {
-    unordered_map<int, vector<string> > GTVecMap;  // map of all Line types, map<idx, vector<GTString> >
-    uint32_t misSampleNum = 0;  // number of missing samples
+    unordered_map<int, vector<string> > GTVecMap;
+    uint32_t misSampleNum = 0;
 
-    // FORMAT column
-    vector<string> formatVec = split(lineTmpVec[8], ":");  // FORMAT character split
+    vector<string> formatVec = split(lineTmpVec[8], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));
 
-    if (gtIndex == formatVec.size()) {  // Check whether index exists. If no index exists, the genotypes are all 0.
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [GT] information in FORMAT -> " << lineTmpVec[0] << ":" << lineTmpVec[1] << endl;
-        for (size_t i = 9; i < lineTmpVec.size(); i++) {  // Start the loop in the ninth column
-            GTVecMap[i - 9] = {"0", "0"};  // Assign
+    if (gtIndex == formatVec.size()) {
+        warning_stream() << "no [GT] information in FORMAT -> " << lineTmpVec[0] << ":" << lineTmpVec[1] << endl;
+        for (size_t i = 9; i < lineTmpVec.size(); i++) {
+            GTVecMap[i - 9] = {"0", "0"};
+            misSampleNum++;
         }
-    } else {  // If it exists, save it
-        string GTString;  // Store the genotype field
+    } else {
+        string GTString;
 
-        for (size_t i = 9; i < lineTmpVec.size(); i++) {  // Start the loop in the ninth column
-            GTString = split(lineTmpVec[i], ":")[gtIndex];  // gt field
-            vector<string> GTVec = gt_split(GTString);
-            GTVecMap[i - 9] = GTVec;  // Assign
+        for (size_t i = 9; i < lineTmpVec.size(); i++) {
+            GTString = sample_gt(lineTmpVec, i, gtIndex);
 
-            // Determine whether it is a missing sample
-            if (GTString == "." || GTString == "./." || GTString == ".|." || GTString == "././." || GTString == ".|.|." || GTString == "./././." || GTString == ".|.|.|.") {
+            if (is_missing_gt(GTString)) {
                 misSampleNum++;
             }
+
+            vector<string> GTVec = gt_split(GTString);
+            GTVecMap[i - 9] = GTVec;
         }
     }
 
     return tuple(GTVecMap, misSampleNum);
 }
 
-
-/**
- * split gt
- *
- * @param gtTxt
- * 
- * 
- * @return vector<gt>
-**/
-vector<string> VCFOPEN::gt_split(
+// Split a genotype into alleles, replacing '.' with '0'; throw if it is not a number or separated by '/' or '|'.
+vector<string> VCFFile::gt_split(
     string & gtTxt
 ) {
-    // Temporary gt list
     vector<string> gtVecTmp;
 
-    // Replace all '.' with '0'
     std::replace(gtTxt.begin(), gtTxt.end(), '.', '0');
-    
+
     if (gtTxt.find("/") != string::npos) {
         gtVecTmp = split(gtTxt, "/");
     } else if (gtTxt.find("|") != string::npos) {
         gtVecTmp = split(gtTxt, "|");
     } else {
         try {
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: sample has only one genotype, attempting to correct to diploid -> " << gtTxt << endl;
+            warning_stream() << "sample has only one genotype, attempting to correct to diploid -> " << gtTxt << endl;
             stoul(gtTxt);
             gtVecTmp.push_back(gtTxt);
-        } catch (const std::invalid_argument&) {
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
-            exit(1);
-        } catch (const std::out_of_range&) {
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: GT is not separated by '/' or '|' -> " << gtTxt << endl;
-            exit(1);
+        } catch (const std::logic_error&) {  // invalid_argument or out_of_range
+            throw runtime_error("GT is not separated by '/' or '|' -> " + gtTxt);
         }
     }
 
     return gtVecTmp;
 }
 
+// Return the GT value (field gtIndex) of a sample column; throw if the column is missing or has fewer fields.
+string VCFFile::sample_gt(
+    const vector<string> & lineVec,
+    size_t column,
+    uint32_t gtIndex
+) {
+    if (column >= lineVec.size()) {
+        throw runtime_error("The sample column is missing -> " + lineVec[0] + " " + lineVec[1]);
+    }
+    vector<string> fields = split(lineVec[column], ":");
+    if (gtIndex >= fields.size()) {
+        throw runtime_error("The sample column has no genotype (GT) field -> " + lineVec[0] + " " + lineVec[1] + " " + lineVec[column]);
+    }
+    return std::move(fields[gtIndex]);
+}
 
-/**
- * Calculate MAF and MISSRATE.
- *
- * @param GTVecMap      map<int, vector<string> >,  map<idx, vector<GTString> >
- * @param misSampleNum  number of missing samples
- * 
- * 
- * @return tuple<double, double>   tuple<MAF, MISSRATE>
-**/
-tuple<double, double> VCFOPEN::calculate(
-    const unordered_map<int, vector<string> > & GTVecMap, 
+// Return the minor allele frequency among called alleles (second-largest allele count / called alleles, 0 with one allele) and the missing rate (missing samples / samples).
+tuple<double, double> VCFFile::calculate(
+    const vector<string> & lineVec,
     uint32_t misSampleNum
 ) {
-    double MAFTMP;  // Minimum allele frequency
-    double MISSRATETMP;  // Miss rate
+    double MAFTMP = 0;
+    double MISSRATETMP;
 
-    uint32_t sampleNum = GTVecMap.size();
+    uint32_t sampleNum = lineVec.size() - 9;
 
-    /* ******************************** Calculate MAF ******************************** */ 
-    map<string, uint32_t> GTFreMapTmp;  // Genotype frequency map<gt, fre>
-    uint16_t ploidy = 1;  // Record ploidy
+    vector<string> formatVec = split(lineVec[8], ":");
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));
 
-    for (const auto& it1 : GTVecMap) {  // map<idx, vector<GTString> >
-        for (const auto& it2 : it1.second) {  // vector<GTString>
-            GTFreMapTmp[it2]++;  // Add 1 to the frequency corresponding to the genotype
+    map<string, uint32_t> alleleCountMap;
+    uint32_t calledAlleleNum = 0;
+    if (gtIndex < formatVec.size()) {
+        for (size_t i = 9; i < lineVec.size(); i++) {
+            for (const auto& allele : split_alleles(sample_gt(lineVec, i, gtIndex))) {
+                if (allele == ".") {
+                    continue;
+                }
+                alleleCountMap[allele]++;
+                calledAlleleNum++;
+            }
         }
-        // If it is 1 then calculate again
-        if (ploidy == 1) {
-            ploidy = it1.second.size();  // Record ploidy
-        }
     }
 
-    map<uint32_t, string> GTFreMapTmpTmp;  // map conversion, map<fre, gt>
-    for (const auto& it1 : GTFreMapTmp) {  // map<gt, fre>
-        GTFreMapTmpTmp[it1.second] = it1.first;
+    vector<uint32_t> alleleCountVec;
+    for (const auto& it1 : alleleCountMap) {
+        alleleCountVec.push_back(it1.second);
+    }
+    sort(alleleCountVec.begin(), alleleCountVec.end(), greater<uint32_t>());
+
+    if (alleleCountVec.size() > 1) {
+        MAFTMP = alleleCountVec[1]/(double)calledAlleleNum;
     }
 
-    if (GTFreMapTmpTmp.size() > 1) {
-        // The second-to-last is the suballele
-        auto iter1 = GTFreMapTmpTmp.end();
-        iter1--; iter1--;
-        // frequence/(ploidy*N)
-        MAFTMP = iter1->first/(double)(ploidy*sampleNum);
-    }
-    
-    /* ******************************** Calculate MISSRATE ******************************** */ 
-    // 1- number/allNumber
-    MISSRATETMP = 1 - (misSampleNum/(double)sampleNum);
+    MISSRATETMP = misSampleNum/(double)sampleNum;
 
     return make_tuple(MAFTMP, MISSRATETMP);
+}
+
+// Throw if the records of a VCF file are not sorted by position within each chromosome (the order rule of SortedIndexPass).
+void check_vcf_sort(const string & inputVcf)
+{
+    SortedIndexPass pass(inputVcf);
+    try {
+        VCFINFOSTRUCT INFOSTRUCTTMP;
+        VCFOPEN VCFOPENCLASS(inputVcf);
+
+        while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+            if (INFOSTRUCTTMP.line.empty() || INFOSTRUCTTMP.line.find("#") != string::npos) {
+                continue;
+            }
+            pass.check_order(INFOSTRUCTTMP);
+        }
+    } catch (...) {
+        pass.fail<bool>(current_exception()).get();
+    }
+    pass.finish(true).get();
+}
+
+// Return the REF length and the ALT lengths of a record: every ALT allele ("all") or the alleles in gtVec ("hap").
+tuple<uint32_t, vector<uint32_t> > get_hap_len(
+    const string & svType,
+    const string & refSeq,
+    const string & qrySeqs,
+    const vector<int> & gtVec,
+    const string & lenType
+)
+{
+    if (lenType != "hap" && lenType != "all") {
+        throw runtime_error("lenType -> " + lenType);
+    }
+
+    uint32_t refLen = refSeq.size();
+    vector<string> qrySeqVec = split(qrySeqs, ",");
+
+    if (lenType == "hap") {
+        int maxGtNum = *max_element(gtVec.begin(), gtVec.end());
+        if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {
+            throw runtime_error("number of genotyping and ALT sequences do not match -> " + qrySeqs);
+        }
+    }
+
+    // ------ Length of every allele (index 0 = REF) ------
+    vector<uint32_t> seqLenVec;
+    seqLenVec.push_back(refLen);
+
+    for (size_t i = 0; i < qrySeqVec.size(); i++) {
+        const string& qrySeq = qrySeqVec[i];
+
+        uint32_t refLenTmp = refLen;
+        uint32_t qryLenTmp = qrySeq.size();
+
+        if (qrySeq.find(">") != string::npos) {
+            static const std::regex reg("SVSIZE=(\\d+)");
+            std::smatch match;
+            if (std::regex_search(qrySeq, match, reg)) {
+                if (qrySeq.find("<INS") != string::npos && qrySeq.find("<DEL") == string::npos) {
+                    refLenTmp = refLen;
+                    qryLenTmp = std::stoul(match[1].str());;
+                }
+                else if (qrySeq.find("<INS") == string::npos && qrySeq.find("<DEL") != string::npos) {
+                    refLenTmp = std::stoul(match[1].str());;
+                    qryLenTmp = refLen;
+                }
+                else if (qrySeq.find("<DUP") != string::npos) {
+                    refLenTmp = std::stoul(match[1].str());;
+                    qryLenTmp = refLenTmp * 2;
+                }
+            } else {
+                warning_stream() << "No length information in the fourth column -> " << qrySeq << endl;
+                refLenTmp = refLen;
+                qryLenTmp = qrySeq.size();
+            }
+
+            seqLenVec[0] = refLenTmp;
+        }
+
+        if (svType.find("Duplication") != string::npos && refLenTmp <= 2) {
+            refLenTmp = qryLenTmp;
+            qryLenTmp *= 2;
+        }
+
+        if (seqLenVec.size() == (i + 1)) {
+            seqLenVec.push_back(qryLenTmp);
+        } else {
+            throw runtime_error("Incorrect index for haplotype length -> " + qrySeqs);
+        }
+    }
+
+    // ------ Select the requested alleles ------
+    vector<uint32_t> qryLenVec;
+    if (lenType == "hap") {
+        for (auto gtTmp : gtVec) {
+            qryLenVec.push_back(seqLenVec[gtTmp]);
+        }
+        if (gtVec.size() == 1) {
+            qryLenVec.push_back(qryLenVec[0]);  // a haploid genotype counts its allele twice
+        }
+    }
+    else {
+        for (size_t i = 1; i < seqLenVec.size(); i++) {
+            qryLenVec.push_back(seqLenVec[i]);
+        }
+    }
+
+    return make_tuple(seqLenVec[0], qryLenVec);
 }

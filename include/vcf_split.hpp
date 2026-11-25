@@ -1,5 +1,4 @@
-#ifndef VCF_SPLIT_HPP
-#define VCF_SPLIT_HPP
+#pragma once
 
 #include <fstream>
 #include <string>
@@ -7,7 +6,6 @@
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
-#include "zlib.h"
 #include <map>
 #include <unordered_map>
 #include <sstream>
@@ -15,21 +13,21 @@
 #include "strip_split_join.hpp"
 #include "vcf_open.hpp"
 #include "save.hpp"
-#include "get_time.hpp"
 #include "sort_find.hpp"
-
 
 using namespace std;
 
-void help_split(char** argv);
+// REF and ALT lengths of a data record found by the per-record worker.
+struct SplitResult {
+    bool keep = false;  // get_len accepted the record
+    uint32_t refLen = 0;
+    uint32_t qryLen = 0;
+};
 
-int main_split(int argc, char** argv);
-
-
+// Split a VCF file into several gzip VCF files.
 class VCFSplit
 {
 private:
-    // Store vcf information
     struct svInfo
     {
         string information;
@@ -40,59 +38,36 @@ private:
 
     struct snpIndelInfo
     {
-        // Save the start and end locations of SNPS and indel
         vector<uint32_t> refStartVec;
         vector<uint32_t> refEndVec;
     };
 
-    string vcfFileName_;  // input VCF file name
-    string baseVcfFileName_;  // VCF file for extracting snp and indel locations
-    int length_;  // Count the number of SNPs and indels within the 'length' near the breakpoint
-    bool filterBool_;  // Whether to filter according to the 'FILTER' column
-    string prefix_;  // output file prefix
+    string vcfFileName_;
+    string baseVcfFileName_;
+    int length_;
+    bool filterBool_;
+    string prefix_;
+    uint32_t threads_;
 
 public:
-    /**
-     * @brief Convert vcf to the format required by graph genome tools
-     * 
-     * @param vcfFileName      input VCF file name
-     * @param baseVcfFileName  VCF file for extracting snp and indel locations
-     * @param length           Count the number of SNPs and indels within the 'length' near the breakpoint
-     * @param filterBool       Whether to filter according to the 'FILTER' column
-     * @param prefix           output file prefix
-     * 
-    **/
     VCFSplit(
         string vcfFileName,
         string baseVcfFileName,
-        int length, 
+        int length,
         bool filterBool,
-        string prefix
+        string prefix,
+        uint32_t threads
     );
 
-
-    /**
-     * @brief Get the length information of variant
-     * 
-     * @param INFOSTRUCTTMP   variant information
-     * @param VCFOPENCLASS    VCFOPEN
-     * @param refLen          store the length of REF
-     * @param qryLen          store the length of ALT
-     * 
-    **/
     bool get_len(
-        const VCFINFOSTRUCT& INFOSTRUCTTMP, 
-        VCFOPEN& VCFOPENCLASS, 
-        uint32_t& refLen, 
+        const VCFINFOSTRUCT& INFOSTRUCTTMP,
+        uint32_t& refLen,
         uint32_t& qryLen
-    );
+    ) const;
 
-    // by type
-    void vcf_split_type();
-    
+    void measure_record(VCFINFOSTRUCT& INFOSTRUCTTMP, SplitResult& result) const;
 
-    // Classified by the number of nearby SNPs and indels
-    void vcf_split_number();
+    void split_by_type();
+
+    void split_by_number();
 };
-
-#endif

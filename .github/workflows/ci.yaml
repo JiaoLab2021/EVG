@@ -11,19 +11,23 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     env:
       DATA_DIR: ./test
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
-        submodules: 'recursive'
+        submodules: recursive
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.9"
 
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake libz-dev
+        sudo apt-get install -y build-essential cmake libz-dev libbz2-dev liblzma-dev libdeflate-dev
 
     - name: Set GCC version to 11
       run: |
@@ -35,7 +39,7 @@ jobs:
 
     - name: Build project
       run: |
-        cmake . -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+        cmake . -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
         make -j2
 
     - name: Run tests
@@ -44,3 +48,15 @@ jobs:
         ./graphvcf count -v $DATA_DIR/test.vcf.gz
         ./fastAQ count -i $DATA_DIR/test.fa
         python EVG.py -h
+        test "$(./graphvcf --version)" = "$(./fastAQ --version)"
+        test "$(./fastAQ --version)" = "$(python EVG.py --version)"
+
+    - name: Test install
+      run: |
+        cmake --install . --prefix $RUNNER_TEMP/evg
+        cd /
+        test "$(readlink $RUNNER_TEMP/evg/bin/EVG)" = EVG.py
+        $RUNNER_TEMP/evg/bin/EVG --version
+        $RUNNER_TEMP/evg/bin/EVG -h
+        $RUNNER_TEMP/evg/bin/graphvcf --version
+        $RUNNER_TEMP/evg/bin/fastAQ --version

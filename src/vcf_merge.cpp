@@ -1,493 +1,142 @@
-// g++ vcf_merge_depth.cpp -o vcf_merge_depth -lz
-
 #include "../include/vcf_merge.hpp"
+
+#include <deque>
+#include <future>
+#include <stdexcept>
+#include <utility>
+
+#include "../include/logger.hpp"
+#include "../include/task_pool.hpp"
+#include "../include/vcf_sort.hpp"
 
 using namespace std;
 
-int main_merge(int argc, char** argv)
-{
-    // EVG running mode
-    string mode = "all";
+// Store the input files, sample name, mode, output name and thread count.
+VCFMerge::VCFMerge(
+    const string& trueVcf,
+    const string& ParagraphVcf,
+    const string& GraphTyper2Vcf,
+    const string& BayesTyperVcf,
+    const string& MAPVcf,
+    const string& GiraffeVcf,
+    const string& GraphAlignerVcf,
+    const string& PanGenieVcf,
+    const string& sampleName,
+    const string& mode,
+    const string& outputFileName,
+    uint32_t threads
+) : trueVcf_(trueVcf), ParagraphVcf_(ParagraphVcf), GraphTyper2Vcf_(GraphTyper2Vcf),
+    BayesTyperVcf_(BayesTyperVcf), MAPVcf_(MAPVcf), GiraffeVcf_(GiraffeVcf),
+    GraphAlignerVcf_(GraphAlignerVcf), PanGenieVcf_(PanGenieVcf), sampleName_(sampleName),
+    threads_(threads), mMode(mode), mOutputFileName(outputFileName) {}
 
-    string trueVcf;
-    string ParagraphVcf;
-    string GraphTyper2Vcf;
-    string BayesTyperVcf;
-    string mapVcf;
-    string giraffeVcf;
-    string GraphAlignerVcf;
-    string PanGenieVcf;
+// Index the population VCF (output header, samples, positions, allele lengths, genotypes) and check its order in the same pass.
+Outcome<baseVcfStruct> VCFMerge::build_basefile_index() const {
+    baseVcfStruct index;
 
-    // Sample name
-    string sampleName = "";
+    log_stream() << "Building index: '" << trueVcf_ << "'" << endl;
 
-    // Output file name
-    string outputFileName = "";
+    SortedIndexPass pass(trueVcf_);
+    try {
+        VCFINFOSTRUCT INFOSTRUCTTMP;
+        VCFOPEN VCFOPENCLASS(trueVcf_, threads_);
 
-    // Input parameter
-    int c;
-    
-    while (true)
-    {
-        static const struct option long_options[] = {
-            {"vcf", required_argument, 0, 'v'},
-            {"Paragraph", required_argument, 0, '1'},
-            {"GraphTyper2", required_argument, 0, '2'},
-            {"BayesTyper", required_argument, 0, '3'},
-            {"VG-MAP", required_argument, 0, '4'},
-            {"VG-Giraffe", required_argument, 0, '5'},
-            {"GraphAligner", required_argument, 0, '6'},
-            {"PanGenie", required_argument, 0, '7'},
-            {"name", required_argument, 0, 'n'},
-
-            {"mode", required_argument, 0, 'm'},
-            {"out", required_argument, 0, 'o'},
-            {"help", no_argument, 0, 'h'},
-            {0, 0, 0, 0}
-        };
-
-        int option_index = 0;
-
-        c = getopt_long (argc, argv, "v:1:2:3:4:5:6:7:n:m:o:h", long_options, &option_index);
-
-        if (c == -1)
-            break;
-        
-        switch (c)
-        {
-        case 'v':
-            trueVcf = optarg;
-            break;
-        case '1':
-            ParagraphVcf = optarg;
-            break;
-        case '2':
-            GraphTyper2Vcf = optarg;
-            break;
-        case '3':
-            BayesTyperVcf = optarg;
-            break;
-        case '4':
-            mapVcf = optarg;
-            break;
-        case '5':
-            giraffeVcf = optarg;
-            break;
-        case '6':
-            GraphAlignerVcf = optarg;
-            break;
-        case '7':
-            PanGenieVcf = optarg;
-            break;
-        case 'n':
-            sampleName = optarg;
-            break;
-        case 'm':
-            mode = optarg;
-            break;
-        case 'o':
-            outputFileName = optarg;
-            break;
-        case 'h':
-        case '?':
-            help_merge(argv);
-            exit(1);
-            break;
-        default:
-            abort ();
+        while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+            if (INFOSTRUCTTMP.line.find("#") != string::npos) {
+                pass.index([&] { index_base_header(INFOSTRUCTTMP, index); });
+            } else {
+                pass.check_order(INFOSTRUCTTMP);
+                pass.index([&] { index_base_record(INFOSTRUCTTMP, index); });
+            }
         }
+    } catch (...) {
+        return pass.fail<baseVcfStruct>(current_exception());
     }
 
-    if (argc <= 2) {
-        help_merge(argv);
-        return 1;
+    return pass.finish(std::move(index));
+}
+
+// Add a header line of the population VCF to the output header; #CHROM also gives the sample names and the column count.
+void VCFMerge::index_base_header(const VCFINFOSTRUCT & INFOSTRUCTTMP, baseVcfStruct & index) const {
+    if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
+        index.headInfo += "##FORMAT=<ID=SO,Number=1,Type=String,Description=\"Software\">\n";
+        index.headInfo += "##FORMAT=<ID=DP,Number=1,Type=Float,Description=\"Total filtered read depth used for genotyping.\">\n";
+        index.headInfo += "##FORMAT=<ID=ADP,Number=1,Type=Float,Description=\"Average depth\">\n";
+        index.headInfo += "##FORMAT=<ID=NDP,Number=1,Type=Float,Description=\"Depth after z-score normalization\">\n";
+
+        vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+9};
+        index.headInfo += join(informationsVecTmp, "\t") + "\t" + sampleName_ + "\n";
+
+        vector<string> sampleNameVecTmp{&INFOSTRUCTTMP.lineVec[9], &INFOSTRUCTTMP.lineVec[0] + INFOSTRUCTTMP.lineVec.size()};
+        index.sampleNameVec = sampleNameVecTmp;
+
+        index.colNum = INFOSTRUCTTMP.lineVec.size();
+    } else {
+        index.headInfo += INFOSTRUCTTMP.line + "\n";
     }
+}
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
+// Index one population record: position, site columns with genotypes, REF length and every ALT length.
+void VCFMerge::index_base_record(const VCFINFOSTRUCT & INFOSTRUCTTMP, baseVcfStruct & index) const {
+    index.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
 
-    // Check parameter
-    if (trueVcf.empty()) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Please enter the -v/--vcf parameter" << endl;
-        exit(1);
-    }
+    vector<string> gtVec = this->get_gt_all(INFOSTRUCTTMP.lineVec);
 
-    if (mode != "specific" && mode != "all") {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Mode error -m: specific/all." << endl;
-        help_merge(argv);
-        exit(1);
-    }
+    vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+8};
+    informationsVecTmp.push_back("GT:SO:DP:ADP:NDP");
 
-    if (sampleName.size() == 0) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Empty sample name: -n." << endl;
-        help_merge(argv);
-        exit(1);
-    }
+    index.BaseInfoTupMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS] = make_tuple(join(informationsVecTmp, "\t"), gtVec);
 
-
-    // init 
-    VCFMerge VCFMerge(
-        trueVcf, 
-        ParagraphVcf, 
-        GraphTyper2Vcf, 
-        BayesTyperVcf, 
-        mapVcf, 
-        giraffeVcf, 
-        GraphAlignerVcf, 
-        PanGenieVcf, 
-        sampleName, 
-        mode, 
-        outputFileName
+    uint32_t refLen;
+    vector<uint32_t> qryLenVec;
+    tie(refLen, qryLenVec) = get_hap_len(
+        INFOSTRUCTTMP.ID,
+        INFOSTRUCTTMP.REF,
+        INFOSTRUCTTMP.ALT,
+        {0, 0},
+        "all"
     );
 
-    // build base index
-    VCFMerge.build_basefile_index();
-
-    // build software index
-    VCFMerge.run_index_merge();
-
-    // filter
-    VCFMerge.vcf_merge_filter();  // Returns the most similar sample index
-
-    // save
-    VCFMerge.result_save();
-
-    // Output the most similar sample
-    if (mode == "all") {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Generating high-confidence VCF file in progress." << endl;
-
-        mode = "specific";
-        VCFMerge.mMode = mode;
-
-        string directory;
-        string fileName;
-        VCFMerge.extract_directory_FileName(outputFileName, directory, fileName);
-
-        VCFMerge.mOutputFileName = directory + "h." + fileName;
-
-        // filter
-        VCFMerge.vcf_merge_filter(true);  // Returns the most similar sample index
-
-        // save
-        VCFMerge.result_save();
-    }
-    
-    // Done
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
-
-    return 0;
+    index.refLenMap[INFOSTRUCTTMP.CHROM].push_back(refLen);
+    index.qryLenVecVecMap[INFOSTRUCTTMP.CHROM].push_back(qryLenVec);
 }
 
-// Help document
-void help_merge(char** argv) {
-  cerr << "usage: " << argv[0] << " " << argv[1] << " -v [options]" << endl
-       << "merge VCF files generated by genome graph software." << endl
-       << endl
-       << "required arguments (Note: vcf files must be sorted):" << endl
-       << "    -v, --vcf            FILE      population VCF file for genotyping" << endl
-       << "    --Paragraph          FILE      output file of Paragraph" << endl
-       << "    --GraphTyper2        FILE      output file of GraphTyper2" << endl
-       << "    --BayesTyper         FILE      output file of BayesTyper" << endl
-       << "    --VG-MAP             FILE      output file of VG-MAP" << endl
-       << "    --VG-Giraffe         FILE      output file of VG-Giraffe" << endl
-       << "    --GraphAligner       FILE      output file of GraphAligner" << endl
-       << "    --PanGenie           FILE      output file of PanGenie" << endl
-       << "    -n, --name           STRING    used to extract genotyping result, after the FORMAT of VCF" << endl
-       << endl
-       << "optional arguments:" << endl
-       << "    -m, --mode           STRING    software mode (specific/all) [all]" << endl
-       << "    -o, --out            FILE      output filename [stdout]" << endl
-       << endl
-       << "    -h, --help                     print this help document" << endl;
-}
-
-
-/**
- * init
- *
- * @param mode
- * @param trueVcf
- * @param ParagraphVcf
- * @param GraphTyper2Vcf
- * @param BayesTyperVcf
- * @param MAPVcf
- * @param GiraffeVcf
- * @param GraphAlignerVcf
- * @param PanGenieVcf
- * @param sampleName         Sample names to be merged
- * 
-**/
-VCFMerge::VCFMerge(
-    const string& trueVcf, 
-    const string& ParagraphVcf, 
-    const string& GraphTyper2Vcf, 
-    const string& BayesTyperVcf, 
-    const string& MAPVcf, 
-    const string& GiraffeVcf, 
-    const string& GraphAlignerVcf, 
-    const string& PanGenieVcf, 
-    const string& sampleName, 
-    const string& mode, 
-    const string& outputFileName
-) : trueVcf_(trueVcf), ParagraphVcf_(ParagraphVcf), GraphTyper2Vcf_(GraphTyper2Vcf), 
-    BayesTyperVcf_(BayesTyperVcf), MAPVcf_(MAPVcf), GiraffeVcf_(GiraffeVcf), 
-    GraphAlignerVcf_(GraphAlignerVcf), PanGenieVcf_(PanGenieVcf), sampleName_(sampleName), 
-    mMode(mode), mOutputFileName(outputFileName) {}
-
-
-/**
- * The base file index is built without filtering the vcf and is used to create the base index. The file is a real vcf file
- * 
- * 
- * @return void
-**/
-void VCFMerge::build_basefile_index() {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Building index: '" << trueVcf_ << "'" << endl;
-
-    check_vcf_sort(trueVcf_);
-
-     // input file stream
-    VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(trueVcf_);
-
-    while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        if (INFOSTRUCTTMP.line.find("#") != string::npos) {  // Comment line
-            // #CHROM comment line index
-            if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
-                // Annotation information
-                mergeVcfStruct_.headInfo += "##FORMAT=<ID=SO,Number=1,Type=String,Description=\"Software\">\n";
-                mergeVcfStruct_.headInfo += "##FORMAT=<ID=DP,Number=1,Type=Float,Description=\"Total filtered read depth used for genotyping.\">\n";
-                mergeVcfStruct_.headInfo += "##FORMAT=<ID=ADP,Number=1,Type=Float,Description=\"Average depth\">\n";
-                mergeVcfStruct_.headInfo += "##FORMAT=<ID=NDP,Number=1,Type=Float,Description=\"Depth after z-score normalization\">\n";
-
-                // Remove all the information after FORMAT and then change to sampleName_
-                vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+9};
-                mergeVcfStruct_.headInfo += join(informationsVecTmp, "\t") + "\t" + sampleName_ + "\n";
-
-                // sample information
-                vector<string> sampleNameVecTmp{&INFOSTRUCTTMP.lineVec[9], &INFOSTRUCTTMP.lineVec[0] + INFOSTRUCTTMP.lineVec.size()};
-                mergeVcfStruct_.sampleNameVec = sampleNameVecTmp;
-
-                // Record the number of baseVcf columns
-                mergeVcfStruct_.colNum = INFOSTRUCTTMP.lineVec.size();
-            } else {
-                mergeVcfStruct_.headInfo += INFOSTRUCTTMP.line + "\n";
-            }
-        } else {
-            mergeVcfStruct_.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);  // Save the mutation origin location
-
-            // get genotyping information
-            vector<string> gtVec = this->get_gt_all(INFOSTRUCTTMP.lineVec);
-
-            vector<string> informationsVecTmp{&INFOSTRUCTTMP.lineVec[0], &INFOSTRUCTTMP.lineVec[0]+8};  // Change FORMAT to GT and remove all the following information
-            informationsVecTmp.push_back("GT:SO:DP:ADP:NDP");  // GT:software:depth:averageDepth:normalDepth
-            
-            mergeVcfStruct_.BaseInfoTupMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS] = make_tuple(join(informationsVecTmp, "\t"), gtVec);  // Save the variants information
-
-            // Get length information
-            uint32_t refLen;
-            vector<uint32_t> qryLenVec;
-            tie(refLen, qryLenVec) = this->get_hap_len(
-                INFOSTRUCTTMP.ID, 
-                INFOSTRUCTTMP.REF, 
-                INFOSTRUCTTMP.ALT, 
-                {0, 0}, 
-                "all"
-            );
-
-            // Save the ref length, qry length and genotyping of the variation. qry is vector because there are multiple alleles.
-            mergeVcfStruct_.refLenMap[INFOSTRUCTTMP.CHROM].push_back(refLen);
-            mergeVcfStruct_.qryLenVecVecMap[INFOSTRUCTTMP.CHROM].push_back(qryLenVec);
-        }
-    }
-}
-
-
-/**
- * Get the length of the haplotype.
- *
- * @param svType                         Variation type
- * @param refSeq                         ref column information
- * @param qrySeqs                        qry Column information
- * @param gtVec                          Typing information of loci
- * @param lenType                        Take only the length corresponding to the haplotype or all the lengths (hap/all)
- * 
- * 
- * @return tuple<uint32_t, vector<uint32_t> >      tuple<refLen, vector<qryLen> >
-**/
-tuple<uint32_t, vector<uint32_t> > VCFMerge::get_hap_len(
-    const string & svType, 
-    const string & refSeq, 
-    const string & qrySeqs, 
-    const vector<int> & gtVec, 
-    const string & lenType
-)
-{
-    // Check that the mode is correct and exit the code incorrectly
-    if (lenType != "hap" && lenType != "all") {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-            << "Error: lenType -> " << lenType << endl;
-        exit(1);
-    }
-    
-    uint32_t refLen = refSeq.size();  // ref sequence length
-    vector<string> qrySeqVec = split(qrySeqs, ",");  // qry sequence list
-    
-    // Check whether the index is out of bounds. If only hap length is needed, check again
-    if (lenType == "hap") {
-        int maxGtNum = *max_element(gtVec.begin(), gtVec.end());
-        // First check whether the array is out of bounds
-        if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "Error: number of genotyping and ALT sequences do not match -> " 
-                << qrySeqs << endl;
-            exit(1);
-        }
-    }
-
-    // Construct the length index common to ref and qry
-    vector<uint32_t> seqLenVec;
-    seqLenVec.push_back(refLen);
-
-    // Traverse the allele list
-    for (size_t i = 0; i < qrySeqVec.size(); i++) {
-        const string& qrySeq = qrySeqVec[i];
-
-        // Temporary storage length
-        uint32_t refLenTmp = refLen;
-        uint32_t qryLenTmp = qrySeq.size();
-
-        // GraphTyper2 results
-        if (qrySeq.find(">") != string::npos) {
-            // Use regular expressions to extract length information
-            std::regex reg("SVSIZE=(\\d+)");
-            std::smatch match;
-            // Check whether there is any length information in the qry sequence. If there is no length information, skip this site
-            // <INS:SVSIZE=97:BREAKPOINT1>
-            if (std::regex_search(qrySeq, match, reg)) {
-                // The character segment contains inserts
-                // <INS:SVSIZE=90:BREAKPOINT1>
-                if (qrySeq.find("<INS") != string::npos && qrySeq.find("<DEL") == string::npos) {
-                    refLenTmp = refLen;
-                    qryLenTmp = std::stoul(match[1].str());;
-                }
-                // The character segment contains missing characters
-                // <DEL:SVSIZE=1720:BREAKPOINT>
-                else if (qrySeq.find("<INS") == string::npos && qrySeq.find("<DEL") != string::npos) {
-                    refLenTmp = std::stoul(match[1].str());;
-                    qryLenTmp = refLen;
-                }
-                // Character segment contains duplicate fields (GraphTyper2) <DUP:SVSIZE=2806:BREAKPOINT1>
-                // <DUP:SVSIZE=10001:COVERAGE>
-                else if (qrySeq.find("<DUP") != string::npos) {
-                    refLenTmp = std::stoul(match[1].str());;
-                    qryLenTmp = refLenTmp * 2;
-                }
-            } else {
-                cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No length information in the fourth column -> " << qrySeq << endl;
-                refLenTmp = refLen;
-                qryLenTmp = qrySeq.size();
-            }
-
-            seqLenVec[0] = refLenTmp; // Reset the length of the ref
-        }
-
-        // The result of BayesTyper was judged to be duplication, ref_len was 1-2, and qry_seq was very long
-        // BayesTyper will change duplication into insertion, so recalculate the length
-        if (svType.find("Duplication") != string::npos && refLenTmp <= 2) {
-            refLenTmp = qryLenTmp;
-            qryLenTmp *= 2;
-        }
-
-        // Add the length of qry
-        // Judging that the haplotype is indeed in its place,
-        if (seqLenVec.size() == (i + 1)) {
-            // Add the length of qry
-            seqLenVec.push_back(qryLenTmp);
-        } else { // Index and list length do not match The Times error
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "Error: Incorrect index for haplotype length -> " << qrySeqs << endl;
-            exit(1);
-        }
-    }
-
-    // Find the qry length corresponding to the genotype
-    vector<uint32_t> qryLenVec;
-    // Take only the sequence length of the haplotype
-    if (lenType == "hap") {
-        // There is only one gt, representing homozygous variants, and the two haplotypes add the same length
-        if (gtVec.size() == 1) {
-            // If genotype 0, skip this locus
-            if (gtVec[0] == 0) {
-                // Back '0/0'
-                vector<uint32_t> qryLenVecTmp(seqLenVec[0], qrySeqVec.size());
-                return make_tuple(seqLenVec[0], qryLenVecTmp);
-            } else {
-                qryLenVec.push_back(seqLenVec[gtVec[0]]);
-                qryLenVec.push_back(seqLenVec[gtVec[0]]);
-            }
-        } else {
-            for (auto gtTmp : gtVec) {
-                qryLenVec.push_back(seqLenVec[gtTmp]);
-            }
-        }
-    }
-    // Take all the lengths
-    else {
-        for (size_t i = 1; i < seqLenVec.size(); i++) {
-            qryLenVec.push_back(seqLenVec[i]);
-        }
-    }
-
-    return make_tuple(seqLenVec[0], qryLenVec);
-}
-
-
-/**
- * Get the typing list of all samples.
- *
- * @param lineVec          lineVec
- * 
- * 
- * @return gtVec           unordered_set <string>
-**/
+// Return the genotypes of all samples with '|' separators; missing or unknown genotypes become 0|0.
 vector<string> VCFMerge::get_gt_all(
     const vector<string> & lineVec
-) {
-    vector<string> gtVec;  // genotyping vector
+) const {
+    vector<string> gtVec;
 
-    // FORMAT character split
     vector<string> formatVec = split(lineVec[8], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));
 
-    if (gtIndex == formatVec.size()) {  // Gets the index location of GT
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No [GT] information in FORMAT, replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
+    if (gtIndex == formatVec.size()) {
+        warning_stream() << "No [GT] information in FORMAT, replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
         for (size_t i = 9; i < lineVec.size(); i++) {
             gtVec.push_back("0|0");
         }
-    } else {  // If it exists, save it
+    } else {
         for (size_t i = 9; i < lineVec.size(); i++) {
-            // gt field
-            string gt = split(lineVec[i], ":")[gtIndex];
-            
-            string splitStr;  // gt field
-            if (gt.find("/") != string::npos) {  // Delimiter in gt
+            string gt = VCFOPEN::sample_gt(lineVec, i, gtIndex);
+
+            string splitStr;
+            if (gt.find("/") != string::npos) {
                 splitStr = "/";
-            } else if (gt.find("|") != string::npos) {  // Determine that '|' is the separator
+            } else if (gt.find("|") != string::npos) {
                 splitStr = "|";
-            } else {  // If the delimiter is not known, use 0|0 instead
-                cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: Genotype does not contain '\\' or '|', replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
+            } else {
+                warning_stream() << "Genotype does not contain '\\' or '|', replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
                 gtVec.push_back("0|0");
                 continue;
             }
 
-            // in the case of '.' or '0', use 0|0 instead
             if (gt == "." || gt == ".|." || gt == "./." || gt == "0" || gt == "0|0" || gt == "0/0") {
                 gtVec.push_back("0|0");
                 continue;
             }
-            
-            replace(gt.begin(), gt.end(), '/', '|');  // replace separator
+
+            replace(gt.begin(), gt.end(), '/', '|');
             gtVec.push_back(gt);
         }
     }
@@ -495,223 +144,209 @@ vector<string> VCFMerge::get_gt_all(
     return gtVec;
 }
 
-
-/**
- * Building index for different software.
- * 
- * 
- * @return void
-**/
-
+// Index the population VCF here while up to threads - 1 tool VCFs are indexed as tasks (-t 1: one by one after it); merge each tool in order, then release it.
 void VCFMerge::run_index_merge()
 {
     vector<string> softwareVec = {ParagraphVcf_, MAPVcf_, GraphTyper2Vcf_, BayesTyperVcf_, GiraffeVcf_, GraphAlignerVcf_, PanGenieVcf_};
     vector<string> softwareNameVec = {"Paragraph", "VG-MAP", "GraphTyper2", "BayesTyper", "VG-Giraffe", "GraphAligner", "PanGenie"};
 
+    vector<size_t> toolIdx;
     for (size_t i = 0; i < softwareVec.size(); i++) {
-        string vcfFileNameTmp = softwareVec[i];  // file name
-        if (!vcfFileNameTmp.empty()) {
-            check_vcf_sort(vcfFileNameTmp);  // Check whether the vcf file is sorted
-            
-            // Output specific indexes for software
-            build_softwarefile_index(
-                vcfFileNameTmp, 
-                softwareNameVec[i]
-            );
+        if (!softwareVec[i].empty()) {
+            toolIdx.push_back(i);
+        }
+    }
 
-            softwareNum_++;  // Number of software plus 1
+    const size_t maxTasks = threads_ > 1 ? threads_ - 1 : 1;
+    deque<pair<size_t, future<Outcome<softwareVcfStruct> > > > tasks;  // tool index tasks in tool order (each slot exists before its task)
+    size_t nextTool = 0;
 
-            // If the input has paragrpah, record
+    // Start tool index tasks up to the budget.
+    auto start_tools = [&] {
+        while (nextTool < toolIdx.size() && tasks.size() < maxTasks) {
+            const size_t i = toolIdx[nextTool++];
+            tasks.emplace_back(i, future<Outcome<softwareVcfStruct> >());
+            tasks.back().second = start_task(threads_, [this, file = softwareVec[i], software = softwareNameVec[i]] {
+                return build_softwarefile_index(file, software);
+            });
+        }
+    };
+
+    try {
+        if (threads_ > 1) start_tools();
+
+        mergeVcfStruct_ = std::move(build_basefile_index().get());
+
+        // ------ Commit in tool order: messages, then the index or the error, then the merge ------
+        while (true) {
+            start_tools();
+            if (tasks.empty()) break;
+
+            const size_t i = tasks.front().first;
+            softwareVcfStruct softvcfStructure = std::move(tasks.front().second.get().get());
+            tasks.pop_front();
+
+            mergeVcfStruct_.softwateSampleIdx[softwareNameVec[i]] = softvcfStructure.sampleIdx;
+            mergeVcfStruct_.depthMap[softwareNameVec[i]] = softvcfStructure.depthStats;
+
+            vcf_merge(softvcfStructure);
+
+            softwareNum_++;
+
             if (softwareNameVec[i] == "Paragraph") {
                 paragraphInputBool_ = true;
             }
         }
-    }
-}
-
-
-/**
- * The results of the software are filtered and indexed, and the files are the output files of the software.
- *
- * @date 2023/07/09
- * 
- * @param vcfFileName        Software output vcf file
- * @param software           Software name
- * 
- * 
- * @return void
-**/
-void VCFMerge::build_softwarefile_index(
-    const string & vcfFileName, 
-    const string & software
-)
-{
-    softwareVcfStruct softvcfStructure;  // Output struct
-
-    softvcfStructure.software = software;  // Software name
-
-    uint32_t sampleIdx = 0;  // Record which column the sample is in the vcf file
-
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Building index: " << software << endl;  // print log
-
-    // input file stream
-    VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(vcfFileName);
-
-    while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // Comment line
-        if (INFOSTRUCTTMP.line.find("#") != string::npos) {
-            // If so, find the sample_name index
-            if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
-                // Gets the number of columns corresponding to sample
-                sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+9, INFOSTRUCTTMP.lineVec.end(), sampleName_));  // Gets the index location of the sample
-                
-                // If not, report an error and exit the code
-                if (sampleIdx == INFOSTRUCTTMP.lineVec.size()) {
-                    cerr << "[" << __func__ << "::" << getTime() << "] " 
-                        << "Error: '" << sampleName_ << "' is not in the output file of '" 
-                        << software << "' -> " << INFOSTRUCTTMP.line 
-                        << endl;
-                    exit(1);
-                }
-
-                mergeVcfStruct_.softwateSampleIdx[software] = sampleIdx; // Add the sample index corresponding to the software
-            }
-        } else {  // Uncommented line
-            // Check whether sample_name is found
-            if (sampleIdx == 0) {
-                cerr << "[" << __func__ << "::" << getTime() << "] " 
-                    << "Error: '" << sampleName_ << "' is not in the output file of '" << software << "'"
-                    << endl;
-                exit(1);
-            }
-            
-            // Obtain the coverage information of the site
-            vector<float> depthVec = get_depth(
-                INFOSTRUCTTMP.lineVec, 
-                sampleIdx
-            );
-            float depSum = accumulate(depthVec.begin(), depthVec.end(), 0.0);  // Calculate the depth sum of all alleles
-            softvcfStructure.depthVec.push_back(depSum);  // Add the vcf depth list corresponding to the software
-            
-            vector<int> gtVec = get_gt_sample(
-                INFOSTRUCTTMP.lineVec, 
-                sampleIdx
-            );
-            string gt = join(gtVec, "/");
-
-            // Filter by genotype
-            if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {  // If it is (0/0,.) Format is skipped, or returns an empty list without building an index
-                cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: The genotype of the variant is empty, skip this site -> "
-                    << INFOSTRUCTTMP.CHROM << " " 
-                    << INFOSTRUCTTMP.POS << endl;
-                continue;
-            }
-
-            // According to the FILTER field
-            if (INFOSTRUCTTMP.FILTER != "PASS") {  // If it is not (PASS), it is skipped and no index is built
-                continue;
-            }
-
-            // If it is not (PASS), it is skipped and no index is built
-            int refLen;
-            vector<uint32_t> qryLenVec;
-            tie(refLen, qryLenVec) = this->get_hap_len(
-                INFOSTRUCTTMP.ID, 
-                INFOSTRUCTTMP.REF, 
-                INFOSTRUCTTMP.ALT, 
-                gtVec, 
-                "hap"
-            );
-
-            // Save mutation initiation and typing information
-            softvcfStructure.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
-            softvcfStructure.gtVecMap[INFOSTRUCTTMP.CHROM].push_back(gtVec);
-            softvcfStructure.depthVecMap[INFOSTRUCTTMP.CHROM].push_back(depthVec);  // Software corresponding vcf depth (per allele)
-
-            // Save the mutated refLen and qryLenVec
-            softvcfStructure.refLenMap[INFOSTRUCTTMP.CHROM].push_back(refLen);
-            softvcfStructure.qryLenVecVecMap[INFOSTRUCTTMP.CHROM].push_back(qryLenVec);
+    } catch (...) {
+        for (auto& task : tasks) {
+            if (task.second.valid()) task.second.wait();
         }
+        throw;
     }
-
-    // Calculate the average coverage, variance, and standard deviation of the software
-    float aveDepth;
-    float variance;
-    float sd;
-    tie(aveDepth, variance, sd) = cal_var_sd(softvcfStructure.depthVec);
-    get<0>(mergeVcfStruct_.depthMap[software]) = aveDepth;
-    get<1>(mergeVcfStruct_.depthMap[software]) = variance;
-    get<2>(mergeVcfStruct_.depthMap[software]) = sd;
-
-    // Add the results of the software to the diagram
-    vcf_merge(softvcfStructure);
 }
 
+// Index the PASS, non-reference calls, sample column and depth statistics of one tool VCF, checking its order (a pool task: one reading thread).
+Outcome<softwareVcfStruct> VCFMerge::build_softwarefile_index(
+    const string & vcfFileName,
+    const string & software
+) const
+{
+    softwareVcfStruct softvcfStructure;
 
-// paragraph DP -> 1
-// graphaligner, vg-map- vg-giraffe DP -> 6
-// bayestyper MAC -> -1,1.87332
-// graphtyper DP -> 6
-// pangenie KC -> 4
-/**
- * Get site DP.
- *
- * @param informationsVec     vcfInfoVec
- * @param sampleIdx           sample corresponding column
- * 
- * 
- * @return depthVec        vector<depth>
-**/
+    softvcfStructure.software = software;
+
+    SortedIndexPass pass(vcfFileName);
+    try {
+        log_stream() << "Building index: " << software << endl;
+
+        VCFINFOSTRUCT INFOSTRUCTTMP;
+        VCFOPEN VCFOPENCLASS(vcfFileName);
+
+        while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+            if (INFOSTRUCTTMP.line.find("#") != string::npos) {
+                pass.index([&] { index_software_header(INFOSTRUCTTMP, softvcfStructure); });
+            } else {
+                pass.check_order(INFOSTRUCTTMP);
+                pass.index([&] { index_software_record(INFOSTRUCTTMP, softvcfStructure); });
+            }
+        }
+    } catch (...) {
+        return pass.fail<softwareVcfStruct>(current_exception());
+    }
+
+    // ------ Depth statistics (not after an index error) ------
+    pass.index([&] { softvcfStructure.depthStats = cal_var_sd(softvcfStructure.depthVec); });
+
+    return pass.finish(std::move(softvcfStructure));
+}
+
+// Find the sample's column on the #CHROM line of a tool VCF; throw if the sample is not there.
+void VCFMerge::index_software_header(const VCFINFOSTRUCT & INFOSTRUCTTMP, softwareVcfStruct & softvcfStructure) const {
+    if (INFOSTRUCTTMP.line.find("#CHROM") != string::npos) {
+        uint32_t sampleIdx = distance(INFOSTRUCTTMP.lineVec.begin(), find(INFOSTRUCTTMP.lineVec.begin()+9, INFOSTRUCTTMP.lineVec.end(), sampleName_));
+
+        if (sampleIdx == INFOSTRUCTTMP.lineVec.size()) {
+            throw runtime_error("'" + sampleName_ + "' is not in the output file of '"
+                + softvcfStructure.software + "' -> " + INFOSTRUCTTMP.line);
+        }
+
+        softvcfStructure.sampleIdx = sampleIdx;
+    }
+}
+
+// Index one tool call: its depth always counts for the statistics; PASS, non-reference calls also get position, genotype and lengths.
+void VCFMerge::index_software_record(const VCFINFOSTRUCT & INFOSTRUCTTMP, softwareVcfStruct & softvcfStructure) const {
+    const uint32_t sampleIdx = softvcfStructure.sampleIdx;
+    if (sampleIdx == 0) {
+        throw runtime_error("'" + sampleName_ + "' is not in the output file of '" + softvcfStructure.software + "'");
+    }
+    if (sampleIdx >= INFOSTRUCTTMP.lineVec.size()) {
+        throw runtime_error("The sample column is missing -> " + INFOSTRUCTTMP.CHROM + " " + to_string(INFOSTRUCTTMP.POS));
+    }
+
+    vector<float> depthVec = get_depth(
+        INFOSTRUCTTMP.lineVec,
+        sampleIdx
+    );
+    float depSum = accumulate(depthVec.begin(), depthVec.end(), 0.0);
+    softvcfStructure.depthVec.push_back(depSum);
+
+    vector<int> gtVec = get_gt_sample(
+        INFOSTRUCTTMP.lineVec,
+        sampleIdx
+    );
+    string gt = join(gtVec, "/");
+
+    if (gt == "0/0" || gt == "0" || gt == "." || gt == "./." || gtVec.size() == 0) {
+        warning_stream() << "The genotype of the variant is empty, skip this site -> "
+            << INFOSTRUCTTMP.CHROM << " "
+            << INFOSTRUCTTMP.POS << endl;
+        return;
+    }
+
+    if (INFOSTRUCTTMP.FILTER != "PASS") {
+        return;
+    }
+
+    int refLen;
+    vector<uint32_t> qryLenVec;
+    tie(refLen, qryLenVec) = get_hap_len(
+        INFOSTRUCTTMP.ID,
+        INFOSTRUCTTMP.REF,
+        INFOSTRUCTTMP.ALT,
+        gtVec,
+        "hap"
+    );
+
+    softvcfStructure.startMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
+    softvcfStructure.gtVecMap[INFOSTRUCTTMP.CHROM].push_back(gtVec);
+    softvcfStructure.depthVecMap[INFOSTRUCTTMP.CHROM].push_back(depthVec);
+
+    softvcfStructure.refLenMap[INFOSTRUCTTMP.CHROM].push_back(refLen);
+    softvcfStructure.qryLenVecVecMap[INFOSTRUCTTMP.CHROM].push_back(qryLenVec);
+}
+
+// Return the per-allele depth of the sample from FORMAT DP, MAC (BayesTyper) or KC (PanGenie).
 vector<float> VCFMerge::get_depth(
-    const vector<string> & informationsVec, 
+    const vector<string> & informationsVec,
     const uint32_t & sampleIdx
-) {
-    vector<float> depthVec;  // vector of site coverage
+) const {
+    vector<float> depthVec;
 
-    // FORMAT field split
     vector<string> formatVec = split(informationsVec[8], ":");
 
-    uint32_t depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "DP"));  // Gets the index position of depth
+    uint32_t depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "DP"));
 
-    // BayesTyper software does not have DP fields, so it uses MAC fields instead
     if (depthIndex == formatVec.size()) {
         depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "MAC"));
     }
-    // PanGenie software does not have a DP field, so the KC field is used instead
     if (depthIndex == formatVec.size()) {
         depthIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "KC"));
     }
-    
-    // Check whether index exists. If it does not exist, return depth 0.
+
     if (depthIndex == formatVec.size()) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [DP,MAC,KC] information in FORMAT -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
+        warning_stream() << "no [DP,MAC,KC] information in FORMAT -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
         depthVec = {0, 0};
     }
-    // If it exists, save it
     else {
         vector<string> splitResult = split(informationsVec[sampleIdx], ":");
 
-        // Check if the array is out of bounds
         if (depthIndex < splitResult.size()) {
             auto depthSplit = split(splitResult[depthIndex], ",");
             for (auto it : depthSplit) {
-                // BayesTyper's -1 means not found, so change -1 to 0
                 if (it == "-1") {
                     it = "0";
                 }
-                // Prevent error in stof(it) conversion
                 try {
                     depthVec.push_back(stof(it));
                 } catch (const std::exception& e) {
-                    cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: stof(it) conversion failed. Replaced with {0,0} -> " << it << endl;
+                    warning_stream() << "stof(it) conversion failed. Replaced with {0,0} -> " << it << endl;
                     depthVec = {0, 0};
                 }
             }
         }
         else {
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: no [DP,MAC,KC] information in column " << sampleIdx << " -> " << informationsVec[sampleIdx] << endl;
+            warning_stream() << "no [DP,MAC,KC] information in column " << sampleIdx << " -> " << informationsVec[sampleIdx] << endl;
             depthVec = {0, 0};
         }
     }
@@ -719,67 +354,51 @@ vector<float> VCFMerge::get_depth(
     return depthVec;
 }
 
-
-/**
- * Get a list of loci genotypes.
- *
- * @param informationsVec  vcfInfoList
- * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
- * 
- * 
- * @return gtVec           vector <int>
-**/
+// Return the genotype of one sample (0 = last column) as integers; missing or unparsable genotypes become {0, 0}.
 vector<int> VCFMerge::get_gt_sample(
-    const vector<string> & informationsVec, 
+    const vector<string> & informationsVec,
     uint32_t sampleIdx
-) {
-    vector<int> gtVec;  // Locus typing vector
+) const {
+    vector<int> gtVec;
 
-    // FORMAT character split
     vector<string> formatVec = split(informationsVec[8], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));
 
-    // // Determine whether the index exists. If it does not exist, the genotypes are all 0.
     if (gtIndex == formatVec.size()) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No [GT] information in FORMAT, replace with 0|0 -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
+        warning_stream() << "No [GT] information in FORMAT, replace with 0|0 -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
         gtVec = {0, 0};
-    } else {  // If it exists, save it
-        string gt;  // Store the genotype field
+    } else {
+        string gt;
 
-        // The number of columns not specified is the last column
         if (sampleIdx == 0) {
-            gt = split(informationsVec.back(), ":")[gtIndex];  // gt field
+            gt = VCFOPEN::sample_gt(informationsVec, informationsVec.size() - 1, gtIndex);
         }
         else {
-            gt = split(informationsVec[sampleIdx], ":")[gtIndex];  // gt field
+            gt = VCFOPEN::sample_gt(informationsVec, sampleIdx, gtIndex);
         }
-        
-        string splitStr;  // Delimiter in gt
-        // Determine the '/' separator
+
+        string splitStr;
         if (gt.find("/") != string::npos) {
             splitStr = "/";
-        }  else if (gt.find("|") != string::npos) {   // Determine that '|' is the separator
+        }  else if (gt.find("|") != string::npos) {
             splitStr = "|";
-        }  else {  // If the delimiter is not known, use 0|0 instead
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: Genotype does not contain '\\' or '|', replace with 0|0 -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
+        }  else {
+            warning_stream() << "Genotype does not contain '\\' or '|', replace with 0|0 -> " << informationsVec[0] << ":" << informationsVec[1] << endl;
             gtVec = {0, 0};
             return gtVec;
         }
-        
-        // Once you find gt, split it by splitStr and loop
+
         auto splitResult = split(gt, splitStr);
         for (auto it : splitResult) {
-            // If it is '.', skip this site
             if (it == ".") {
                 gtVec = {0, 0};
                 return gtVec;
             }
-            // Prevent error in stof(it) conversion
             try {
-                gtVec.push_back(stoi(it));  // If it is '.', skip this site
+                gtVec.push_back(stoi(it));
             } catch (const std::exception& e) {
-                cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: stoi(it) conversion failed. Replaced with {0,0} -> " << it << endl;
+                warning_stream() << "stoi(it) conversion failed. Replaced with {0,0} -> " << it << endl;
                 gtVec = {0, 0};
                 return gtVec;
             }
@@ -789,137 +408,97 @@ vector<int> VCFMerge::get_gt_sample(
     return gtVec;
 }
 
-
-
-/**
- * vcf_merge Function added to the total map after recall
- *
- * @date 2023/07/09
- * 
- * @param chromosome         Chromosome number
- * @param trueRefStart       The actual ref starting position
- * @param software           software
- * @param qryLenVec          The haplotype of software typing corresponds to the length
- * @param gtVec              Classification gt list of software
- * @param gt                 The current cycle of gt
- * @param depth              The depth corresponding to the site
- * @param j                  Index of multiple haplotype loops of software
- * @param k                  Binary search method index of two coordinate loops
- * @param l                  Cyclic index of true site haplotype
- * @param indexLeft          Left index of binary search method
- * @param indexRight         Right index of binary search method
- * 
- * 
- * @return tuple<int, int>   tuple<state, j>  0 -> Add correctly; -1 -> The next loop is required
-**/
+// Record the depth and genotype of a matched tool allele at a population site; return -1 if only one side is reference.
 tuple<int, int> VCFMerge::recall_push(
-    const string chromosome, 
-    const uint32_t trueRefStart, 
-    const string software, 
-    const vector<uint32_t> qryLenVec, 
-    const vector<int> gtVec, 
-    const int gt, 
-    const float depth, 
-    uint32_t j, 
+    const string chromosome,
+    const uint32_t trueRefStart,
+    const string software,
+    const vector<uint32_t> qryLenVec,
+    const vector<int> gtVec,
+    const int gt,
+    const float depth,
+    uint32_t j,
     uint32_t k,
     uint32_t l,
-    int64_t & indexLeft, 
+    int64_t & indexLeft,
     int64_t & indexRight
 )
 {
-    // First initialize the recall hash table
-    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].find(trueRefStart) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].end()) {  // Initialize if the starting position is first seen
+    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].find(trueRefStart) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome].end()) {
         mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart];
     }
-    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].find(software) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].end()) {  // If the software is first seen, it is initialized
+    if (mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].find(software) == mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart].end()) {
         vector<float> depthVecTmp(qryLenVec.size());
         vector<int> gtVecTmp(qryLenVec.size());
         mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software] = make_tuple(depthVecTmp, gtVecTmp);
     }
 
-    // If one of gt and l is 0, but the other is not, the next loop will be performed to prevent SNP from making an error in its judgment
     if ((gt != 0 && l == 0) || (gt == 0 && l != 0)) {
         return make_tuple(-1, j);
     } else {
-        // Each haplotype is added separately
-        get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;  // Corresponding haplotype position depth
-        get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;  // Corresponding haplotype location genotype
+        get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;
+        get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;
 
-        // Change the coordinates of the binary search, and the next allele is added directly to the refStart
         indexLeft = k;
         indexRight = k;
 
-        if (j == 0 && gt == gtVec[1]) {  // If the two haplotypes are the same, assign the value directly and skip the next loop
+        if (j == 0 && gt == gtVec[1]) {
             j++;
-            get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;  // Corresponding haplotype position depth
-            get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;  // Corresponding haplotype location genotype
+            get<0>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = depth;
+            get<1>(mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome][trueRefStart][software])[j] = l;
         }
     }
 
     return make_tuple(0, j);
 }
 
-
-/**
- * The results of the software are filtered and indexed, and the files are the output files of the software.
- *
- * @date 2023/07/09
- * 
- * @param softvcfStructure   build_softwarefile_index Indicates the index of the built software vcf
- * 
- * @return void
-**/
+// Match every allele of one tool to population sites by position and length tolerance.
 void VCFMerge::vcf_merge(
     softwareVcfStruct & softvcfStructure
 ) {
     vector<string> chromosomeVec;
     string software = softvcfStructure.software;
 
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Merging: " << software << ".\n";  // print log
+    log_stream() << "Merging: " << software << ".\n";
 
     for (auto iter = mergeVcfStruct_.startMap.begin(); iter != mergeVcfStruct_.startMap.end(); iter++) {
         chromosomeVec.push_back(iter->first);
     }
 
-    // for (auto iter = softvcfStructure.startMap.begin(); iter != softvcfStructure.startMap.end(); iter++) {  // Loop software vcf (Chromosome)
-    for (const auto& [chromosome, startVec] : softvcfStructure.startMap) {  // Loop software vcf (Chromosome)
+    // ------ Candidate population sites within 10 bp (both alleles < 50 bp) or 200 bp ------
+    for (const auto& [chromosome, startVec] : softvcfStructure.startMap) {
         const vector<uint32_t>& refLenVec = softvcfStructure.refLenMap[chromosome];
         const vector<vector<uint32_t> >& qryLenVecVec = softvcfStructure.qryLenVecVecMap[chromosome];
         const vector<vector<int> >& gtVecVec = softvcfStructure.gtVecMap[chromosome];
         const vector<vector<float> >& depthVecVec = softvcfStructure.depthVecMap[chromosome];
 
-        // First initialize the recall hash table
-        if (mergeVcfStruct_.recallSoftwareGtDepVecMap.find(chromosome) == mergeVcfStruct_.recallSoftwareGtDepVecMap.end()) {  // If the chromosome is first seen, it is initialized
+        if (mergeVcfStruct_.recallSoftwareGtDepVecMap.find(chromosome) == mergeVcfStruct_.recallSoftwareGtDepVecMap.end()) {
             mergeVcfStruct_.recallSoftwareGtDepVecMap[chromosome];
         }
 
-        if (find(chromosomeVec.begin(), chromosomeVec.end(), chromosome) == chromosomeVec.end()) {  // First check if there is this chromosome in mergeVcfStructure, if not, report an error and exit the code
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: chromosome is not present in '"<< trueVcf_ << "' -> " << chromosome << endl;
-            exit(1);
-        } else {  // If it exists, use binary search to find the most recent variation and determine whether they are the same, push if they are, and add a new one if they are not
+        if (find(chromosomeVec.begin(), chromosomeVec.end(), chromosome) == chromosomeVec.end()) {
+            throw runtime_error("chromosome is not present in '" + trueVcf_ + "' -> " + chromosome);
+        } else {
             const vector<uint32_t>& mergeRefStartVec = mergeVcfStruct_.startMap[chromosome];
             const vector<uint32_t>& mergeRefLenVec = mergeVcfStruct_.refLenMap[chromosome];
-            const vector<vector<uint32_t> >& mergeQryLenVecVec = mergeVcfStruct_.qryLenVecVecMap[chromosome];  // vector<vector<qryLen> >
+            const vector<vector<uint32_t> >& mergeQryLenVecVec = mergeVcfStruct_.qryLenVecVecMap[chromosome];
 
-            for (size_t i = 0; i < startVec.size(); i++) {  // Loop software vcf (location)
+            for (size_t i = 0; i < startVec.size(); i++) {
                 uint32_t refStart = startVec[i];
                 uint32_t refLen = refLenVec[i];
-                vector<uint32_t> qryLenVec = qryLenVecVec[i];  // Allele sequence length corresponding to locus typing
-                vector<int> gtVec = gtVecVec[i];  // Locus typing corresponding to typing
-                vector<float> depthVec = depthVecVec[i];  // Allelic depth corresponding to locus typing
+                vector<uint32_t> qryLenVec = qryLenVecVec[i];
+                vector<int> gtVec = gtVecVec[i];
+                vector<float> depthVec = depthVecVec[i];
 
-                // Record binary search index, multiple alleles with the same refStart
                 int64_t indexLeft = -1;
                 int64_t indexRight = -1;
 
-                // Traversal of multiple alleles
                 for (size_t j = 0; j < qryLenVec.size(); j++) {
                     uint32_t qryLen = qryLenVec[j];
                     int gt = gtVec[j];
                     float depth = depthVec[j];
 
-                    // Binary search method to find the variation index within 200/10bp.
-                    if (indexLeft == -1 && indexRight == -1) {  // New alleles were searched again
+                    if (indexLeft == -1 && indexRight == -1) {
                         if (refLen <= 49 && qryLen <= 49) {
                             indexLeft = search_Binary_left(mergeRefStartVec, (refStart-10));
                             indexRight = search_Binary_right(mergeRefStartVec, (refStart+10));
@@ -929,87 +508,77 @@ void VCFMerge::vcf_merge(
                         }
 
                         if (indexLeft < 0 || indexRight >= static_cast<int64_t>(mergeRefStartVec.size())) {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: out of index, please check the data or code.\n";
-                            exit(1);
+                            throw runtime_error("out of index, please check the data or code.");
                         }
                     }
 
+                    // ------ Match by variant class: breakpoint distance and 25% length difference ------
                     for (int64_t k = indexLeft; k <= indexRight; k++) {
-                        // true Indicates the mutation information
-                        vector<uint32_t> mergeQryLenVec = mergeQryLenVecVec[k];  // The length of multiple alleles
+                        vector<uint32_t> mergeQryLenVec = mergeQryLenVecVec[k];
                         uint32_t trueRefLen = mergeRefLenVec[k];
                         uint32_t trueRefStart = mergeRefStartVec[k];
 
-                        // Construct the length index common to ref and qry
                         vector<uint32_t> trueSeqLenVec;
-                        trueSeqLenVec.push_back(trueRefLen);  // Start by adding the length of the reference genome
-                        trueSeqLenVec.insert(trueSeqLenVec.end(), mergeQryLenVec.begin(), mergeQryLenVec.end());  // readd
+                        trueSeqLenVec.push_back(trueRefLen);
+                        trueSeqLenVec.insert(trueSeqLenVec.end(), mergeQryLenVec.begin(), mergeQryLenVec.end());
 
-                        // If the length is 0, an error is reported and the code exits.
                         if (mergeQryLenVec.size() == 0) {
-                            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                                << "Error: mergeQryLenVec.size() == 0 -> " << chromosome 
-                                << " " << mergeRefStartVec[k] << endl;
-                            exit(1);
+                            throw runtime_error("mergeQryLenVec.size() == 0 -> " + chromosome
+                                + " " + to_string(mergeRefStartVec[k]));
                         }
 
-                        for (size_t l = 0; l < trueSeqLenVec.size(); l++) {  // When a locus has multiple alleles, trueSeqLenVec stores the length of each allele, so it iterates over it to see if the mutation at that locus is the same as the one in the merge, which contains 0
+                        for (size_t l = 0; l < trueSeqLenVec.size(); l++) {
                             uint32_t trueQryLen = trueSeqLenVec[l];
 
-                            // deletion
                             if (refLen >= 50 && qryLen < 50) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart)) <= 200) &&
                                     (abs((static_cast<int32_t>(refStart + refLen) - static_cast<int32_t>(trueRefStart + trueRefLen)) <= 200)) &&
                                     ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / (float)trueRefLen) <= 0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
                                     }
-                                    
+
                                     goto stop;
                                 }
-                            } else if (refLen < 50 && qryLen >= 50) {  // ins
+                            } else if (refLen < 50 && qryLen >= 50) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=200) &&
                                     (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=200) &&
                                     ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
@@ -1018,257 +587,221 @@ void VCFMerge::vcf_merge(
                                     goto stop;
                                 }
                             }
-                            else if (refLen >= 50 && qryLen >= 50) {  // Replace
+                            else if (refLen >= 50 && qryLen >= 50) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=200) &&
                                     (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=200) &&
-                                    ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) && 
+                                    ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) &&
                                     ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
                                     }
-                                    
+
                                     goto stop;
                                 }
-                            } else if (refLen == 1 && qryLen == 1) {  // snp
+                            } else if (refLen == 1 && qryLen == 1) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=1) &&
                                     (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=1) &&
-                                    ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) && 
+                                    ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) &&
                                     ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
                                     }
-                                    
+
                                     goto stop;
                                 }
-                            } else if (refLen >= 3 && qryLen <= 2) {  // del
+                            } else if (refLen >= 3 && qryLen <= 2) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=10) &&
                                 (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=10) &&
                                 ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
                                     }
-                                    
+
                                     goto stop;
                                 }
-                            } else if (refLen <= 2 && qryLen >= 3) {  // ins
+                            } else if (refLen <= 2 && qryLen >= 3) {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=10) &&
                                 (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=10) &&
                                 ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
                                     }
-                                    
+
                                     goto stop;
                                 }
                             } else {
                                 if ((abs(static_cast<int32_t>(refStart) - static_cast<int32_t>(trueRefStart))<=1) &&
                                 (abs(static_cast<int32_t>(refStart+refLen)-static_cast<int32_t>(trueRefStart+trueRefLen))<=1) &&
-                                ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) && 
+                                ((abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen))/(float)trueRefLen)<=0.25) &&
                                 ((abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen))/(float)trueQryLen)<=0.25))
                                 {
-                                    // Added to the general picture
                                     int recall_state;
                                     tie(recall_state, j) = recall_push(
-                                        chromosome, 
-                                        trueRefStart, 
-                                        software, 
-                                        qryLenVec, 
-                                        gtVec, 
-                                        gt, 
-                                        depth, 
-                                        j, 
+                                        chromosome,
+                                        trueRefStart,
+                                        software,
+                                        qryLenVec,
+                                        gtVec,
+                                        gt,
+                                        depth,
+                                        j,
                                         k,
                                         l,
-                                        indexLeft, 
+                                        indexLeft,
                                         indexRight
                                     );
 
-                                    // No addition is followed by the next loop
                                     if (recall_state == -1)
                                     {
                                         continue;
                                     }
-                                    
+
                                     goto stop;
                                 }
                             }
                         }
                     }
-                    stop:; // If found, exit the nested loop. End the cycle of this haplotype and proceed to the next haplotype
+                    stop:;
                 }
             }
         }
     }
 }
 
-
-/**
- * Get the length information of the variation
- *
- * @param vcfInfo           vcfInfo
- * @param gtVec             Genotype list
- * 
- * 
- * @return int              svLength
-**/
+// Return the length difference between the last non-reference allele of gtVec and REF.
 int64_t VCFMerge::sv_length_select(
-    const string & vcfInfo, 
+    const string & vcfInfo,
     const vector<int> & gtVec
 ) {
     int64_t svLength = 0;
 
     vector<string> vcfInfoVec = split(vcfInfo, "\t");
 
-    // Gets the length of the ref and haplotype
     uint32_t refLen;
     vector<uint32_t> qryLenVec;
-    tie(refLen, qryLenVec) = this->get_hap_len(
-        vcfInfoVec[2], 
-        vcfInfoVec[3], 
-        vcfInfoVec[4], 
-        gtVec, 
+    tie(refLen, qryLenVec) = get_hap_len(
+        vcfInfoVec[2],
+        vcfInfoVec[3],
+        vcfInfoVec[4],
+        gtVec,
         "hap"
     );
 
     for (size_t i = 0; i < gtVec.size(); i++) {
-        if (gtVec[i] == 0) {  // If genotype is 0, skip
+        if (gtVec[i] == 0) {
             continue;
         }
         else {
             svLength = static_cast<int64_t>(qryLenVec[i] - refLen);
         }
     }
-    
+
     return svLength;
 }
 
-
-
-/**
- * Filter result according to the depth and number of variants.
- *
- * @param gtAllVec        vector of all gt sites
- * @param softwareVec     Locus vector of all software
- * @param depthNorVec     The vector of all normalized depths at the site
- * @param vcfInfo         Variation information at the site
- * 
- * @return software
-**/
+// Choose the tool whose genotype is kept at a site; return an empty string to drop the site.
 string VCFMerge::filter_rule(
-    vector<vector<int> > & gtAllVec, 
-    vector<string> & softwareVec, 
-    vector<float> & depthNorVec, 
+    vector<vector<int> > & gtAllVec,
+    vector<string> & softwareVec,
+    vector<float> & depthNorVec,
     const string & vcfInfo
 ) {
-    // If the vcf file of the group is used as the skeleton, determine whether the site needs to be skipped.
     if (mMode == "all") {
-        // If the number of software supported by the site is less than 2, skip the site
         if (softwareNum_ >= 2 && softwareVec.size() < 2) {
             return "";
         }
     }
 
-    // Result filtering
-    vector<string> bestSoftwareVec{};  // The most frequently appearing software vector
-    string selectSoftware;  // Software vector after filtering according to the length of sv
+    vector<string> bestSoftwareVec{};
+    string selectSoftware;
     int64_t svLength{};
     int gtFrequency = 0;
 
-    // The index whose depth is closest to 0 after standardization
+    // ------ Depth closest to the tool mean, most frequent genotype ------
     float selectDepth = 10000.0;
     int selectDepthIdx = 0;
     for (size_t i = 0; i < depthNorVec.size(); i++) {
         if (abs(depthNorVec[i]) < selectDepth) {
-            selectDepth = abs(depthNorVec[i]);  // Renewal depth
-            selectDepthIdx = i;  // Update index
+            selectDepth = abs(depthNorVec[i]);
+            selectDepthIdx = i;
         }
     }
 
-    // Calculate the frequency of occurrence of each genotype
-    // Find the gt with the highest frequency first
     for (size_t i = 0; i < gtAllVec.size(); i++) {
         svLength = sv_length_select(
-            vcfInfo, 
+            vcfInfo,
             gtAllVec[i]
         );
 
@@ -1277,36 +810,31 @@ string VCFMerge::filter_rule(
         }
     }
 
-    // Find out the gt corresponding software with the highest frequency
     for (size_t i = 0; i < gtAllVec.size(); i++) {
         if (count(gtAllVec.begin(), gtAllVec.end(), gtAllVec[i]) == gtFrequency) {
             bestSoftwareVec.push_back(softwareVec[i]);
         }
     }
-    // Filter rule
-    if (-49 <= svLength && svLength <= 49) {  // snp+indel
-        if (mMode == "specific") {  // Is a strain specific vcf file
-            // The number of supported software is less than 2, and the genotype whose depth is closest to 0 is selected. Or Select the most frequent results
+    // ------ Selection rule by variant size and mode ------
+    if (-49 <= svLength && svLength <= 49) {
+        if (mMode == "specific") {
             selectSoftware = (gtFrequency < 2) ? softwareVec[selectDepthIdx] : bestSoftwareVec[0];
-        } else {  // vcf for composition
-            if (softwareNum_ == 1) {  // If the user only enters one software
-                selectSoftware = bestSoftwareVec[0]; // Select the most frequent results
-            } else if (softwareNum_ == 2 && paragraphInputBool_) {  // If the number of software input is 2 and includes paragraph, because it is not known whether the result of paragrpah contains snp, the depth optimal solution is selected.
-                selectSoftware = softwareVec[selectDepthIdx];  // Select software with coverage close to 0
+        } else {
+            if (softwareNum_ == 1) {
+                selectSoftware = bestSoftwareVec[0];
+            } else if (softwareNum_ == 2 && paragraphInputBool_) {
+                selectSoftware = softwareVec[selectDepthIdx];
             } else {
-                // The result must be supported by more than two software, otherwise the site is skipped
                 selectSoftware = (gtFrequency < 2) ? "" : bestSoftwareVec[0];
             }
         }
-    } else {  // Insertion and Deletion
-        if (mMode == "specific") {  // Is a strain specific vcf file
-            // The number of supported software is less than 2, and the genotype whose depth is closest to 0 is selected. Or Select the most frequent results
+    } else {
+        if (mMode == "specific") {
             selectSoftware = (gtFrequency < 2) ? softwareVec[selectDepthIdx] : bestSoftwareVec[0];
-        } else {  // vcf for composition
-            if (softwareNum_ == 1) {  // If the user only enters one software
-                selectSoftware = bestSoftwareVec[0]; // Select the most frequent results
+        } else {
+            if (softwareNum_ == 1) {
+                selectSoftware = bestSoftwareVec[0];
             } else {
-                // If the frequency is greater than 1, select the result with the largest frequency, otherwise select the result with the depth closest to 0
                 selectSoftware = (gtFrequency < 2) ? softwareVec[selectDepthIdx] : bestSoftwareVec[0];
             }
         }
@@ -1314,110 +842,85 @@ string VCFMerge::filter_rule(
     return selectSoftware;
 }
 
-
-
-/*
- * Select software with coverage close to 0
- * mergeVcfStruct_ -> struct after software merger
-*/
-
-/**
- * Filter and merge result according to the depth and number of variants.
- *
- * @param secondBool          second filter
- * 
- * @return void
-**/
-void VCFMerge::vcf_merge_filter(bool secondBool)
+// Pick one genotype per population site; in mode all also find the population sample most similar to this one and return false if none shares a genotype.
+bool VCFMerge::vcf_merge_filter(bool secondBool)
 {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Filtering.\n";
+    log_stream() << "Filtering.\n";
 
-    // Record the number of variants passed and the number of each sample
     uint64_t allPassNum = 0;
     map<uint32_t, uint64_t> sampleIdxNumMap;
 
-    // clear emory
     if (secondBool) {
         map<string, map<int, string > >().swap(outChrStartInfoMap_);
     }
 
-    // Iterate over the recall hash table
-    for (const auto& [chromosome, startSoftwareInfoMap] : mergeVcfStruct_.recallSoftwareGtDepVecMap) {  // map<chr, map<start, map<software, tuple<vector<depth>, vector<gt> > > > >
-        for (const auto& [refStart, SoftwareInfoMap] : startSoftwareInfoMap) {  // map<start, map<software, tuple<vector<depth>, vector<gt> > > >
-            // vcfInfo at this site
+    // ------ One genotype per site ------
+    for (const auto& [chromosome, startSoftwareInfoMap] : mergeVcfStruct_.recallSoftwareGtDepVecMap) {
+        for (const auto& [refStart, SoftwareInfoMap] : startSoftwareInfoMap) {
             string informations;
             vector<string> gtVec;
             tie(informations, gtVec) = mergeVcfStruct_.BaseInfoTupMap[chromosome][refStart];
 
-            // If the most similar sample in the output sample mutates, make a judgment
             string gtTmpTmp = gtVec[mostSimilarSampleIdx_];
             if (secondBool && (gtTmpTmp == "." || gtTmpTmp == ".|." || gtTmpTmp == "./." || gtTmpTmp == "0" || gtTmpTmp == "0|0" || gtTmpTmp == "0/0")) {
                 continue;
             }
 
-            // Constructs the parameters of filter_rule
             vector<vector<int> > gtAllVec;
             vector<string> softwareVec;
             vector<float> depthSumVec;
             vector<float> depthNorVec;
             vector<vector<float> > depthVecVec;
 
-            for (const auto& [software, Info] : SoftwareInfoMap) {  // map<software, tuple<vector<depth>, vector<gt> > >
+            for (const auto& [software, Info] : SoftwareInfoMap) {
                 depthVecVec.push_back(get<0>(Info));
 
-                // Obtain the average coverage of the software. Check whether the map contains it. If no, an error is reported
                 float meanDepth;
                 float sd;
                 if (mergeVcfStruct_.depthMap.find(software) != mergeVcfStruct_.depthMap.end()) {
                     meanDepth = get<0>(mergeVcfStruct_.depthMap[software]);
                     sd = get<2>(mergeVcfStruct_.depthMap[software]);
                 } else {
-                    cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: no coverage information -> "<< software << endl;
-                    exit(1);
+                    throw runtime_error("no coverage information -> " + software);
                 }
-                float depthSumTmp = accumulate(get<0>(Info).begin(), get<0>(Info).end(), 0.0);  // Calculate the depth sum of all alleles
+                float depthSumTmp = accumulate(get<0>(Info).begin(), get<0>(Info).end(), 0.0);
                 depthSumVec.push_back(depthSumTmp);
-                
-                // Standardization of coverage (z-score standardization)
+
                 float depthNor = (depthSumTmp - meanDepth) / (float)sd;
                 gtAllVec.push_back(get<1>(Info));
                 softwareVec.push_back(software);
                 depthNorVec.push_back(depthNor);
             }
 
-            // Filter to select the most likely haplotype
             string selectSoftware = filter_rule(
-                gtAllVec, 
-                softwareVec, 
-                depthNorVec, 
+                gtAllVec,
+                softwareVec,
+                depthNorVec,
                 informations
             );
 
-            if (selectSoftware.empty()) {  // If an empty string is returned, the site is untrusted and is skipped
+            if (selectSoftware.empty()) {
                 continue;
             }
 
-            // Selected software indexes, genotypes and in-depth information
-            int softwareIdx = distance(softwareVec.begin(), find(softwareVec.begin(), softwareVec.end(), selectSoftware));  // Gets the index location of the software
+            int softwareIdx = distance(softwareVec.begin(), find(softwareVec.begin(), softwareVec.end(), selectSoftware));
             vector<int> selectGtVec = gtAllVec[softwareIdx];
             float selectDepthSumVec = depthSumVec[softwareIdx];
             float selectDepthNor = depthNorVec[softwareIdx];
             vector<float> selectDepthVec = depthVecVec[softwareIdx];
 
-            // save result
             string selectGt = join(selectGtVec, "/");
             string selectGtTmp = selectGt;
-            selectGt += ":" + selectSoftware 
-                    + ":" + to_string(selectDepthNor).substr(0, 5) 
-                    + ":" + to_string(get<0>(mergeVcfStruct_.depthMap[selectSoftware])).substr(0, 5) 
+            selectGt += ":" + selectSoftware
+                    + ":" + to_string(selectDepthNor).substr(0, 5)
+                    + ":" + to_string(get<0>(mergeVcfStruct_.depthMap[selectSoftware])).substr(0, 5)
                     + ":" + to_string(selectDepthSumVec).substr(0, 5);
             outChrStartInfoMap_[chromosome][refStart] = informations + "\t" + selectGt;
 
             if (mMode == "all") {
-                // recodr the number of samples
                 allPassNum++;
                 uint32_t sampleIdx = 0;
-                replace(selectGtTmp.begin(), selectGtTmp.end(), '/', '|');  // replace separator
+                replace(selectGtTmp.begin(), selectGtTmp.end(), '/', '|');
                 for (const auto& gtTmp : gtVec) {
                     if (gtTmp == "." || gtTmp == ".|." || gtTmp == "./." || gtTmp == "0" || gtTmp == "0|0" || gtTmp == "0/0") {
                         sampleIdx++;
@@ -1433,8 +936,12 @@ void VCFMerge::vcf_merge_filter(bool secondBool)
         }
     }
 
+    // ------ Population sample sharing the most selected genotypes ------
     if (mMode == "all") {
-        // Find the most similar sample
+        if (sampleIdxNumMap.empty()) {
+            warning_stream() << "no population sample shares a selected genotype; the high-confidence VCF is not written." << endl;
+            return false;
+        }
         uint64_t maxValue = sampleIdxNumMap.begin()->second;
         uint32_t maxKey = sampleIdxNumMap.begin()->first;
         for (auto it = sampleIdxNumMap.begin(); it != sampleIdxNumMap.end(); ++it) {
@@ -1443,24 +950,17 @@ void VCFMerge::vcf_merge_filter(bool secondBool)
                 maxKey = it->first;
             }
         }
-        cerr << fixed << setprecision(2);
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "The sample most similar to the '" << sampleName_ << "' is: '" << mergeVcfStruct_.sampleNameVec[maxKey] << "(" << maxValue / (float)allPassNum << ")'" << endl;
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "If you firmly believe that '" << sampleName_ << "' and '" << mergeVcfStruct_.sampleNameVec[maxKey] << "' belong to closely related varieties, then you can utilize the upcomming high-confidence VCF file." << endl;
-        cerr << defaultfloat << setprecision(6);
+        diagnostic_stream() << fixed << setprecision(2);
+        log_stream() << "The sample most similar to the '" << sampleName_ << "' is: '" << mergeVcfStruct_.sampleNameVec[maxKey] << "(" << maxValue / (float)allPassNum << ")'" << endl;
+        log_stream() << "If you firmly believe that '" << sampleName_ << "' and '" << mergeVcfStruct_.sampleNameVec[maxKey] << "' belong to closely related varieties, then you can utilize the upcomming high-confidence VCF file." << endl;
+        diagnostic_stream() << defaultfloat << setprecision(6);
         mostSimilarSampleIdx_ = maxKey;
     }
+    return true;
 }
 
-
-
-/**
- * Calculate the variance and standard deviation
- *
- * @param data     List with site depth
- * 
- * @return tuple   make_tuple(mean, variance, std_deviation)
-**/
-tuple<float, float, float> VCFMerge::cal_var_sd(const vector<float>& data)
+// Return the mean, variance and standard deviation of the depths.
+tuple<float, float, float> VCFMerge::cal_var_sd(const vector<float>& data) const
 {
     float sum = std::accumulate(std::begin(data), std::end(data), 0.0);
     float mean = sum / data.size();
@@ -1476,80 +976,50 @@ tuple<float, float, float> VCFMerge::cal_var_sd(const vector<float>& data)
     return make_tuple(mean, variance, std_deviation);
 }
 
-
-/**
- * save result
- * mergeVcfStruct_ -> struct after software merger
- * outChrStartInfoMap_ -> vcf_merge_filter Output result   outChrStartInfoMap_[chromosome][refStart][refLen][qryLen]
- * prefix -> Output file name prefix
-**/
-
-/**
- * save result
- *
- * 
- * @return void
-**/
+// Write the header and the selected records to the output file or stdout.
 void VCFMerge::result_save(
 )
 {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Wrote genotyped variants to '" << mOutputFileName << "'\n";
+    log_stream() << "Wrote genotyped variants to '" << mOutputFileName << "'\n";
 
-    SAVE SAVEClass(mOutputFileName);
+    SAVE SAVEClass(mOutputFileName, threads_);
 
-    stringstream outStream; // Use stringstream instead of string concatenation
-    static const int32_t CACHE_SIZE = 1024 * 1024 * 10; // Cache size is 10mb
+    stringstream outStream;
+    static const int32_t CACHE_SIZE = 1024 * 1024 * 10;
     outStream.str().reserve(CACHE_SIZE);
 
-    // Output file name prefix
     outStream << mergeVcfStruct_.headInfo;
- 
-    for (const auto& [_, StartInfoMap] : outChrStartInfoMap_) {  // outChrStartInfoMap_<chromosome, map<refStart, vcfInfo> >
-        for (const auto& [_, info] : StartInfoMap) {  // map<refStart, vcfInfo>
+
+    for (const auto& [_, StartInfoMap] : outChrStartInfoMap_) {
+        for (const auto& [_, info] : StartInfoMap) {
             outStream << info + "\n";
 
-            if (outStream.tellp() >= CACHE_SIZE) {  // Cache size is 10mb
+            if (outStream.tellp() >= CACHE_SIZE) {
                 string outTxt = outStream.str();
                 SAVEClass.save(outTxt);
-                // Clear stringstream
                 outStream.str(string());
                 outStream.clear();
             }
         }
     }
 
-    if (outStream.tellp() > 0) {  //Write for the last time
+    if (outStream.tellp() > 0) {
         string outTxt = outStream.str();
         SAVEClass.save(outTxt);
-        // Clear stringstream
         outStream.str(string());
         outStream.clear();
     }
 }
 
-
-/**
- * replace file base name
- *
- * @param path
- * @param directory
- * @param fileName
- * 
- * 
- * @return void
-**/
+// Split a path into its directory (with the trailing '/') and file name.
 void VCFMerge::extract_directory_FileName(const std::string& path, std::string& directory, std::string& fileName) {
-    // Find the position of the last slash
     size_t lastSlashPos = path.find_last_of('/');
 
     if (lastSlashPos != std::string::npos) {
-        //Extract directory part
         directory = path.substr(0, lastSlashPos + 1);
 
-        //Extract the file name part
         fileName = path.substr(lastSlashPos + 1);
     } else {
-        // If no slash is found, use the entire path as the file name
         directory = "";
         fileName = path;
     }

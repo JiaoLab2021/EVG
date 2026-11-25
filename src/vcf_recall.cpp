@@ -1,151 +1,23 @@
-// g++ vcf_recall.cpp -o vcf_recall -lz -O2
-
 #include "../include/vcf_recall.hpp"
+
+#include <exception>
+#include <regex>
+#include <stdexcept>
+
+#include "../include/logger.hpp"
+#include "../include/vcf_sort.hpp"
 
 using namespace std;
 
-int main_recall(int argc, char** argv)
-{
-    string trueVCFFileName;
-    string evaluateFileName;
-
-    string model = "recall";
-    string rocKey = "";
-    // roc calculation rule
-    string rocType = "genotype";
-
-    // Input parameter
-    int c;
-    while (true)
-    {
-        static const struct option long_options[] = {
-            {"vcf1", required_argument, 0, 't'},
-            {"vcf2", required_argument, 0, 'e'},         
-            {"model", required_argument, 0, 'm'},
-
-            {"score-field", required_argument, 0, 's'},
-            {"roc", required_argument, 0, 'r'},
-            {"help", no_argument, 0, 'h'},
-            {0, 0, 0, 0}
-        };
-
-        int option_index = 0;
-
-        c = getopt_long (argc, argv, "t:e:m:s:r:h", long_options, &option_index);
-
-        if (c == -1)
-            break;
-
-        switch (c)
-        {
-        case 't':
-            trueVCFFileName = optarg;
-            break;
-        case 'e':
-            evaluateFileName = optarg;
-            break;
-        case 'm':
-            model = optarg;
-            break;
-        case 's':
-            rocKey = optarg;
-            break;
-        case 'r':
-            rocType = optarg;
-            break;
-        case 'h':
-        case '?':
-            help_recall(argv);
-            exit(1);
-            break;
-        default:
-            abort ();
-        }
-    }
-
-    // Check whether the parameters are correct
-    if (trueVCFFileName.empty() || evaluateFileName.empty() || model.empty()) {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-             << "Parameter error.\n";
-        help_recall(argv);
-        return 1;
-    }
-
-    // Check that rocType is correct
-    if (rocType != "recall" && rocType != "genotype") {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-             << "Parameter error: -r\n";
-        help_recall(argv);
-        return 1;
-    }
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Running ...\n";
-
-    // init
-    VCFRecall VCFRecallClass(
-        trueVCFFileName, 
-        evaluateFileName, 
-        rocKey, 
-        rocType
-    );
-    // index
-    VCFRecallClass.build_true_index();
-
-
-    if (model == "recall") {
-        VCFRecallClass.evulate_recall();
-    } else if (model == "genotype") {
-        VCFRecallClass.evulate_gt();
-    } else if (model == "gramtools") {
-        VCFRecallClass.gramtools_convert();
-        VCFRecallClass.evulate_gt();
-    } else {
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "The model is incorrect. [recall/genotype/gramtools]" << endl;
-        exit(1);
-    }
-    
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Done ...\n";
-
-    return 0;
-}
-
-// Help document
-void help_recall(char** argv)
-{
-  cerr << "usage: " << argv[0] << " " << argv[1] << " -t -e [options]" << endl
-       << "evaluate the results of genome graph software." << endl
-       << endl
-       << "input files (Note: vcf files must be sorted):" << endl
-       << "    -t, --vcf1          FILE       vcf file containing truth values" << endl
-       << "    -e, --vcf2          FILE       output vcf file by genomes graph software" << endl
-       << endl
-	   << "algorithm:" << endl
-       << "    -m, --model         STRING     the mode in which the software runs (recall/genotype/gramtools) [recall]" << endl
-       << endl 
-       << "ROC arguments:" << endl
-       << "    -s, --score-field   STRING     the name of the VCF FORMAT/INFO field to use as the ROC score (FORMAT.<name>/INFO.<name>)" << endl
-       << "    -r, --roc           STRING     roc calculation rules (recall/genotype) [genotype]" << endl
-       << endl
-       << "    -h, --help                     print this help document" << endl;
-}
-
-
-/**
- * init
- *
- * @param trueVCFFileName    true set
- * @param evaluateFileName   evaluation set
- * @param rocKey             Keywords used to extract roc score
- * 
-**/
+// Store the inputs, the thread count, the length bins and the ROC field (column 7 for INFO, 8 for FORMAT; INFO keys get their regex here).
 VCFRecall::VCFRecall(
-    const string& trueVCFFileName, 
-    const string& evaluateFileName, 
-    const string& rocKey, 
-    const string& rocType
-) : trueVCFFileName_(trueVCFFileName), evaluateFileName_(evaluateFileName), rocKey_(rocKey), rocType_(rocType)
+    const string& trueVCFFileName,
+    const string& evaluateFileName,
+    const string& rocKey,
+    const string& rocType,
+    uint32_t threads
+) : trueVCFFileName_(trueVCFFileName), evaluateFileName_(evaluateFileName), rocKey_(rocKey), rocType_(rocType), threads_(threads)
 {
-    // Variable length range
     lengthVec_.push_back("-999999/-10000");
     lengthVec_.push_back("-9999/-5000");
     lengthVec_.push_back("-4999/-2500");
@@ -172,11 +44,10 @@ VCFRecall::VCFRecall(
     lengthVec_.push_back("5000/9999");
     lengthVec_.push_back("10000/999999");
 
-    // ROC -> save the number of DP or GQ
     rocColNum_ = 0;
     if (!rocKey_.empty())
     {
-        rocKeyVec_ = split(rocKey_, "."); // vector<colname, key>
+        rocKeyVec_ = split(rocKey_, ".");
 
         if (rocKeyVec_[0] == "INFO")
         {
@@ -186,107 +57,92 @@ VCFRecall::VCFRecall(
         {
             rocColNum_ = 8;
         }
+
+        if (rocKeyVec_.size() >= 2 && rocColNum_ != 8) {
+            rocInfoReg_ = regex(rocKeyVec_[1] + "=(\\d+)");
+        }
     }
 }
 
-
-/**
- * build the index of true VCF file
- * 
- * @return void
-**/
+// Index the non-reference records of the truth VCF by chromosome and position, checking its order in the same pass.
 void VCFRecall::build_true_index()
 {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Building index ...\n";
+    log_stream() << "Building index ...\n";
 
-    // Check if the vcf file is sorted
-    check_vcf_sort(trueVCFFileName_);
+    SortedIndexPass pass(trueVCFFileName_);
+    try {
+        VCFINFOSTRUCT INFOSTRUCTTMP;
+        VCFOPEN VCFOPENCLASS(trueVCFFileName_, threads_);
 
-    // input file stream
-    VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(trueVCFFileName_);
-    
-    // If not traversed, continue
-    while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // empty or commant line, skip
-        if (INFOSTRUCTTMP.line.empty() || INFOSTRUCTTMP.line.find("#") != string::npos) {
-            continue;
+        while (VCFOPENCLASS.read(INFOSTRUCTTMP)) {
+            if (INFOSTRUCTTMP.line.empty() || INFOSTRUCTTMP.line.find("#") != string::npos) {
+                continue;
+            }
+
+            pass.check_order(INFOSTRUCTTMP);
+            pass.index([&] { index_true_record(INFOSTRUCTTMP); });
         }
-
-        vector<int> gtVec = get_gt(
-            INFOSTRUCTTMP.lineVec
-        );
-        // Filter by genotype
-        if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is all '0' or all '.', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << " " 
-                << INFOSTRUCTTMP.POS << endl;
-            continue;
-        }
-
-
-        // Gets the length of the ref and haplotype
-        uint32_t refLen;
-        vector<uint32_t> qryLenVec;
-        tie(refLen, qryLenVec) = get_hap_len(
-            INFOSTRUCTTMP.ID, 
-            INFOSTRUCTTMP.REF, 
-            INFOSTRUCTTMP.ALT, 
-            gtVec, 
-            "hap"
-        );
-
-        // Gets the length of the variation
-        int32_t svLength = sv_length_select(
-            refLen, 
-            qryLenVec, 
-            gtVec
-        );
-
-        // Save the length of all variations
-        trueVCFStrcuture_.allLengthList.push_back(svLength);
-
-        // Variation information
-        trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
-
-        // Initialize the hash table first
-        if (trueVCFStrcuture_.chrStartLenInfoGtTupMap.find(INFOSTRUCTTMP.CHROM) == trueVCFStrcuture_.chrStartLenInfoGtTupMap.end()) {
-            trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM];
-        }
-        trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS] = make_tuple(refLen, qryLenVec, INFOSTRUCTTMP.line, svLength, gtVec);
+    } catch (...) {
+        pass.fail<bool>(current_exception()).get();
     }
+
+    pass.finish(true).get();
 }
 
+// Add one truth record (skipped with a warning when its genotype has no ALT allele) to the truth index.
+void VCFRecall::index_true_record(const VCFINFOSTRUCT & INFOSTRUCTTMP)
+{
+    vector<int> gtVec = get_gt(
+        INFOSTRUCTTMP.lineVec
+    );
+    if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
+        warning_stream() << "The genotype of the variant is all '0' or all '.', skip this site -> "
+            << INFOSTRUCTTMP.CHROM << " "
+            << INFOSTRUCTTMP.POS << endl;
+        return;
+    }
 
-/**
- * Convert the results of gramtools
- * 
- * @return void
-**/
-void VCFRecall::gramtools_convert()
+    uint32_t refLen;
+    vector<uint32_t> qryLenVec;
+    tie(refLen, qryLenVec) = get_hap_len(
+        INFOSTRUCTTMP.ID,
+        INFOSTRUCTTMP.REF,
+        INFOSTRUCTTMP.ALT,
+        gtVec,
+        "hap"
+    );
+
+    int32_t svLength = sv_length_select(
+        refLen,
+        qryLenVec,
+        gtVec
+    );
+
+    trueVCFStrcuture_.allLengthList.push_back(svLength);
+
+    trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM].push_back(INFOSTRUCTTMP.POS);
+
+    trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][INFOSTRUCTTMP.POS] = make_tuple(refLen, qryLenVec, INFOSTRUCTTMP.line, svLength, gtVec);
+}
+
+// Rewrite gramtools output with diploid genotypes from COV into convert.<name> and evaluate that file instead.
+void VCFRecall::convert_gramtools()
 {
     string outInformations;
 
-    // check whether the file is sorted
     check_vcf_sort(evaluateFileName_);
 
-    // output file stream
     vector<string> prefixVec = split(evaluateFileName_, "/");
     string outFileName = "convert." + prefixVec.back();
-    SAVE SaveClass(outFileName);
+    SAVE SaveClass(outFileName, threads_);
 
-    // input file stream
     VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(evaluateFileName_);
-    // If not traversed, continue
+    VCFOPEN VCFOPENCLASS(evaluateFileName_, threads_);
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             SaveClass.save(INFOSTRUCTTMP.line);
         }
 
-        // Extract genotype and locus coverage information from informationsVector
         vector<string> gtVector = split(INFOSTRUCTTMP.lineVec.back(), ":");
         vector<string> formatVector = split(INFOSTRUCTTMP.FORMAT, ":");
         string gt;
@@ -296,19 +152,17 @@ void VCFRecall::gramtools_convert()
             gt = "0";
         }
 
-        // Find the location of COV in the FORMAT field
         vector<string>::iterator covItera = find(formatVector.begin(), formatVector.end(), "COV");
         int covIndex = 0;
-        if (covItera != formatVector.end()) { // The FORMAT contains COV
+        if (covItera != formatVector.end()) {
             covIndex = distance(formatVector.begin(), covItera);
-        } else {  // If not, just switch and continue the next cycle
+        } else {
             outInformations += INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
-        // The contents of the FILTER field are added directly to outInformations
         for (size_t i = 0; i < INFOSTRUCTTMP.lineVec.size()-1; i++) {
-            if (i == 6) {  // The FILTER column is changed to PASS, and the source file is.
+            if (i == 6) {
                 outInformations += "PASS\t";
             } else {
                 outInformations += INFOSTRUCTTMP.lineVec[i] + "\t";
@@ -316,182 +170,142 @@ void VCFRecall::gramtools_convert()
         }
 
         string siteCoverage = gtVector[covIndex];
-        
-        // If gt=0 means that there is no variation at this site, then gt is changed to 0/0
+
         if (gt == "0") {
             outInformations += "\t0/0";
-        } else {  // When gt is not 0
-            // If there is a 0 field in the site coverage, it represents a mutation site that is a pure sum
+        } else {
             if (siteCoverage.find("0,") < siteCoverage.length()) {
                 outInformations += "\t1/1";
-            } else {  // If the site coverage does not have a 0, field, it indicates that the site is a heterozygous mutation site
+            } else {
                 outInformations += "\t0/1";
             }
         }
 
-        // Add the last field of informations
         for (size_t i = 1; i < gtVector.size(); i++) {
             outInformations += ":" + gtVector[i];
         }
 
         outInformations += "\n";
 
-        // The file is written every 10Mb
         if (outInformations.size() > bufferSize_) {
             SaveClass.save(outInformations);
 
-            // The file is written every 10Mb
             outInformations.clear();
         }
     }
 
-    // Last write to the file
     SaveClass.save(outInformations);
-    
+
     evaluateFileName_ = outFileName;
 }
 
-
-/**
- * genotype evaluation function
- * 
- * @return void
-**/
-void VCFRecall::evulate_gt()
+// Evaluate calls by exact position: write the true, wrong-genotype, miscall and failcall VCFs, vcf_evulate.out and the ROC tables.
+void VCFRecall::evaluate_genotype()
 {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Evaluating the genotype results ..." << endl;
+    log_stream() << "Evaluating the genotype results ..." << endl;
 
-    // check whether the file is sorted
     check_vcf_sort(evaluateFileName_);
-    
-    // Save the correct results for typing
-    stringstream truetxtStream; // Use stringstream instead of string concatenation
+
+    // ------ Output files ------
+    stringstream truetxtStream;
     truetxtStream.str().reserve(bufferSize_);
-    SAVE trueFile("genotype.true.vcf.gz");
+    SAVE trueFile("genotype.true.vcf.gz", threads_);
 
-    // Saves the result of a typing error
-    stringstream genotypeMisTxtStream; // Use stringstream instead of string concatenation
+    stringstream genotypeMisTxtStream;
     genotypeMisTxtStream.str().reserve(bufferSize_);
-    SAVE genotypeMisFile("genotype.err.vcf.gz");
+    SAVE genotypeMisFile("genotype.err.vcf.gz", threads_);
 
-    // Save the result of miscall
-    stringstream misCallTxtStream; // Use stringstream instead of string concatenation
+    stringstream misCallTxtStream;
     misCallTxtStream.str().reserve(bufferSize_);
-    SAVE misCallFile("miscall.vcf.gz");
+    SAVE misCallFile("miscall.vcf.gz", threads_);
 
-    // No variation found
-    stringstream failCallTxtStream; // Use stringstream instead of string concatenation
+    stringstream failCallTxtStream;
     failCallTxtStream.str().reserve(bufferSize_);
-    SAVE failCallFile("failcall.vcf.gz");
+    SAVE failCallFile("failcall.vcf.gz", threads_);
 
-    // No variation found
     vector<int64_t> genotypeLenVec;
     vector<int64_t> misgenotypeLenVec;
     vector<int64_t> miscallLenVec;
 
-    // input file stream
+    // ------ Classify each PASS call: true genotype, wrong genotype or miscall ------
     VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(evaluateFileName_);
+    VCFOPEN VCFOPENCLASS(evaluateFileName_, threads_);
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // Skip comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             continue;
         }
-        
-        // According to the FILTER field
-        if (INFOSTRUCTTMP.FILTER != "PASS") {  // If not (PASS), skip directly
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: '" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << " " 
+
+        if (INFOSTRUCTTMP.FILTER != "PASS") {
+            warning_stream() << "'" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " "
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
-        // Get genotype information
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
-        // Filter by genotype
         if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is all '0' or all '.', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << " " 
+            warning_stream() << "The genotype of the variant is all '0' or all '.', skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " "
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
-
-        /* --------------------------------- roc ------------------------------------ */
         float rocNum = 0.0;
         rocNum = get_roc(INFOSTRUCTTMP);
-        /* --------------------------------- roc ------------------------------------ */
 
-        // Gets the length of the ref and haplotype
         uint32_t refLen;
         vector<uint32_t> qryLenVec;
         tie(refLen, qryLenVec) = get_hap_len(
-            INFOSTRUCTTMP.ID, 
-            INFOSTRUCTTMP.REF, 
-            INFOSTRUCTTMP.ALT, 
-            gtVec, 
+            INFOSTRUCTTMP.ID,
+            INFOSTRUCTTMP.REF,
+            INFOSTRUCTTMP.ALT,
+            gtVec,
             "hap"
         );
 
-        // Gets the length of the variation
         int32_t svLength = sv_length_select(
-            refLen, 
-            qryLenVec, 
+            refLen,
+            qryLenVec,
             gtVec
         );
 
-        // Add length to rocAllMap
         rocCallMap_[rocNum].push_back(svLength);
 
-        // Genotyping was performed
-        // Check for the presence of chromosomes. No is a miscall
+        // ------ Match the alleles of the truth record at the same position ------
         auto iter1 = trueVCFStrcuture_.chrStartLenInfoGtTupMap.find(INFOSTRUCTTMP.CHROM);
         if (iter1 == trueVCFStrcuture_.chrStartLenInfoGtTupMap.end()) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                    << "Warning: " << INFOSTRUCTTMP.CHROM << " not in true set.\n";
+            warning_stream() << "" << INFOSTRUCTTMP.CHROM << " not in true set.\n";
             miscallLenVec.push_back(svLength);
             misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         }
 
-        // Record the result of the genotype
-        uint32_t genotypeTrueNum = 0;  // 0->misCall >0&&<gtVec.size()->recall  >=gtVec.size()->trueGenotype
+        uint32_t genotypeTrueNum = 0;
         uint32_t trueRefLen;
         string trueVcfInfo;
         int32_t trueSvLen;
 
-        // Find the true refLen in the map of the corresponding chromosome qryLenVec
         auto iter2 = iter1->second.find(INFOSTRUCTTMP.POS);
-        if (iter2 != iter1->second.end()) {  // The software finds it and then determines whether the classification is correct
-            // true mutation information
+        if (iter2 != iter1->second.end()) {
             trueRefLen = get<0>(iter2->second);
             const vector<uint32_t>& trueQryLenVec = get<1>(iter2->second);
             trueVcfInfo = get<2>(iter2->second);
             trueSvLen = get<3>(iter2->second);
             vector<int> trueGtVec = get<4>(iter2->second);
 
-            // If the length is 0, an error is reported and the code exits.
             if (trueQryLenVec.size() == 0) {
-                cerr << "[" << __func__ << "::" << getTime() << "] " 
-                    << "Error: trueQryLenVec.size() == 0 -> " 
-                    << INFOSTRUCTTMP.CHROM << " " 
-                    << INFOSTRUCTTMP.POS << endl;
-                exit(1);
+                throw runtime_error("trueQryLenVec.size() == 0 -> " + INFOSTRUCTTMP.CHROM + " " + to_string(INFOSTRUCTTMP.POS));
             }
 
-            // Traverse alleles
-            int64_t trueQryLenVecIdx = -1;  // Record used haplotypes for truth values to prevent duplicate evaluations
+            int64_t trueQryLenVecIdx = -1;
             for (size_t i = 0; i < qryLenVec.size(); i++) {
                 uint32_t qryLen = qryLenVec[i];
                 int callGt = gtVec[i];
 
                 for (size_t j = 0; j < trueQryLenVec.size(); j++) {
-                    // Used haplotypes are skipped
                     if (static_cast<int64_t>(j) == trueQryLenVecIdx) {
                         continue;
                     }
@@ -499,12 +313,10 @@ void VCFRecall::evulate_gt()
                     uint32_t trueQryLen = trueQryLenVec[j];
                     int trueGt = trueGtVec[j];
 
-                    // If one of callGt and trueGt is 0, but the other is not, the next loop will be performed to prevent SNP from making errors in judgment
                     if ((callGt != 0 && trueGt == 0) || (callGt == 0 && trueGt != 0)) {
                         continue;;
                     }
 
-                    // deficiency
                     if (refLen >= 50 && qryLen < 50) {
                         if ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) {
                             genotypeTrueNum++;
@@ -512,189 +324,165 @@ void VCFRecall::evulate_gt()
 
                             goto stop;
                         }
-                    } else if (refLen < 50 && qryLen >= 50) {  // ins
+                    } else if (refLen < 50 && qryLen >= 50) {
                         if ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25)
                         {
                             genotypeTrueNum++;
                             trueQryLenVecIdx = j;
-                            
+
                             goto stop;
                         }
-                    } else if (refLen >= 50 && qryLen >= 50) {  // Replace
-                        if (((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
+                    } else if (refLen >= 50 && qryLen >= 50) {
+                        if (((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
                             genotypeTrueNum++;
                             trueQryLenVecIdx = j;
-                            
+
                             goto stop;
                         }
-                    } else if (refLen == 1 && qryLen == 1) {  // snp
-                        if (((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
+                    } else if (refLen == 1 && qryLen == 1) {
+                        if (((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
                             genotypeTrueNum++;
                             trueQryLenVecIdx = j;
-                            
+
                             goto stop;
                         }
-                    } else if (refLen >= 3 && qryLen <= 2) {  // del
+                    } else if (refLen >= 3 && qryLen <= 2) {
                         if ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25)
                         {
                             genotypeTrueNum++;
                             trueQryLenVecIdx = j;
-                            
+
                             goto stop;
                         }
-                    } else if (refLen <= 2 && qryLen >= 3) {  // ins
+                    } else if (refLen <= 2 && qryLen >= 3) {
                         if ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25)
                         {
                             genotypeTrueNum++;
                             trueQryLenVecIdx = j;
-                            
+
                             goto stop;
                         }
                     } else {
-                        if ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25 && 
+                        if ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25 &&
                             (std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25)
                         {
                             genotypeTrueNum++;
                             trueQryLenVecIdx = j;
-                            
+
                             goto stop;
                         }
                     }
                 }
-                stop:; // If found, exit the nested loop. End the cycle of this haplotype and proceed to the next haplotype
+                stop:;
             }
         }
 
-        // Determine the result of typing
-        if (genotypeTrueNum == 0) {  // The mutations we found are not in the true concentration 
+        // ------ Record the class and flush every 10 MB ------
+        if (genotypeTrueNum == 0) {
             miscallLenVec.push_back(svLength);
             misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         } else {
-            // Correct typing
             if (genotypeTrueNum >= gtVec.size()) {
                 genotypeLenVec.push_back(trueSvLen);
-                truetxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                truetxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" +
                             "true_length\t" + to_string(trueSvLen) + "\t" + trueVcfInfo + "\n";
 
-                // Add length to rocTrueMap
                 rocRecallMap_[rocNum].push_back(svLength);
-            } else {  // Typing error
+            } else {
                 misgenotypeLenVec.push_back(trueSvLen);
-                genotypeMisTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                genotypeMisTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" +
                                 "true_length\t" + to_string(trueSvLen) + "\t" + trueVcfInfo + "\n";
 
-                // The roc is calculated using the recall, or only the genotype if the roc is not enabled
                 if (rocType_ == "recall") {
-                    // Add length to rocTrueMap
                     rocRecallMap_[rocNum].push_back(svLength);
                 }
-                
             }
-            // Delete variations that have already been used
             trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].erase(INFOSTRUCTTMP.POS);
         }
 
-        // save result
-        if (truetxtStream.tellp() >= bufferSize_ || 
-            genotypeMisTxtStream.tellp() >= bufferSize_ || 
-            misCallTxtStream.tellp() >= bufferSize_) // It is written every 10Mb
+        if (truetxtStream.tellp() >= bufferSize_ ||
+            genotypeMisTxtStream.tellp() >= bufferSize_ ||
+            misCallTxtStream.tellp() >= bufferSize_)
         {
-            // Correct genotyping
             string truetxt = truetxtStream.str();
             trueFile.save(truetxt);
-            // Clear stringstream
             truetxtStream.str(string());
             truetxtStream.clear();
 
-            // genotyping error
             string genotypeMisTxt = genotypeMisTxtStream.str();
             genotypeMisFile.save(genotypeMisTxt);
-            // Clear stringstream
             genotypeMisTxtStream.str(string());
             genotypeMisTxtStream.clear();
 
-            // Variation that is not in true concentration
             string misCallTxt = misCallTxtStream.str();
             misCallFile.save(misCallTxt);
-            // Clear stringstream
             misCallTxtStream.str(string());
             misCallTxtStream.clear();
         }
     }
 
-    // last save
-    if (truetxtStream.tellp() > 0 || 
-        genotypeMisTxtStream.tellp() > 0 || 
-        misCallTxtStream.tellp() > 0) // It is written every 10Mb
+    if (truetxtStream.tellp() > 0 ||
+        genotypeMisTxtStream.tellp() > 0 ||
+        misCallTxtStream.tellp() > 0)
     {
-        // Correct typing
         string truetxt = truetxtStream.str();
         trueFile.save(truetxt);
-        // Clear stringstream
         truetxtStream.str(string());
         truetxtStream.clear();
 
-        // genotyping error
         string genotypeMisTxt = genotypeMisTxtStream.str();
         genotypeMisFile.save(genotypeMisTxt);
-        // Clear stringstream
         genotypeMisTxtStream.str(string());
         genotypeMisTxtStream.clear();
 
-        // Variation that is not in true concentration
         string misCallTxt = misCallTxtStream.str();
         misCallFile.save(misCallTxt);
-        // Clear stringstream
         misCallTxtStream.str(string());
         misCallTxtStream.clear();
     }
 
-    // True variation not found
-    for (auto it1 : trueVCFStrcuture_.chrStartLenInfoGtTupMap) {  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> > >
-        for (auto it2 : it1.second) {  // map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> >
+    // ------ Truth records never matched ------
+    for (auto it1 : trueVCFStrcuture_.chrStartLenInfoGtTupMap) {
+        for (auto it2 : it1.second) {
             failCallTxtStream << get<2>(it2.second) + "\n";
 
-            // save the result
-            if (failCallTxtStream.tellp() >= bufferSize_) {  // It is written every 10Mb
+            if (failCallTxtStream.tellp() >= bufferSize_) {
                 string failCallTxt = failCallTxtStream.str();
                 failCallFile.save(failCallTxt);
-                // Clear stringstream
                 failCallTxtStream.str(string());
                 failCallTxtStream.clear();
             }
         }
     }
-    // last save
-    if (failCallTxtStream.tellp() > 0) {  // It is written every 10Mb
+    if (failCallTxtStream.tellp() > 0) {
         string failCallTxt = failCallTxtStream.str();
         failCallFile.save(failCallTxt);
-        // Clear stringstream
         failCallTxtStream.str(string());
         failCallTxtStream.clear();
     }
 
+    // ------ Summary in vcf_evulate.out (appended), then ROC tables ------
     int64_t sv_genotype_recall = genotypeLenVec.size();
     int64_t sv_misgenotype_recall = misgenotypeLenVec.size();
     int64_t sv_mis_call = miscallLenVec.size();
     int64_t sv_all = trueVCFStrcuture_.allLengthList.size();
 
-    // save result
     ofstream outFile;
     outFile.open("vcf_evulate.out", ios::app);
 
     outFile << "snp+indel+sv:\n"
-            << "genotype_recall:" << sv_genotype_recall 
-            << "\nmisgenotype_call:" << sv_misgenotype_recall 
-            << "\nrecall:" << sv_genotype_recall + sv_misgenotype_recall 
-            << "\nmis_call:" << sv_mis_call 
-            << "\ncall:" << sv_genotype_recall + sv_misgenotype_recall + sv_mis_call 
-            << "\nfail_call:" << sv_all - sv_genotype_recall - sv_misgenotype_recall 
-            << "\nall:" << sv_all 
+            << "genotype_recall:" << sv_genotype_recall
+            << "\nmisgenotype_call:" << sv_misgenotype_recall
+            << "\nrecall:" << sv_genotype_recall + sv_misgenotype_recall
+            << "\nmis_call:" << sv_mis_call
+            << "\ncall:" << sv_genotype_recall + sv_misgenotype_recall + sv_mis_call
+            << "\nfail_call:" << sv_all - sv_genotype_recall - sv_misgenotype_recall
+            << "\nall:" << sv_all
             << endl
             << endl;
 
@@ -702,20 +490,19 @@ void VCFRecall::evulate_gt()
     vector<int64_t> mis_call_length_count = count_num(miscallLenVec);
     vector<int64_t> genotype_length_count = count_num(genotypeLenVec);
     vector<int64_t> misgenotype_length_count = count_num(misgenotypeLenVec);
-    
+
     outFile << "length/length: genotype_recall/misgenotype_call/recall/mis_call/call/fail_call/all\n";
 
-    // True variation not found
     for (size_t i = 0; i < lengthVec_.size(); i++) {
-        outFile << lengthVec_[i] << ": " 
-                << genotype_length_count[i] << "/" 
-                << misgenotype_length_count[i] << "/" 
-                << genotype_length_count[i] + misgenotype_length_count[i] << "/" 
-                << mis_call_length_count[i] << "/" 
-                << genotype_length_count[i] + misgenotype_length_count[i] + mis_call_length_count[i] << "/" 
-                << all_length_count[i] - genotype_length_count[i] - misgenotype_length_count[i] << "/" 
+        outFile << lengthVec_[i] << ": "
+                << genotype_length_count[i] << "/"
+                << misgenotype_length_count[i] << "/"
+                << genotype_length_count[i] + misgenotype_length_count[i] << "/"
+                << mis_call_length_count[i] << "/"
+                << genotype_length_count[i] + misgenotype_length_count[i] + mis_call_length_count[i] << "/"
+                << all_length_count[i] - genotype_length_count[i] - misgenotype_length_count[i] << "/"
                 << all_length_count[i] << endl;
-        
+
         if (10 <= i && i <= 14) {
             sv_genotype_recall -= genotype_length_count[i];
             sv_misgenotype_recall -= misgenotype_length_count[i];
@@ -725,166 +512,131 @@ void VCFRecall::evulate_gt()
     }
 
     outFile << "\nsv:\n"
-            << "genotype_recall:" << sv_genotype_recall 
-            << "\nmisgenotype_call:" << sv_misgenotype_recall 
-            << "\nrecall:" << sv_genotype_recall + sv_misgenotype_recall 
-            << "\nmis_call:" << sv_mis_call 
-            << "\ncall:" << sv_genotype_recall + sv_misgenotype_recall + sv_mis_call 
-            << "\nfail_call:" << sv_all - sv_genotype_recall - sv_misgenotype_recall 
-            << "\nall:" << sv_all 
+            << "genotype_recall:" << sv_genotype_recall
+            << "\nmisgenotype_call:" << sv_misgenotype_recall
+            << "\nrecall:" << sv_genotype_recall + sv_misgenotype_recall
+            << "\nmis_call:" << sv_mis_call
+            << "\ncall:" << sv_genotype_recall + sv_misgenotype_recall + sv_mis_call
+            << "\nfail_call:" << sv_all - sv_genotype_recall - sv_misgenotype_recall
+            << "\nall:" << sv_all
             << endl
             << endl;
 
-    // Free memory
     outFile.close();
 
     roc_calculate(trueVCFStrcuture_.allLengthList);
 }
 
-
-/**
- * genotype evaluation function
- * 
- * @return void
-**/
-void VCFRecall::evulate_recall()
+// Evaluate calls by nearby position and length tolerance: write the recall VCFs, vcf_evulate.out and the ROC tables.
+void VCFRecall::evaluate_recall()
 {
-    cerr << "[" << __func__ << "::" << getTime() << "] " << "Evaluating the genotype results ..." << endl;
+    log_stream() << "Evaluating the genotype results ..." << endl;
 
-    // Check whether the vcf file is sorted
     check_vcf_sort(evaluateFileName_);
 
-    // Save the correct results
-    stringstream truetxtStream; // Use stringstream instead of string concatenation
+    // ------ Output files ------
+    stringstream truetxtStream;
     truetxtStream.str().reserve(bufferSize_);
-    SAVE trueFile("recall.true.vcf.gz");
+    SAVE trueFile("recall.true.vcf.gz", threads_);
 
-    // Save the correct results for typing
-    stringstream trueGtTxtStream; // Use stringstream instead of string concatenation
+    stringstream trueGtTxtStream;
     trueGtTxtStream.str().reserve(bufferSize_);
-    SAVE trueGtFile("genotype.true.vcf.gz");
+    SAVE trueGtFile("genotype.true.vcf.gz", threads_);
 
-    // Saves the result of a typing error
-    stringstream genotypeMisTxtStream; // Use stringstream instead of string concatenation
+    stringstream genotypeMisTxtStream;
     genotypeMisTxtStream.str().reserve(bufferSize_);
-    SAVE genotypeMisFile("genotype.err.vcf.gz");
+    SAVE genotypeMisFile("genotype.err.vcf.gz", threads_);
 
-    // Save the result of miscall
-    stringstream misCallTxtStream; // Use stringstream instead of string concatenation
+    stringstream misCallTxtStream;
     misCallTxtStream.str().reserve(bufferSize_);
-    SAVE misCallFile("miscall.vcf.gz");
+    SAVE misCallFile("miscall.vcf.gz", threads_);
 
-    // Define vector
     vector<int64_t> genotypeLenVec;
     vector<int64_t> callLenVec;
     vector<int64_t> recallLenVec;
 
-    string preChr; // It's used to determine if it's a new chromosome, and if it is, it reconstructs the vector.
+    string preChr;
 
-    // Binary search method left and right index
     int leftIdxTmp = 0;
     int rightIdxTmp = 0;
 
-    // input file stream
+    // ------ Classify each PASS call: recalled (true or wrong genotype) or miscall ------
     VCFINFOSTRUCT INFOSTRUCTTMP;
-    VCFOPEN VCFOPENCLASS(evaluateFileName_);
+    VCFOPEN VCFOPENCLASS(evaluateFileName_, threads_);
 
     while(VCFOPENCLASS.read(INFOSTRUCTTMP)) {
-        // Skip comment line
         if (INFOSTRUCTTMP.line.find("#") != string::npos) {
             continue;
         }
 
-        // According to the FILTER field
-        if (INFOSTRUCTTMP.FILTER != "PASS") {  // Skip comment line
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: '" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << " " 
+        if (INFOSTRUCTTMP.FILTER != "PASS") {
+            warning_stream() << "'" << INFOSTRUCTTMP.FILTER << "' != 'PASS', skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " "
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
-        // According to the FILTER field
         vector<int> gtVec = get_gt(
             INFOSTRUCTTMP.lineVec
         );
-        // Filter by genotype
         if (gtVec.empty() || (all_of(gtVec.begin(), gtVec.end(), [](int c) { return c == 0; }))) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: The genotype of the variant is all '0' or all '.', skip this site -> "
-                << INFOSTRUCTTMP.CHROM << " " 
+            warning_stream() << "The genotype of the variant is all '0' or all '.', skip this site -> "
+                << INFOSTRUCTTMP.CHROM << " "
                 << INFOSTRUCTTMP.POS << endl;
             continue;
         }
 
-
-        /* --------------------------------- roc ------------------------------------ */
         float rocNum = 0.0;
         rocNum = get_roc(INFOSTRUCTTMP);
-        /* --------------------------------- roc ------------------------------------ */
 
-
-        // Gets the length of the ref and haplotype
         uint32_t refLen;
         vector<uint32_t> qryLenVec;
         tie(refLen, qryLenVec) = get_hap_len(
-            INFOSTRUCTTMP.ID, 
-            INFOSTRUCTTMP.REF, 
-            INFOSTRUCTTMP.ALT, 
-            gtVec, 
+            INFOSTRUCTTMP.ID,
+            INFOSTRUCTTMP.REF,
+            INFOSTRUCTTMP.ALT,
+            gtVec,
             "hap"
         );
 
-        // Gets the length of the variation
         int32_t svLength = sv_length_select(
-            refLen, 
-            qryLenVec, 
+            refLen,
+            qryLenVec,
             gtVec
         );
 
-        // Add length to rocAllMap
         rocCallMap_[rocNum].push_back(svLength);
 
-
-        // recall
-        // Check for the presence of chromosomes. No is a miscall
         if (trueVCFStrcuture_.chrStartLenInfoGtTupMap.find(INFOSTRUCTTMP.CHROM) == trueVCFStrcuture_.chrStartLenInfoGtTupMap.end()) {
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Warning: '" << INFOSTRUCTTMP.CHROM << "' is not in the true set.\n";
+            warning_stream() << "'" << INFOSTRUCTTMP.CHROM << "' is not in the true set.\n";
             callLenVec.push_back(svLength);
             misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
             continue;
         }
-    
 
-        if (preChr != INFOSTRUCTTMP.CHROM) {  // Check for the presence of chromosomes. No is a miscall
-            // The left and right indexes of binary search are zeroed out to speed up the query
+        // ------ Truth records within 10 bp (both alleles < 50 bp) or 200 bp, matched by class and length ------
+        if (preChr != INFOSTRUCTTMP.CHROM) {
             leftIdxTmp = 0;
             rightIdxTmp = 0;
         }
 
-        // Record binary search index, multiple alleles with the same refStart
         int64_t indexLeft = -1;
         int64_t indexRight = -1;
 
-        uint32_t genotypeTrueNum = 0;  // 0->misCall >0 && <gtVec.size()->recall  >=gtVec.size()->trueGenotype
+        uint32_t genotypeTrueNum = 0;
 
-        // recalled  trueRefStart, trueRefLen, trueSvLen��truevcfInfo
         uint32_t trueRefStart;
         uint32_t trueRefLen;
-        int32_t trueSvLen;
+        int32_t trueSvLen = 0;
         string truevcfInfo;
 
-        // Record the used haplotypes in the true set
         int64_t trueQryLenVecIdx = -1;
 
-        // Traverse multiple alleles
         for (size_t i = 0; i < qryLenVec.size(); i++) {
             uint32_t qryLen = qryLenVec[i];
             int callGt = gtVec[i];
 
-            // Binary search method to find the variation index within 200/10bp.
-            if (indexLeft == -1 && indexRight == -1) {  // New alleles were searched again
+            if (indexLeft == -1 && indexRight == -1) {
                 if (refLen <= 49 && qryLen <= 49) {
                     indexLeft = search_Binary_left(trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS-10, leftIdxTmp);
                     leftIdxTmp = indexLeft;
@@ -896,29 +648,24 @@ void VCFRecall::evulate_recall()
                     indexRight = search_Binary_right(trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM], INFOSTRUCTTMP.POS+200, rightIdxTmp);
                     rightIdxTmp = indexRight;
                 } if (indexLeft < 0 || indexRight >= static_cast<int64_t>(trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM].size())) {
-                    cerr << "[" << __func__ << "::" << getTime() << "] " << "Error: out of index, please check the data or code.\n";
-                    exit(1);
+                    throw runtime_error("out of index, please check the data or code.");
                 }
             }
 
-            // Traverse the index of the binary search method
             for (int64_t j = indexLeft; j <= indexRight; j++) {
-                // Traverse the index of the binary search method
                 trueRefStart = trueVCFStrcuture_.refStartVecMap[INFOSTRUCTTMP.CHROM][j];
 
-                // First check to see if the mutation has been used, then move on to the next coordinates if it's been deleted
                 if (trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].find(trueRefStart) == trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].end()) {
                     continue;
                 }
-                
+
                 trueRefLen = get<0>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
                 const vector<uint32_t>& trueQryLenVec = get<1>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
                 truevcfInfo = get<2>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
                 trueSvLen = get<3>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
                 vector<int> trueGtVec = get<4>(trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM][trueRefStart]);
 
-                for (size_t k = 0; k < trueQryLenVec.size(); k++) {  // First check to see if the mutation has been used, then move on to the next coordinates if it's been deleted
-                    // Used haplotypes are skipped
+                for (size_t k = 0; k < trueQryLenVec.size(); k++) {
                     if (static_cast<int64_t>(k) == trueQryLenVecIdx) {
                         continue;
                     }
@@ -926,112 +673,92 @@ void VCFRecall::evulate_recall()
                     uint32_t trueQryLen = trueQryLenVec[k];
                     int trueGt = trueGtVec[k];
 
-                    // If one of callGt and trueGt is 0, but the other is not, the next loop will be performed to prevent SNP from making errors in judgment
                     if ((callGt != 0 && trueGt == 0) || (callGt == 0 && trueGt != 0)) {
                         continue;;
                     }
 
-                    // deletion
                     if (refLen >= 50 && qryLen < 50) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=200) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25))
                         {
-                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
                         }
-                    } else if (refLen < 50 && qryLen >= 50) {  // ����
+                    } else if (refLen < 50 && qryLen >= 50) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=200) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
                         }
-                    } else if (refLen >= 50 && qryLen >= 50) {  // Replace
+                    } else if (refLen >= 50 && qryLen >= 50) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=200) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=200) &&
-                            ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
+                            ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
                         }
-                    } else if (refLen == 1 && qryLen == 1) {  // snp
+                    } else if (refLen == 1 && qryLen == 1) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=1) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=1) &&
-                            ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
+                            ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // Records indexes that have used haplotypes
                             genotypeTrueNum++;
 
-                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
                         }
-                    } else if (refLen >= 3 && qryLen <= 2) {  // indel-del
+                    } else if (refLen >= 3 && qryLen <= 2) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=10) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=10) &&
                             ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25))
                         {
-                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // Multiple alleles use the same starting position
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
                         }
-                    }  else if (refLen <= 2 && qryLen >= 3) {  // indel-ins
+                    }  else if (refLen <= 2 && qryLen >= 3) {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=10) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=10) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // The haplotype recall and genotype were recorded correctly
                             genotypeTrueNum++;
 
-                            // The haplotype recall and genotype were recorded correctly
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -1039,17 +766,14 @@ void VCFRecall::evulate_recall()
                     } else {
                         if ((abs(static_cast<int32_t>(INFOSTRUCTTMP.POS) - static_cast<int32_t>(trueRefStart))<=1) &&
                             (abs((static_cast<int32_t>(INFOSTRUCTTMP.POS) + static_cast<int32_t>(refLen))-(static_cast<int32_t>(trueRefStart) + static_cast<int32_t>(trueRefLen)))<=1) &&
-                            ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) && 
+                            ((std::abs(static_cast<int32_t>(refLen) - static_cast<int32_t>(trueRefLen)) / static_cast<float>(trueRefLen)) <= 0.25) &&
                             ((std::abs(static_cast<int32_t>(qryLen) - static_cast<int32_t>(trueQryLen)) / static_cast<float>(trueQryLen)) <= 0.25))
                         {
-                            // Records indexes that have used haplotypes
                             genotypeTrueNum++;
 
-                            // The haplotype recall and genotype were recorded correctly
                             indexLeft = j;
                             indexRight = j;
 
-                            // Records indexes that have used haplotypes
                             trueQryLenVecIdx = k;
 
                             goto stop;
@@ -1057,244 +781,204 @@ void VCFRecall::evulate_recall()
                     }
                 }
             }
-            stop:; // If found, exit the nested loop. End the cycle of this haplotype and proceed to the next haplotype
+            stop:;
         }
 
-        // Determine the results of the search and add 
-        if (genotypeTrueNum > 0) {  // Determine the results of the search and add
-            // Software call vcf-vector
+        // ------ Record the class and flush every 10 MB ------
+        if (genotypeTrueNum > 0) {
             callLenVec.push_back(trueSvLen);
 
-            truetxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+            truetxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" +
                         "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
             recallLenVec.push_back(trueSvLen);
 
-            // Correct typing
-            if (genotypeTrueNum >= gtVec.size()) {  // If the value is greater than or equal to gtVec.size(), the classification is correct
+            if (genotypeTrueNum >= gtVec.size()) {
                 genotypeLenVec.push_back(trueSvLen);
-                trueGtTxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+                trueGtTxtStream << "recall_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" +
                             "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
-                // Add length to rocTrueMap
                 rocRecallMap_[rocNum].push_back(svLength);
-            } else {  // Typing error
-                genotypeMisTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" + 
+            } else {
+                genotypeMisTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n" +
                                 "true_length\t" + to_string(trueSvLen) + "\t" + truevcfInfo + "\n";
 
-                // The roc is calculated using the recall, or only the genotype if the roc is not enabled
                 if (rocType_ == "recall")
                 {
-                    // Add length to rocTrueMap
                     rocRecallMap_[rocNum].push_back(svLength);
                 }
             }
 
-            // Add length to rocTrueMap
             if (trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].find(INFOSTRUCTTMP.POS) != trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].end()) {
                 trueVCFStrcuture_.chrStartLenInfoGtTupMap[INFOSTRUCTTMP.CHROM].erase(INFOSTRUCTTMP.POS);
             }
-        } else {  // If the above loop does not find the variation in the true set, it is added with the length found by the software itself
+        } else {
             callLenVec.push_back(svLength);
             misCallTxtStream << "call_length\t" + to_string(svLength) + "\t" + INFOSTRUCTTMP.line + "\n";
         }
 
-        // save result
-        if (truetxtStream.tellp() >= bufferSize_ || 
-            trueGtTxtStream.tellp() >= bufferSize_ || 
-            genotypeMisTxtStream.tellp() >= bufferSize_ || 
-            misCallTxtStream.tellp() >= bufferSize_) // It is written every 10Mb
+        if (truetxtStream.tellp() >= bufferSize_ ||
+            trueGtTxtStream.tellp() >= bufferSize_ ||
+            genotypeMisTxtStream.tellp() >= bufferSize_ ||
+            misCallTxtStream.tellp() >= bufferSize_)
         {
-            // Correct call
             string truetxt = truetxtStream.str();
             trueFile.save(truetxt);
-            // Clear stringstream
             truetxtStream.str(string());
             truetxtStream.clear();
 
-            // Correct genotyping
             string trueGtTxt = trueGtTxtStream.str();
             trueGtFile.save(trueGtTxt);
-            // Clear stringstream
             trueGtTxtStream.str(string());
             trueGtTxtStream.clear();
 
-            // Genotyping error
             string genotypeMisTxt = genotypeMisTxtStream.str();
             genotypeMisFile.save(genotypeMisTxt);
-            // Clear stringstream
             genotypeMisTxtStream.str(string());
             genotypeMisTxtStream.clear();
 
-            // Variation that is not in true concentration
             string misCallTxt = misCallTxtStream.str();
             misCallFile.save(misCallTxt);
-            // Clear stringstream
             misCallTxtStream.str(string());
             misCallTxtStream.clear();
         }
     }
 
-    // last save
-    if (truetxtStream.tellp() > 0 || 
-        trueGtTxtStream.tellp() > 0 || 
-        genotypeMisTxtStream.tellp() > 0 || 
-        misCallTxtStream.tellp() > 0) // It is written every 10Mb
+    if (truetxtStream.tellp() > 0 ||
+        trueGtTxtStream.tellp() > 0 ||
+        genotypeMisTxtStream.tellp() > 0 ||
+        misCallTxtStream.tellp() > 0)
     {
-        // Correct call
         string truetxt = truetxtStream.str();
         trueFile.save(truetxt);
-        // Clear stringstream
         truetxtStream.str(string());
         truetxtStream.clear();
 
-        // Correct genotyping
         string trueGtTxt = trueGtTxtStream.str();
         trueGtFile.save(trueGtTxt);
-        // Clear stringstream
         trueGtTxtStream.str(string());
         trueGtTxtStream.clear();
 
-        // Genotyping error
         string genotypeMisTxt = genotypeMisTxtStream.str();
         genotypeMisFile.save(genotypeMisTxt);
-        // Clear stringstream
         genotypeMisTxtStream.str(string());
         genotypeMisTxtStream.clear();
 
-        // Variation that is not in true concentration
         string misCallTxt = misCallTxtStream.str();
         misCallFile.save(misCallTxt);
-        // Clear stringstream
         misCallTxtStream.str(string());
         misCallTxtStream.clear();
     }
 
-    // Save no variation found, false negative
+    // ------ Truth records never matched ------
     saveFailCall(
-        trueVCFStrcuture_.chrStartLenInfoGtTupMap, 
+        trueVCFStrcuture_.chrStartLenInfoGtTupMap,
         "failcall.vcf.gz"
     );
 
+    // ------ Summary in vcf_evulate.out (appended), then ROC tables ------
     int64_t all_num = trueVCFStrcuture_.allLengthList.size();
     int64_t call_num = callLenVec.size();
     int64_t recall_num = recallLenVec.size();
 
     int64_t genotype_recall_number = genotypeLenVec.size();
 
-    // save result
     ofstream outFile;
     outFile.open("vcf_evulate.out", ios::app);
 
     outFile << "snp+indel+sv:\n"
-            << "genotype_recall:" << genotype_recall_number 
-            << "\nmisgenotype_call:" << recall_num - genotype_recall_number 
-            << "\nrecall:" << recall_num 
-            << "\nmis_call:" << call_num - recall_num 
-            << "\ncall:" << call_num 
-            << "\nfail_call:" << all_num - recall_num 
-            << "\nall:" << all_num 
-            << endl 
+            << "genotype_recall:" << genotype_recall_number
+            << "\nmisgenotype_call:" << recall_num - genotype_recall_number
+            << "\nrecall:" << recall_num
+            << "\nmis_call:" << call_num - recall_num
+            << "\ncall:" << call_num
+            << "\nfail_call:" << all_num - recall_num
+            << "\nall:" << all_num
+            << endl
             << endl;
 
     vector<int64_t> allNumVec = count_num(trueVCFStrcuture_.allLengthList);
     vector<int64_t> callNumVec = count_num(callLenVec);
     vector<int64_t> recallNumVec = count_num(recallLenVec);
     vector<int64_t> genotypeRecallNumVec = count_num(genotypeLenVec);
-    
+
     outFile << "length/length: genotype_recall/misgenotype_call/recall/mis_call/call/fail_call/all\n";
 
-    // Save no variation found, false negative
     for (size_t i = 0; i < lengthVec_.size(); i++) {
-        outFile << lengthVec_[i] << ": " 
-                << genotypeRecallNumVec[i] << "/" 
-                << recallNumVec[i] - genotypeRecallNumVec[i] << "/" 
-                << recallNumVec[i] << "/" 
+        outFile << lengthVec_[i] << ": "
+                << genotypeRecallNumVec[i] << "/"
+                << recallNumVec[i] - genotypeRecallNumVec[i] << "/"
+                << recallNumVec[i] << "/"
                 << callNumVec[i] - recallNumVec[i] << "/"
                 << callNumVec[i] << "/"
                 << allNumVec[i] - recallNumVec[i] << "/"
                 << allNumVec[i] << endl;
-        
+
         if (10 <= i && i <= 14) {
             all_num -= allNumVec[i];
             call_num -= callNumVec[i];
             recall_num -= recallNumVec[i];
             genotype_recall_number -= genotypeRecallNumVec[i];
-        }    
+        }
     }
 
     outFile << "\nsv:\n"
-            << "genotype_recall:" << genotype_recall_number 
-            << "\nmisgenotype_call:" << recall_num - genotype_recall_number 
-            << "\nrecall:" << recall_num 
-            << "\nmis_call:" << call_num - recall_num 
-            << "\ncall:" << call_num 
-            << "\nfail_call:" << all_num - recall_num 
-            << "\nall:" << all_num 
-            << endl 
+            << "genotype_recall:" << genotype_recall_number
+            << "\nmisgenotype_call:" << recall_num - genotype_recall_number
+            << "\nrecall:" << recall_num
+            << "\nmis_call:" << call_num - recall_num
+            << "\ncall:" << call_num
+            << "\nfail_call:" << all_num - recall_num
+            << "\nall:" << all_num
+            << endl
             << endl;
 
-    // Length result output
     outFile.close();
 
-    // Free memory
     roc_calculate(trueVCFStrcuture_.allLengthList);
 }
 
-
-/**
- * Get a list of loci genotypes.
- *
- * @param lineVec          lineVec
- * @param sampleIdx        Index of the sample genotype, with the default value 0 representing the last column
- * 
- * 
- * @return gtVec           vector <int>
-**/
+// Return the genotype of one sample (0 = last column) as integers; '.' counts as 0, unparsable genotypes become {0, 0}.
 vector<int> VCFRecall::get_gt(
-    const vector<string> & lineVec, 
+    const vector<string> & lineVec,
     int sampleIdx
-) {
-    vector <int> gtVec;  // Locus typing vector
+) const {
+    vector <int> gtVec;
 
-    // FORMAT character split
     vector<string> formatVec = split(lineVec[8], ":");
 
-    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));  // Gets the index location of GT
+    uint32_t gtIndex = distance(formatVec.begin(), find(formatVec.begin(), formatVec.end(), "GT"));
 
-    if (gtIndex == formatVec.size()) {  // Gets the index location of GT
-        cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No [GT] information in FORMAT, replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
+    if (gtIndex == formatVec.size()) {
+        warning_stream() << "No [GT] information in FORMAT, replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
         gtVec = {0, 0};
-    } else {  // If it exists, save it
-        string gt;  // Store the genotype field
+    } else {
+        string gt;
 
-        if (sampleIdx == 0) {  // The number of columns not specified is the last column
-            gt = split(lineVec.back(), ":")[gtIndex];  // gt field
+        if (sampleIdx == 0) {
+            gt = VCFOPEN::sample_gt(lineVec, lineVec.size() - 1, gtIndex);
         } else {
-            gt = split(lineVec[sampleIdx], ":")[gtIndex];  // gt field
+            gt = VCFOPEN::sample_gt(lineVec, sampleIdx, gtIndex);
         }
-        
-        string splitStr;  // gt field
-        if (gt.find("/") != string::npos) {  // Delimiter in gt
+
+        string splitStr;
+        if (gt.find("/") != string::npos) {
             splitStr = "/";
-        } else if (gt.find("|") != string::npos) {  // Determine that '|' is the separator
+        } else if (gt.find("|") != string::npos) {
             splitStr = "|";
-        } else {  // If the delimiter is not known, use 0|0 instead
-            cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: Genotype does not contain '\\' or '|', replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
+        } else {
+            warning_stream() << "Genotype does not contain '\\' or '|', replace with 0|0 -> " << lineVec[0] << ":" << lineVec[1] << endl;
             gtVec = {0, 0};
             return gtVec;
         }
 
-        // Once you find gt, split it by splitStr and loop
         auto splitResult = split(gt, splitStr);
         for (auto it : splitResult) {
-            // If it is '.', replace it to 0
             if (it == ".") {
                 it = "0";
             }
-            // Prevent error in stof(it) conversion
             try {
-                gtVec.push_back(stoi(it));  // Add to vector
+                gtVec.push_back(stoi(it));
             } catch (const std::exception& e) {
-                cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: stof(it) conversion failed. Replaced with {0,0} -> " << it << endl;
+                warning_stream() << "stof(it) conversion failed. Replaced with {0,0} -> " << it << endl;
                 gtVec = {0, 0};
                 return gtVec;
             }
@@ -1304,15 +988,7 @@ vector<int> VCFRecall::get_gt(
     return gtVec;
 }
 
-
-/**
- * Get a list of loci genotypes.
- *
- * @param INFOSTRUCTTMP    line information
- * 
- * 
- * @return rocNum
-**/
+// Return the ROC score of a record from the -s field (0 without -s); throw if the field is missing.
 float VCFRecall::get_roc(
     const VCFINFOSTRUCT& INFOSTRUCTTMP
 )
@@ -1321,30 +997,21 @@ float VCFRecall::get_roc(
         return 0.0;
     }
 
-    if (rocColNum_ == 8) {  // FORMAT field
+    if (rocColNum_ == 8) {
         vector<string> lastColVec = split(INFOSTRUCTTMP.lineVec.back(), ":");
 
         vector<string> rocInfVec = split(INFOSTRUCTTMP.FORMAT, ":");
-        // rocNum subscript
         vector<string>::iterator rocItera = find(rocInfVec.begin(), rocInfVec.end(), rocKeyVec_[1]);
 
-        if (rocItera == rocInfVec.end()) {  // rocNum subscript
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: " << rocKeyVec_[1] << " not in " << rocKeyVec_[0] << " column -> " 
-                << INFOSTRUCTTMP.line << endl;
-            exit(1);
+        if (rocItera == rocInfVec.end()) {
+            throw runtime_error("" + rocKeyVec_[1] + " not in " + rocKeyVec_[0] + " column -> " + INFOSTRUCTTMP.line);
         }
 
         return stof(lastColVec[distance(rocInfVec.begin(), rocItera)]);
-    } else {  // INFO field
-        smatch patternResult; // INFO field
-        regex pattern(rocKeyVec_[1] + "=(\\d+)");
-
-        if (!regex_search(INFOSTRUCTTMP.INFO, patternResult, pattern)) {  // Check whether the value of rocKeyVec_[1] is matched
-            cerr << "[" << __func__ << "::" << getTime() << "] "
-                << "Error: " << rocKeyVec_[1] << " not in " << rocKeyVec_[0] << " column -> " 
-                << INFOSTRUCTTMP.line << endl;
-            exit(1);
+    } else {
+        smatch patternResult;
+        if (!regex_search(INFOSTRUCTTMP.INFO, patternResult, rocInfoReg_)) {
+            throw runtime_error("" + rocKeyVec_[1] + " not in " + rocKeyVec_[0] + " column -> " + INFOSTRUCTTMP.line);
         }
 
         string rocNumString = patternResult[1];
@@ -1353,45 +1020,26 @@ float VCFRecall::get_roc(
     }
 }
 
-
-/**
- * Get the length information of the variation
- *
- * @param refLen            ref length
- * @param qryLenVec         qry Length list
- * @param gtVec             qry Length list
- * 
- * 
- * @return int32_t          svLength
-**/
+// Return the length difference between the last non-reference allele of gtVec and REF.
 int32_t VCFRecall::sv_length_select(
-    const uint32_t & refLen, 
-    const vector<uint32_t> & qryLenVec, 
+    const uint32_t & refLen,
+    const vector<uint32_t> & qryLenVec,
     const vector<int> & gtVec
-) {
+) const {
     int32_t svLength = 0;
 
     for (size_t i = 0; i < gtVec.size(); i++) {
-        if (gtVec[i] == 0) {  // Genotype list
+        if (gtVec[i] == 0) {
             continue;
         } else {
             svLength = qryLenVec[i] - refLen;
         }
     }
-    
+
     return svLength;
 }
 
-
-/**
- * If genotype is 0, skip
- *
- * @param lengthVec_         Divided interval
- * @param length_list        Length list
- * 
- * 
- * @return vector<int64_t>  The length of each interval
-**/
+// Count the lengths falling into each length bin.
 vector<int64_t> VCFRecall::count_num(
     vector<int64_t> length_list
 ) {
@@ -1407,169 +1055,33 @@ vector<int64_t> VCFRecall::count_num(
     return out_length;
 }
 
-
-/**
- * The length of each interval.
- *
- * @param svType                         Variation type
- * @param refSeq                         ref column information
- * @param qrySeqs                        qry Column information
- * @param gtVec                          qry Column information
- * @param lenType                        Take only the length corresponding to the haplotype or all the lengths (hap/all)
- * 
- * 
- * @return tuple<uint32_t, vector<uint32_t> >      tuple<refLen, vector<qryLen> >
-**/
-tuple<uint32_t, vector<uint32_t> > VCFRecall::get_hap_len(
-    const string & svType, 
-    const string & refSeq, 
-    const string & qrySeqs, 
-    const vector<int> & gtVec, 
-    const string & lenType
-) {
-    // Take only the length corresponding to the haplotype or all the lengths (hap/all)
-    if (lenType != "hap" && lenType != "all") {
-        cerr << "[" << __func__ << "::" << getTime() << "] " 
-            << "Error: lenType -> " 
-            << lenType << endl;
-        exit(1);
-    }
-    
-    uint32_t refLen = refSeq.size();  // Check that the mode is correct and exit the code incorrectly
-    vector<string> qrySeqVec = split(qrySeqs, ",");  // ref sequence length
-    
-    // Check whether the index is out of bounds. If only hap length is needed, check again
-    if (lenType == "hap") {
-        int maxGtNum = *max_element(gtVec.begin(), gtVec.end());
-        if (static_cast<uint32_t>(maxGtNum) > qrySeqVec.size()) {  // First check whether the array is out of bounds
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "Error: number of genotyping and ALT sequences do not match -> " 
-                << qrySeqs << endl;
-            exit(1);
-        }
-    }
-
-    // First check whether the array is out of bounds
-    vector<uint32_t> seqLenVec;
-    seqLenVec.push_back(refLen);
-
-    // Construct the length index common to ref and qry
-    for (size_t i = 0; i < qrySeqVec.size(); i++) {
-        string qrySeq = qrySeqVec[i];
-
-        // Temporary storage length
-        uint32_t refLenTmp = refLen;
-        uint32_t qryLenTmp = qrySeq.size(); 
-
-        if (qrySeq.find(">") != string::npos) {  // GraphTyper2 results
-            // Use regular expressions to extract length information
-            std::regex reg("SVSIZE=(\\d+)");
-            std::smatch match;
-            // Check whether there is any length information in the qry sequence. If there is no length information, skip this site
-            if (std::regex_search(qrySeq, match, reg)) {  // <INS:SVSIZE=97:BREAKPOINT1>
-                // <INS:SVSIZE=90:BREAKPOINT1>
-                if (qrySeq.find("<INS") != string::npos && qrySeq.find("<DEL") == string::npos) {  // The character segment contains inserts
-                    refLenTmp = refLen;
-                    qryLenTmp = std::stoul(match[1].str());;
-                } else if (qrySeq.find("<INS") == string::npos && qrySeq.find("<DEL") != string::npos) {  // The character segment contains missing characters: <DEL:SVSIZE=1720:BREAKPOINT>
-                    refLenTmp = std::stoul(match[1].str());;
-                    qryLenTmp = refLen;
-                } else if (qrySeq.find("<DUP") != string::npos) {  // Character segment contains duplicate fields (GraphTyper2) <DUP:SVSIZE=2806:BREAKPOINT1>
-                    refLenTmp = std::stoul(match[1].str());;
-                    qryLenTmp = refLenTmp * 2;
-                }
-            } else {
-                cerr << "[" << __func__ << "::" << getTime() << "] " << "Warning: No length information in column 4 -> " << qrySeq << endl;
-                refLenTmp = refLen;
-                qryLenTmp = qrySeq.size();
-            }
-
-            seqLenVec[0] = refLenTmp; // Reset the length of the ref
-        }
-
-        // The result of BayesTyper was judged to be duplication, ref_len was 1-2, and qry_seq was very long
-        if (svType.find("Duplication") != string::npos && refLenTmp <= 2) {  // BayesTyper will change duplication into insertion, so recalculate the length
-            refLenTmp = qryLenTmp;
-            qryLenTmp *= 2;
-        }
-
-        // Add the length of qry
-        if (seqLenVec.size() == (i + 1)) {  // Judging that the haplotype is indeed in its place,
-            seqLenVec.push_back(qryLenTmp);  // Add the length of qry
-        } else {  // Index and list length do not match The Times error
-            cerr << "[" << __func__ << "::" << getTime() << "] " 
-                << "Error: Incorrect index for haplotype length -> " << qrySeqs << endl;
-            exit(1);
-        }
-    }
-
-    // Index and list length do not match The Times error
-    vector<uint32_t> qryLenVec;
-    if (lenType == "hap") {  // The index and list length do not match the qry length corresponding to the genotype found by Times Error a
-        if (gtVec.size() == 1) {  // Take only the sequence length of the haplotype
-            if (gtVec[0] == 0) {  // If genotype 0, skip this locus
-                // Return '0/0'
-                vector<uint32_t> qryLenVecTmp(seqLenVec[0], qrySeqVec.size());
-                return make_tuple(seqLenVec[0], qryLenVecTmp);
-            } else {
-                qryLenVec.push_back(seqLenVec[gtVec[0]]);
-                qryLenVec.push_back(seqLenVec[gtVec[0]]);
-            }
-        } else {
-            for (auto gtTmp : gtVec) {
-                qryLenVec.push_back(seqLenVec[gtTmp]);
-            }
-        }
-    } else {  // Take all the lengths
-        for (size_t i = 1; i < seqLenVec.size(); i++) {
-            qryLenVec.push_back(seqLenVec[i]);
-        }
-    }
-
-    return make_tuple(seqLenVec[0], qryLenVec);
-}
-
-
-/**
- * Save the result of failCall in recall
- *
- * @param chrStartLenInfoGtTupMap     Save the result of failCall in recall
- * @param outFileName                 Output file name
- * 
- * 
- * @return int             0
-**/
+// Write the truth records that no call matched.
 int VCFRecall::saveFailCall(
-    map<string, map<uint32_t, tuple<uint32_t, vector<uint32_t>, string, int32_t, vector<int> > > > & chrStartLenInfoGtTupMap, 
+    map<string, map<uint32_t, tuple<uint32_t, vector<uint32_t>, string, int32_t, vector<int> > > > & chrStartLenInfoGtTupMap,
     const string & outFileName
 )
 {
-    SAVE SAVEClass(outFileName);
+    SAVE SAVEClass(outFileName, threads_);
 
-    stringstream outStream; // Use stringstream instead of string concatenation
+    stringstream outStream;
     outStream.str().reserve(bufferSize_);
 
-    // Iterate through the dictionary and save the vcf that is not found
-    for (const auto& [_, StartLenInfoGtTupMap] : chrStartLenInfoGtTupMap) {  // unordered_map<chr, map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> > >
-        for (const auto& [_, LenInfoGtTup] : StartLenInfoGtTupMap) {  // map<refStart, tuple<refLen, qryLenVec, vcfInfo, svLen> >
+    for (const auto& [_, StartLenInfoGtTupMap] : chrStartLenInfoGtTupMap) {
+        for (const auto& [_, LenInfoGtTup] : StartLenInfoGtTupMap) {
             outStream << get<2>(LenInfoGtTup) + "\n";
 
-            // save result
-            if (outStream.tellp() >= bufferSize_) {  // Cache size is 10mb
+            if (outStream.tellp() >= bufferSize_) {
                 string outTxt = outStream.str();
                 SAVEClass.save(outTxt);
-                // Clear stringstream
                 outStream.str(string());
                 outStream.clear();
             }
         }
     }
 
-    // last save
-    if (outStream.tellp() > 0) {  // Cache size is 10mb
+    if (outStream.tellp() > 0) {
         string outTxt = outStream.str();
         SAVEClass.save(outTxt);
-        // Clear stringstream
         outStream.str(string());
         outStream.clear();
     }
@@ -1577,19 +1089,10 @@ int VCFRecall::saveFailCall(
     return 0;
 }
 
-
-/**
- * Save the result of failCall in recall
- *
- * @param allLengthList     All variation lengths
- * 
- * 
- * @return int             0
-**/
+// Write the cumulative ROC tables (all, SNP, indel, deletion, insertion) from the highest score down.
 void VCFRecall::roc_calculate(
     const vector<int64_t> & allLengthList
 ) {
-    // save result
     ofstream allFile;
     allFile.open("weight.all.table", ios::out);
     ofstream snpFile;
@@ -1600,15 +1103,14 @@ void VCFRecall::roc_calculate(
     delFile.open("weight.del.table", ios::out);
     ofstream insFile;
     insFile.open("weight.ins.table", ios::out);
-    
-    // Calculate all the lengths to calculate roc
-    // Cycle from big to small
+
+    // ------ All variants ------
     string outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    int64_t allTruePositives = allLengthList.size(); // All correct number of sites
-    int64_t truePositives = 0; // True positive
-    int64_t falsePositives = 0; // False positive
-    int64_t trueNegatives = 0; // True negative
-    int64_t falseNegatives = 0; // false negative
+    int64_t allTruePositives = allLengthList.size();
+    int64_t truePositives = 0;
+    int64_t falsePositives = 0;
+    int64_t trueNegatives = 0;
+    int64_t falseNegatives = 0;
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         auto findIter1 = rocRecallMap_.find(iter1->first);
@@ -1624,10 +1126,10 @@ void VCFRecall::roc_calculate(
         float precision = (float)truePositives / (truePositives + falsePositives);
         float Fscore = (2*recall*precision)/(recall + precision);
 
-        outRoc += to_string(iter1->first) + "\t" 
-                + to_string(truePositives) + "\t" 
-                + to_string(falsePositives) + "\t" 
-                + to_string(trueNegatives) + "\t" 
+        outRoc += to_string(iter1->first) + "\t"
+                + to_string(truePositives) + "\t"
+                + to_string(falsePositives) + "\t"
+                + to_string(trueNegatives) + "\t"
                 + to_string(falseNegatives) + "\t"
                 + to_string(recall) + "\t"
                 + to_string(precision) + "\t"
@@ -1636,24 +1138,21 @@ void VCFRecall::roc_calculate(
     allFile << outRoc;
     allFile.close();
 
-
-    // snp
+    // ------ SNPs ------
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // All correct number of sites
+    allTruePositives = 0;
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] == 0) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // True positive
-    falsePositives = 0; // False positive
-    trueNegatives = 0; // True negative
-    falseNegatives = 0; // false negative
+    truePositives = 0;
+    falsePositives = 0;
+    trueNegatives = 0;
+    falseNegatives = 0;
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         uint32_t allPositiveTmp = 0;
-        // Number of SNPS in all
-        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] == 0) {
                 allPositiveTmp++;
@@ -1663,14 +1162,12 @@ void VCFRecall::roc_calculate(
         uint32_t truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] == 0) {
                     truePositiveTmp++;
                 }
             }
         }
-        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1683,10 +1180,10 @@ void VCFRecall::roc_calculate(
         float precision = (float)truePositives / (truePositives + falsePositives);
         float Fscore = (2*recall*precision)/(recall + precision);
 
-        outRoc += to_string(iter1->first) + "\t" 
-                + to_string(truePositives) + "\t" 
-                + to_string(falsePositives) + "\t" 
-                + to_string(trueNegatives) + "\t" 
+        outRoc += to_string(iter1->first) + "\t"
+                + to_string(truePositives) + "\t"
+                + to_string(falsePositives) + "\t"
+                + to_string(trueNegatives) + "\t"
                 + to_string(falseNegatives) + "\t"
                 + to_string(recall) + "\t"
                 + to_string(precision) + "\t"
@@ -1695,24 +1192,21 @@ void VCFRecall::roc_calculate(
     snpFile << outRoc;
     snpFile.close();
 
-
-    // indel
+    // ------ Indels (1-49 bp) ------
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // All correct number of sites
+    allTruePositives = 0;
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] > -50 && allLengthList[i] < 50 && allLengthList[i] != 0) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // True positive
-    falsePositives = 0; // False positive
-    trueNegatives = 0; // True negative
-    falseNegatives = 0; // false negative
+    truePositives = 0;
+    falsePositives = 0;
+    trueNegatives = 0;
+    falseNegatives = 0;
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         int allPositiveTmp = 0;
-        // Number of SNPS in all
-        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] > -50 && iter1->second[i] < 50 && iter1->second[i] != 0) {
                 allPositiveTmp++;
@@ -1722,14 +1216,12 @@ void VCFRecall::roc_calculate(
         int truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] > -50 && findIter1->second[i] < 50 && findIter1->second[i] != 0) {
                     truePositiveTmp++;
                 }
             }
         }
-        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1742,10 +1234,10 @@ void VCFRecall::roc_calculate(
         float precision = (float)truePositives / (truePositives + falsePositives);
         float Fscore = (2*recall*precision)/(recall + precision);
 
-        outRoc += to_string(iter1->first) + "\t" 
-                + to_string(truePositives) + "\t" 
-                + to_string(falsePositives) + "\t" 
-                + to_string(trueNegatives) + "\t" 
+        outRoc += to_string(iter1->first) + "\t"
+                + to_string(truePositives) + "\t"
+                + to_string(falsePositives) + "\t"
+                + to_string(trueNegatives) + "\t"
                 + to_string(falseNegatives) + "\t"
                 + to_string(recall) + "\t"
                 + to_string(precision) + "\t"
@@ -1754,24 +1246,21 @@ void VCFRecall::roc_calculate(
     indelFile << outRoc;
     indelFile.close();
 
-
-    // del
+    // ------ Deletions (>= 50 bp) ------
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // All correct number of sites
+    allTruePositives = 0;
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] <= -50) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // True positive
-    falsePositives = 0; // False positive
-    trueNegatives = 0; // True negative
-    falseNegatives = 0; // false negative
+    truePositives = 0;
+    falsePositives = 0;
+    trueNegatives = 0;
+    falseNegatives = 0;
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         int allPositiveTmp = 0;
-        // Number of SNPS in all
-        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] <= -50) {
                 allPositiveTmp++;
@@ -1781,14 +1270,12 @@ void VCFRecall::roc_calculate(
         int truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] <= -50) {
                     truePositiveTmp++;
                 }
             }
         }
-        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1801,10 +1288,10 @@ void VCFRecall::roc_calculate(
         float precision = (float)truePositives / (truePositives + falsePositives);
         float Fscore = (2*recall*precision)/(recall + precision);
 
-        outRoc += to_string(iter1->first) + "\t" 
-                + to_string(truePositives) + "\t" 
-                + to_string(falsePositives) + "\t" 
-                + to_string(trueNegatives) + "\t" 
+        outRoc += to_string(iter1->first) + "\t"
+                + to_string(truePositives) + "\t"
+                + to_string(falsePositives) + "\t"
+                + to_string(trueNegatives) + "\t"
                 + to_string(falseNegatives) + "\t"
                 + to_string(recall) + "\t"
                 + to_string(precision) + "\t"
@@ -1813,24 +1300,21 @@ void VCFRecall::roc_calculate(
     delFile << outRoc;
     delFile.close();
 
-
-    // ins
+    // ------ Insertions (>= 50 bp) ------
     outRoc = rocType_ + "." + rocKey_ + "\tTrue positives\tFalse positives\tTrue negatives\tFalse negatives\trecall\tprecision\tF-score\n";
-    allTruePositives = 0; // All correct number of sites
+    allTruePositives = 0;
     for (size_t i = 0; i < allLengthList.size(); i++) {
         if (allLengthList[i] >= 50) {
             allTruePositives++;
         }
     }
-    truePositives = 0; // True positive
-    falsePositives = 0; // False positive
-    trueNegatives = 0; // True negative
-    falseNegatives = 0; // false negative
+    truePositives = 0;
+    falsePositives = 0;
+    trueNegatives = 0;
+    falseNegatives = 0;
 
     for (auto iter1 = rocCallMap_.rbegin(); iter1 != rocCallMap_.rend(); iter1++) {
         int64_t allPositiveTmp = 0;
-        // Number of SNPS in all
-        // Traverse the length vector under the score
         for (size_t i = 0; i < iter1->second.size(); i++) {
             if (iter1->second[i] >= 50) {
                 allPositiveTmp++;
@@ -1840,14 +1324,12 @@ void VCFRecall::roc_calculate(
         int64_t truePositiveTmp = 0;
         auto findIter1 = rocRecallMap_.find(iter1->first);
         if (findIter1 != rocRecallMap_.end()) {
-            // Traverse the length vector under the score
             for (size_t i = 0; i < findIter1->second.size(); i++) {
                 if (findIter1->second[i] >= 50) {
                     truePositiveTmp++;
                 }
             }
         }
-        // If the number is 0, skip the score
         if (allPositiveTmp == 0) {
             continue;
         }
@@ -1860,10 +1342,10 @@ void VCFRecall::roc_calculate(
         float precision = (float)truePositives / (truePositives + falsePositives);
         float Fscore = (2*recall*precision)/(recall + precision);
 
-        outRoc += to_string(iter1->first) + "\t" 
-                + to_string(truePositives) + "\t" 
-                + to_string(falsePositives) + "\t" 
-                + to_string(trueNegatives) + "\t" 
+        outRoc += to_string(iter1->first) + "\t"
+                + to_string(truePositives) + "\t"
+                + to_string(falsePositives) + "\t"
+                + to_string(trueNegatives) + "\t"
                 + to_string(falseNegatives) + "\t"
                 + to_string(recall) + "\t"
                 + to_string(precision) + "\t"

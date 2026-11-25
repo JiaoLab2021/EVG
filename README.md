@@ -26,21 +26,14 @@ A comprehensive benchmark of graph-based genetic variant genotyping algorithms o
 Please note the following requirements before building and running the software:
 
 * `Linux` operating system
-* cmake version `3.12` or higher
+* cmake version `3.15` or higher
 * Python version `3.9`
-* C++ compiler that supports `C++17` or higher, and the `zlib` library installed (we recommend using GCC version `"7.3.0"` or newer) for building `graphvcf` and `fastAQ`
+* C++ compiler that supports `C++17` or higher, GNU `make`, and the `zlib`, `bzip2` and `xz` (liblzma) libraries installed (`libdeflate` is used for faster gzip when found; we recommend using GCC version `"7.3.0"` or newer) for building `graphvcf` and `fastAQ`
 * The following dependencies must also be installed: [tabix][tabix_url], [bwa][bwa_url], [samtools][samtools_url], [VG][VG_url], [GraphAligner][GraphAligner_url], [Paragraph][Paragraph_url], [BayesTyper][BayesTyper_url], [GraphTyper2][GraphTyper2_url], [PanGenie][PanGenie_url]
 
 ## Recent major updates:
 
-(2025/04/30, v1.2.2)
-
-* Updated Giraffe indexing and alignment commands for vg ≥1.63.0.
-* Pinned BayesTyper to 1.5=h176a8bc_0 due to bugs in newer conda versions.
-
-(2024/06/25, v1.2.0)
-
-* If a sample's genotype information is missing in the VCF file, the previous version would throw a segmentation fault. In version `v1.2.0`, it will be replaced with `0|0`.
+See [CHANGELOG.md](CHANGELOG.md) for the changes in each release.
 
 ## Installation
 
@@ -64,11 +57,11 @@ Use the following script to build the software:
 1. First, obtain the source code.
 
 ```shell
-git clone https://github.com/JiaoLab2021/EVG.git
+git clone --recursive https://github.com/JiaoLab2021/EVG.git
 cd EVG
 ```
 
-2. Next, compile the software and add the current directory to your system's `PATH` environment variable. Please make sure that `EVG`, `graphvcf`, and `fastAQ` are all in the same folder, as `EVG` will call these two programs from its own directory.
+2. Next, compile the software and add the current directory to your system's `PATH` environment variable. Please make sure that `EVG`, `graphvcf`, `fastAQ`, `src/evg_pipeline/` and `include/ProgramMetadata.hpp` stay in the same folder, as `EVG` loads them from its own directory.
 
 ```shell
 cmake ./
@@ -101,6 +94,7 @@ The default version of `PanGenie` installed by conda is `2.1.0`, but `EVG` requi
 To verify that the software has been installed correctly, perform a test run using the following steps:
 
 ```shell
+EVG --version
 EVG -h
 graphvcf -h
 fastAQ -h
@@ -136,7 +130,7 @@ sample2 sample2.r1.fq.gz sample2.r2.fq.gz
 sampleN sampleN.r1.fq.gz sampleN.r2.fq.gz
 ```
 
-Please note that the Sample file must be formatted exactly as shown above, where each sample is listed with its corresponding read files.
+Please note that the Sample file must be formatted exactly as shown above, where each sample is listed with its corresponding read files. Sample names may contain only letters, digits, `_`, `.`, `+` and `-`, and must not start with `.` or `-`.
 
 **Running**
 
@@ -152,23 +146,25 @@ For convenience, let's assume the following file names for the input:
 EVG -r refgenome.fa -v input.vcf.gz -s sample.txt
 ```
 
-The results are stored in the `merge/` folder, and each file is named after the corresponding sample listed in `sample.txt`: `sample1.vcf.gz`, `sample2.vcf.gz`, ..., `sampleN.vcf.gz`.
+The results are stored in the `merge/` folder, and each file is named after the corresponding sample listed in `sample.txt`: `sample1.vcf.gz`, `sample2.vcf.gz`, ..., `sampleN.vcf.gz` (`h.<sample>.vcf.gz` holds high-confidence calls taken from the most similar sample in the population VCF; use it only when the two are closely related).
 
 ```shell
 $ tree merge/
 merge/
+├── h.test1.vcf.gz
+├── h.test2.vcf.gz
 ├── test1.vcf.gz
 └── test2.vcf.gz
 
-0 directories, 2 files
+0 directories, 4 files
 ```
 
 **Parameter**
 
 * `--depth`: This parameter specifies the maximum sequencing data depth allowed for downstream analysis. If this value is exceeded, EVG will randomly downsample reads to the specified level in order to speed up the run. The default downsampling level is set at 15×, but it can be adjusted to meet specific requirements.
 * `--mode`: This parameter determines the operating mode of `EVG`. In fast mode, only certain software is utilized to genotype SNPs and indels, while precise mode employs all software to genotype all variants.
-* `--force`: If there are pre-existing files in the running directory of `EVG`, this parameter can be used to forcibly empty the folder. Otherwise, the software will encounter an error and exit.
-* `--restart`: This parameter allows the software to resume from where it left off if it unexpectedly stops, enabling a breakpoint restart. Note that software completion is determined by file existence. It's recommended to manually check for incomplete or empty files before using this parameter and delete them.
+* `--force`: Clear the step directories (`convert/`, `bwa/`, `genotype/`, `merge/`) left by an earlier run. Without `--force` or `--resume`, EVG stops if they exist.
+* `--resume`: Continue a stopped run in the same directory. A command is skipped only if it finished before with the same options (thread counts aside) and none of its files has changed; everything else, including the steps after a re-run command, runs again. Use `--force` after changing the external tools.
 
 **graphvcf**
 
@@ -201,31 +197,31 @@ When using the following tools, please cite the corresponding articles:
 
     *  Du, ZZ., He, JB. & Jiao, WB. [A comprehensive benchmark of graph-based genetic variant genotyping algorithms on plant genomes for creating an accurate ensemble pipeline.][evg_article] Genome Biol 25, 91 (2024).
 
-*  `vg map`: 
+*  `vg map`:
 
     *  Hickey, G., Heller, D., Monlong, J. et al. [Genotyping structural variants in pangenome graphs using the vg toolkit.][vg-map_article] Genome Biol 21, 35 (2020).
 
-*  `vg giraffe`: 
+*  `vg giraffe`:
 
     *  Jouni Sirén et al. [Pangenomics enables genotyping of known structural variants in 5202 diverse genomes.][vg-giraffe-article] Science 374, abg8871 (2021).
 
-*  `GraphAligner`: 
+*  `GraphAligner`:
 
     *  Rautiainen, M., Marschall, T. [GraphAligner: rapid and versatile sequence-to-graph alignment.][GraphAligner_article] Genome Biol 21, 253 (2020).
 
-*  `Paragraph`: 
+*  `Paragraph`:
 
     *  Chen, S., Krusche, P., Dolzhenko, E. et al. [Paragraph: a graph-based structural variant genotyper for short-read sequence data.][Paragraph_article] Genome Biol 20, 291 (2019).
 
     *  Li, H. [Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM.][bwa_article] arXiv: Genomics. (2013).
 
-*  `BayesTyper`: 
+*  `BayesTyper`:
 
     *  Sibbesen, J.A., Maretty, L., [The Danish Pan-Genome Consortium. et al. Accurate genotyping across variant classes and lengths using variant graphs.][BayesTyper_article] Nat Genet 50, 1054–1059 (2018).
 
     *  Li, H. [Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM.][bwa_article] arXiv: Genomics. (2013).
 
-*  `GraphTyper2`: 
+*  `GraphTyper2`:
 
     *  Eggertsson, H.P., Kristmundsdottir, S., Beyter, D. et al. [GraphTyper2 enables population-scale genotyping of structural variation using pangenome graphs.][GraphTyper2_article] Nat Commun 10, 5402 (2019).
 
@@ -233,7 +229,7 @@ When using the following tools, please cite the corresponding articles:
 
     *  Danecek, P., Bonfield, J. K., Liddle, J. et al. [Twelve years of SAMtools and BCFtools.][samtools_article] GigaScience, Volume 10, Issue 2, February 2021, giab008
 
-*  `PanGenie`: 
+*  `PanGenie`:
 
     *  Ebler, J., Ebert, P., Clarke, W.E. et al. [Pangenome-based genome inference allows efficient and accurate genotyping across a wide spectrum of variant classes.][PanGenie_article] Nat Genet 54, 518–525 (2022).
 

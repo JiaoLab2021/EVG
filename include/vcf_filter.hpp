@@ -1,5 +1,4 @@
-#ifndef vcf_filter_hpp
-#define vcf_filter_hpp
+#pragma once
 
 #include <fstream>
 #include <string>
@@ -7,25 +6,17 @@
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
-#include "zlib.h"
 #include <unordered_map>
 #include <cmath>
-#include "strip_split_join.hpp"
-#include "get_time.hpp"
-#include "sort_find.hpp"
-#include "vcf_open.hpp"
-#include "save.hpp"
-#include <getopt.h>
 #include <cstdlib>
 
+#include "strip_split_join.hpp"
+#include "vcf_open.hpp"
+#include "save.hpp"
 
 using namespace std;
 
-
-void help_filter(char** argv);
-int main_filter(int argc, char** argv);
-
-
+// Filter the SNPs of a VCF file by minor allele frequency and missing rate.
 class VCFFilter
 {
 private:
@@ -33,24 +24,17 @@ private:
     string outputFileName_;
     double MAF_;
     double MISSRATE_;
+    uint32_t threads_;
 public:
-    /**
-	 * init
-	 *
-	 * @param vcfFileName         input VCF  file name
-     * @param outputFileName      output file name
-     * @param MAF                 MAF
-     * @param MISSRATE            MISSRATE
-     * 
-	**/
     VCFFilter(
-        const string & vcfFileName, 
-        const string & outputFileName, 
-        const double & MAF, 
-        const double & MISSRATE
+        const string & vcfFileName,
+        const string & outputFileName,
+        const double & MAF,
+        const double & MISSRATE,
+        uint32_t threads
     );
 
-    void vcf_filter();
-};
+    void filter_vcf();
 
-#endif
+    bool filter_record(VCFINFOSTRUCT & INFOSTRUCTTMP) const;
+};

@@ -1,768 +1,385 @@
 #!/usr/bin/env python3
 
-# -*- coding: utf-8 -*-
-
-
-__data__ = "2025/05/06"
-__version__ = "1.2.2"
-__author__ = "Zezhen Du"
-__email__ = "dzz0539@gmail.com or dzz0539@163.com"
-
-import os
 import argparse
-import sys
-import shutil
-import concurrent.futures
-import threading
-import time
+import errno
+import fcntl
 import logging
+import os
+import re
+import resource
+import shutil
+import sys
+import time
 
-# code path
-code_dir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.join(code_dir, "src/"))
-import convert, select_software, merge, bwa, GraphTyper2, \
-    GraphAligner, BayesTyper, Paragraph, VG_MAP_Giraffe, PanGenie, check_software, run_cmd
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "src"))
+from evg_pipeline import bayestyper, bwa, graphaligner, graphtyper2, merge, pangenie, paragraph, prepare, vg
+from evg_pipeline.common import CODE_DIR, ENV, get_version, parse_version, run_jobs
 
-# get parser
-class MyParser:
-    def __init__(self):
-        self.flag = "-"*65
+SOFTWARE = ("VG-MAP", "VG-Giraffe", "GraphAligner", "Paragraph", "BayesTyper", "GraphTyper2", "PanGenie")
 
-        self.setup_logging()
-        self.initialize_parser()
-
-        # Parse arguments
-        self.args = self.parser.parse_args()
-        self.setup_paths()
-
-    def setup_logging(self):
-        """Configure the logging"""
-        self.logger = logging.getLogger('MyParser')
-        # log
-        self.logger.error(f"data: {__data__}")
-        self.logger.error(f"version: {__version__}")
-        self.logger.error(f"author: {__author__}")
-        self.logger.error(f"If you encounter any issues related to the code, please don't hesitate to contact us via email at {__email__}.\n")
-        formatter = logging.Formatter('[%(asctime)s] %(message)s')
-        handler = logging.StreamHandler()  # output to the console
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-
-    def initialize_parser(self):
-        """Setup command line argument parser"""
-        self.parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-        # Input options
-        self.input_option = self.parser.add_argument_group(title="required input")
-        self.input_option.add_argument("-r", dest="reference", help="input FASTA reference", type=str, required=True)
-        self.input_option.add_argument("-v", dest="vcf", help="input the merged vcf file", type=str, required=True)
-        self.input_option.add_argument("-s", dest="samples", help="samples file (name read1_path read2_path)", type=str, required=True)
-        # Depth option
-        self.depth_option = self.parser.add_argument_group(title="depth")
-        self.depth_option.add_argument("--depth", dest="depth", help="read depth for genotyping [15]", type=float, default=15)
-        # Algorithm option
-        self.algorithm_option = self.parser.add_argument_group(title="algorithm")
-        self.algorithm_option.add_argument("--software", dest="software", help="genotyping software [auto]", type=str, nargs='+', choices=['VG-MAP', 'VG-Giraffe', 'GraphAligner', 'Paragraph', 'BayesTyper', 'GraphTyper2', 'PanGenie'], default="auto")
-        self.algorithm_option.add_argument("--mode", dest="mode", help="software mode [precise]", type=str, choices=['precise', 'fast'], default="precise")
-        # Parallel option
-        self.parallel_option = self.parser.add_argument_group(title="parallel")
-        self.parallel_option.add_argument("--threads", dest="threads", help="number of threads [10]", type=int, default=10)
-        self.parallel_option.add_argument("--jobs", dest="jobs", help="run n jobs in parallel [3]", type=int, default=3)
-        self.parallel_option.add_argument("--number", dest="number", help="BayesTyper and Paragraph process N samples at once [5]", type=int, default=5)
-        # Resume option
-        self.resume_option = self.parser.add_argument_group(title="resume")
-        self.resume_option.add_argument("--force", action="store_true", help="erase already existing output directory [False]")
-        self.resume_option.add_argument("--restart", action="store_true", help="attempt to restart existing workflow based on the state of output files [False]")
-
-    def setup_paths(self):
-        """Setup paths based on parsed arguments"""
-        # input
-        self.reference_file = os.path.abspath(self.args.reference)
-        self.vcf_file = os.path.abspath(self.args.vcf)
-        self.samples_file = os.path.abspath(self.args.samples)
-
-        # Check if the file exists
-        if not os.path.exists(self.reference_file):
-            self.logger.error(f"'{self.reference_file}' No such file or directory.")
-            sys.exit(1)
-        if not os.path.exists(self.vcf_file):
-            self.logger.error(f"'{self.vcf_file}' No such file or directory.")
-            sys.exit(1)
-        if not os.path.exists(self.samples_file):
-            self.logger.error(f"'{self.samples_file}' No such file or directory.")
-            sys.exit(1)
+logger = logging.getLogger("EVG")
 
 
-# EVG
-class MyEVG(MyParser):
-    def __init__(self):
-        super().__init__()
+def get_cpu_time():
+    """Return the CPU seconds used by EVG and its finished child processes."""
+    self_usage = resource.getrusage(resource.RUSAGE_SELF)
+    child_usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return self_usage.ru_utime + self_usage.ru_stime + child_usage.ru_utime + child_usage.ru_stime
 
-        ## Initialize other attributes
-        # Lock
-        self.lock = threading.Lock()
-        # environment variable
-        self.env_path = {'PATH': os.environ.get('PATH')}
-        # work directory
-        self.base_work_dir = os.getcwd()
-        # reads
-        self.samples_map = {}  # map<sample_name, list<read_path> >
-        self.read_infos_map = {}  # map<sample_name, map<read1: "read1", read2: "read2", depth: "depth", length: "length", bam: "bam"> >
-        # reference genome information
-        self.refgenome_base = 0
-        # Converted file path
-        self.convert_file_map = {}  # map<sample_name, reference: "refernece", vcf: "vcf", sv: "sv", region: "region", map_index: "map_index", giraffe_index: "giraffe_index", GraphAligner_index "GraphAligner_index", PanGenie_index: "PanGenie_index">
-        # genotype vcf path
-        self.bayestyper_vcf_map = {}  # map<sample_name, vcf_path>
-        self.paragraph_vcf_map = {}  # map<sample_name, vcf_path>
-        self.genotype_vcf_map = {}  # map<sample_name, map<software, vcf_path> >
-        # merge vcf path
-        self.merge_vcf_map = {}
 
-    def check_softwares(self):
-        # check software
-        for software in ['graphvcf', 'fastAQ', 'tabix', 'bwa', 'samtools', 'vg', 'GraphAligner', 'paragraph', 'bayesTyper', 'graphtyper', 'PanGenie']:
-            stdout, stderr, log_out = check_software.check_software_existence(software, self.env_path)
-            if log_out:
-                raise SystemExit(log_out.strip())
+START_TIME = time.perf_counter()
+START_CPU = get_cpu_time()
 
-    def execute_and_check(self, function, *args):
-        stdout, stderr, log_out = function(*args)
-        if log_out:
-            raise SystemExit(log_out.strip())
-        return stdout, stderr
-    
-    # capture subprocess exit status
-    def throw_exception(self, name):
-        # print log
-        log = '%s' % name.__cause__
-        raise SystemExit(log)
 
-    # Create a directory
-    def makedir(self, path_dir: str):
-        """Create a directory with handling for existing directories"""
-        if self.args.force and self.args.restart:
-            raise ValueError("Both `force` and `restart` arguments were provided. Please provide only one of them.")
-        
-        if os.path.isdir(path_dir):
-            if self.args.force:  # If forced to delete, empty the directory and create a new one
-                shutil.rmtree(path_dir)
-                os.makedirs(path_dir)
-                self.logger.error(f"'{path_dir}' already exists, cleared and recreated.")
-            elif self.args.restart:
-                self.logger.error(f"'{path_dir}' already exists, using restart, skipping folder clearance.")
-            else:  # Print a warning and exit code if not forced to delete
-                raise SystemExit(f"'{path_dir}' already exists. Use '--force' to overwrite or '--restart' to restart workflow.")
+def format_number(number, width):
+    """Format a number as the C++ logger does: six decimals cut to `width` characters, keeping the integer part."""
+    text = f"{number:.6f}"
+    return text[:max(width, text.find("."))]
+
+
+class LogFormatter(logging.Formatter):
+    """Format records as "[L::function::wall*cpu] message" like graphvcf and fastAQ; stage titles follow a blank line."""
+
+    def format(self, record):
+        wall = time.perf_counter() - START_TIME
+        level = {logging.WARNING: "W", logging.ERROR: "E"}.get(record.levelno, "M")
+        prefix = f"[{level}::{record.funcName[:10].ljust(10, '.')}::{format_number(wall, 6)}*" \
+                 f"{format_number((get_cpu_time() - START_CPU) / wall if wall > 0 else 0.0, 4)}] "
+        return ("\n" if getattr(record, "stage", False) else "") + prefix + record.getMessage()
+
+
+def log_stage(title):
+    """Log a stage title after a blank line."""
+    logger.info(title, extra={"stage": True}, stacklevel=2)
+
+
+def read_metadata():
+    """Read the program name, version, date, author and contact from include/ProgramMetadata.hpp."""
+    with open(os.path.join(CODE_DIR, "include", "ProgramMetadata.hpp")) as f:
+        return dict(re.findall(r'inline constexpr const char\* (\w+)\s*=\s*"([^"]*)";', f.read()))
+
+
+def parse_args(metadata):
+    """Parse the command line and make the input paths absolute."""
+    parser = argparse.ArgumentParser(
+        description=f"{metadata['description']}\n\n"
+                    f"Version: {metadata['version']}\n"
+                    f"Date: {metadata['build_date']}\n"
+                    f"Author: {metadata['author']}\n"
+                    f"Contact: {metadata['email']}",
+        formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("--version", action="version", version=metadata["version"])
+    input_option = parser.add_argument_group(title="required input")
+    input_option.add_argument("-r", dest="reference", metavar="FILE", help="input FASTA reference", type=str, required=True)
+    input_option.add_argument("-v", dest="vcf", metavar="FILE", help="population VCF (plain or .gz)", type=str, required=True)
+    input_option.add_argument("-s", dest="samples", metavar="FILE", help="samples file; each line: NAME READ1 [READ2]", type=str, required=True)
+    depth_option = parser.add_argument_group(title="depth")
+    depth_option.add_argument("--depth", dest="depth", metavar="FLOAT", help="read depth for genotyping [%(default)s]", type=float, default=15)
+    algorithm_option = parser.add_argument_group(title="algorithm")
+    algorithm_option.add_argument("--software", dest="software", metavar="STR", help=f"genotyping software: {', '.join(SOFTWARE)} [auto]", type=str, nargs="+", choices=SOFTWARE, default=None)
+    algorithm_option.add_argument("--mode", dest="mode", metavar="STR", help="software mode: precise, fast [%(default)s]", type=str, choices=("precise", "fast"), default="precise")
+    parallel_option = parser.add_argument_group(title="parallel")
+    parallel_option.add_argument("--threads", dest="threads", metavar="INT", help="threads per job [%(default)s]", type=int, default=10)
+    parallel_option.add_argument("--jobs", dest="jobs", metavar="INT", help="jobs run in parallel [%(default)s]", type=int, default=3)
+    parallel_option.add_argument("--number", dest="number", metavar="INT", help="samples per BayesTyper/Paragraph batch [%(default)s]", type=int, default=5)
+    resume_option = parser.add_argument_group(title="resume").add_mutually_exclusive_group()
+    resume_option.add_argument("--force", action="store_true", help="clear existing output directories")
+    resume_option.add_argument("--resume", action="store_true", help="continue a stopped run; skip commands that finished with the same options and unchanged files")
+    args = parser.parse_args()
+    args.reference = os.path.abspath(args.reference)
+    args.vcf = os.path.abspath(args.vcf)
+    args.samples = os.path.abspath(args.samples)
+    return args
+
+
+def print_config(args):
+    """Log the run settings."""
+    log_stage("Configuration ...")
+    logger.info(f"  - Reference: {args.reference}")
+    logger.info(f"  - VCF: {args.vcf}")
+    logger.info(f"  - Samples: {args.samples}")
+    logger.info(f"  - Software: {' '.join(args.software) if args.software else 'auto'}")
+    logger.info(f"  - Mode: {args.mode}")
+    logger.info(f"  - Depth: {args.depth:g}x")
+    logger.info(f"  - Threads: {args.threads}")
+    logger.info(f"  - Jobs: {args.jobs}")
+    logger.info(f"  - Batch size: {args.number}")
+    if args.force:
+        logger.info("  - Force: yes")
+    if args.resume:
+        logger.info("  - Resume: yes")
+
+
+def check_inputs(args):
+    """Raise if --threads is out of range or an input file or an external tool is missing."""
+    if not 1 <= args.threads <= 256:
+        raise ValueError(f"--threads {args.threads}: must be 1 to 256.")
+    for path in (args.reference, args.vcf, args.samples):
+        if not os.path.exists(path):
+            raise RuntimeError(f"'{path}' No such file or directory.")
+    for tool in ("graphvcf", "fastAQ"):
+        if not os.access(os.path.join(CODE_DIR, tool), os.X_OK):
+            raise RuntimeError(f"{os.path.join(CODE_DIR, tool)}: not found next to EVG.py.")
+    for tool in ("tabix", "bwa", "samtools", "vg", "GraphAligner", "paragraph", "bayesTyper", "graphtyper", "PanGenie"):
+        if shutil.which(tool, path=ENV["PATH"]) is None:
+            raise RuntimeError(f"{tool}: command not found in PATH.")
+
+
+def make_dir(path, args):
+    """Create a step directory; clear it with --force, keep it with --resume, otherwise fail if it exists."""
+    if os.path.isdir(path):
+        if args.force:
+            shutil.rmtree(path)
+            os.makedirs(path)
+            logger.info(f"  - Cleared: {path}")
+        elif args.resume:
+            logger.info(f"  - Reusing: {path}")
         else:
-            os.makedirs(path_dir)
-            self.logger.error(f"Created directory: '{path_dir}'")
+            raise RuntimeError(f"'{path}' already exists. Use '--force' to overwrite or '--resume' to continue the run.")
+    else:
+        os.makedirs(path)
+    return path
 
-    # Parse the samples file
-    def get_sample_path(self):
-        try:
-            with open(self.samples_file, 'r') as f:
-                samples_list = f.readlines()
-        except IOError as e:
-            raise ValueError(f'Error occurred while reading the file {self.samples_file}: {e}')
 
-        if not samples_list:
-            raise ValueError(f'Empty file: {self.samples_file}')
+def read_samples(samples_file):
+    """Read the samples file into {name: (read1, read2)} in file order; relative read paths follow the launch directory."""
+    try:
+        with open(samples_file, "r") as f:
+            lines = f.readlines()
+    except IOError as error:
+        raise ValueError(f"Cannot read the samples file: {error}")
+    if not lines:
+        raise ValueError(f"'{samples_file}': empty samples file.")
+    samples = {}
+    for line in lines:
+        if not line.strip() or "#" in line or "read1_path" in line:
+            continue
+        fields = line.split()
+        if len(fields) < 2:
+            raise ValueError(f"Invalid entry in samples file. Expected 2 or 3 fields, got: {line.strip()}")
+        samples[fields[0]] = (os.path.abspath(fields[1]), os.path.abspath(fields[2]) if len(fields) > 2 else "")
+    for name in samples:
+        if not re.fullmatch(r"[\w+][\w.+-]*", name):
+            raise ValueError(f"Sample name '{name}' may only contain letters, digits, '_', '.', '+' and '-', and must not start with '.' or '-'.")
+        if f"h.{name}" in samples:
+            raise ValueError(f"Sample names '{name}' and 'h.{name}' would write the same file in merge/.")
+    return samples
 
-        for sample in samples_list:
-            if not sample.strip() or "#" in sample or "read1_path" in sample:
-                continue
 
-            sample_list = sample.split()
-            if len(sample_list) >= 2:
-                name = sample_list[0]
-                read1_path = os.path.abspath(sample_list[1])
-                read2_path = os.path.abspath(sample_list[2]) if len(sample_list) > 2 else ""
-                self.samples_map[name] = [read1_path, read2_path]
-            else:
-                raise ValueError(f"Invalid entry in samples file. Expected 2 or 3 fields, got: {sample}")
+def split_batches(names, number):
+    """Split sorted sample names into batches of `number` names (one batch if number <= 0)."""
+    batches = []
+    batch = []
+    for name in sorted(names):
+        batch.append(name)
+        if len(batch) == number:
+            batches.append(batch)
+            batch = []
+    if batch:
+        batches.append(batch)
+    return batches
 
-    # Convert reads files
-    def read_convert(self, work_path: str, sample_name: str, read1: str, read2: str):
-        # log
-        stdout = stderr = log_out = ""
 
-        # switch paths
-        os.chdir(work_path)
+def downsample_samples(args, samples, ref_base, convert_dir):
+    """Count and downsample every sample (--jobs samples at once, --threads each); return {name: {read1, read2, depth, length}}."""
+    tasks = [(prepare.downsample_reads, sample_name, read1, read2, ref_base, args.depth, args.threads, convert_dir)
+             for sample_name, (read1, read2) in samples.items()]
+    return dict(zip(samples, run_jobs(tasks, args.jobs)))
 
-        # ################################### Transform the second-generation data ###################################
-        # Evaluate fastq files
-        if read1:
-            stdout, stderr, log_out, read_base, read_num, length = convert.fastq_count(code_dir, self.env_path, read1, read2)
-            # Report an error if there is a problem with the exit code
-            if log_out:
-                return stdout, stderr, log_out
 
-            # downsample
-            stdout, stderr, log_out, read1_out, read2_out = convert.downsample(code_dir, read1, read2, read_base, self.refgenome_base, self.args.depth, self.env_path, self.args.restart)
-            # Report an error if there is a problem with the exit code
-            if log_out:
-                return stdout, stderr, log_out
-
-            # actual sequencing depth
-            depth = min(int(read_base) / int(self.refgenome_base), self.args.depth)
+def select_software(args, reads, ref_base, convert_dir):
+    """Return --software, or pick tools from read length, depth and genome size; drop PanGenie older than 3.0.0 or of unknown version."""
+    if args.software:
+        software = list(dict.fromkeys(args.software))
+    else:
+        depth_min = min([1000] + [read["depth"] for read in reads.values()])
+        read_len_min = min([100000] + [read["length"] for read in reads.values()])
+        if read_len_min >= 10000:
+            software = ["GraphAligner"]
         else:
-            length = 0
-            read1_out, read2_out = "", ""
-            depth = 0
-
-        # Determine whether the sequencing depth is 0
-        if depth == 0:
-            log_out = f'Sequencing depth is zero. Please verify the input files: {read1} {read2}'
-            return stdout, stderr, log_out
-
-        # Assigned to the total hash table
-        with self.lock:  # Use locks to protect the following operations
-            self.read_infos_map[sample_name] = {
-                "read1": read1_out,
-                "read2": read2_out,
-                "depth": depth,
-                "length": length
-            }
-
-        return stdout, stderr, log_out
-    
-    # Convert reference genome
-    def refgenome_convert(self, work_path):
-        # switch paths
-        os.chdir(work_path)
-
-        # convert
-        stdout, stderr, log_out, self.reference_file = convert.convert_reference(self.reference_file, self.env_path, self.args.restart)
-        # Report an error if there is a problem with the exit code
-        if log_out:
-            return stdout, stderr, log_out
-        
-        # count
-        stdout, stderr, log_out, self.refgenome_base = convert.fasta_count(code_dir, self.env_path, self.reference_file)
-
-        return stdout, stderr, log_out
-    
-    # vcf convert
-    def vcf_convert(self, work_path):
-        # switch paths
-        os.chdir(work_path)
-
-        # convert
-        stdout, stderr, log_out, vcf_file, sv_file, region_file = convert.vcf_convert(code_dir, self.reference_file, self.vcf_file, 350, self.args.mode, self.env_path, self.args.restart)
-        # Report an error if there is a problem with the exit code
-        if log_out:
-            return stdout, stderr, log_out
-
-        # bgzip
-        if sv_file != vcf_file:  # If the two files are the same, sv_file will not be compressed, otherwise an error will be reported
-            stdout, stderr, log_out, sv_file_gz = convert.bgzip_vcf(sv_file, self.env_path, self.args.threads, self.args.restart)
-            # Report an error if there is a problem with the exit code
-            if log_out:
-                return stdout, stderr, log_out
-            stdout, stderr, log_out, vcf_file_gz = convert.bgzip_vcf(vcf_file, self.env_path, self.args.threads, self.args.restart)
-            # Report an error if there is a problem with the exit code
-            if log_out:
-                return stdout, stderr, log_out
-        else:
-            stdout, stderr, log_out, vcf_file_gz = convert.bgzip_vcf(vcf_file, self.env_path, self.args.threads, self.args.restart)
-            sv_file_gz = vcf_file_gz
-            # Report an error if there is a problem with the exit code
-            if log_out:
-                return stdout, stderr, log_out
-
-        # The path to store the converted file
-        with self.lock:  # Use locks to protect the following operations
-            self.convert_file_map["vcf"] = vcf_file_gz
-            self.convert_file_map["sv"] = sv_file_gz
-            self.convert_file_map["region"] = region_file
-
-        return stdout, stderr, log_out
-    
-    # build index (bwa, vg, PanGenie)
-    def build_indexes(self, work_path):
-        stdout = stderr = log_out = ""
-        
-        # Minimum sequencing depth and sequencing length for obtaining sequencing data
-        depth_min = 1000
-        read_len_min = 100000
-        for _, value in self.read_infos_map.items():
-            depth_min = min(depth_min, value["depth"])
-            read_len_min = min(read_len_min, value["length"])
-
-        # run select_software
-        if isinstance(self.args.software, str):  # Program Automatic Judgment Software
-            self.args.software = select_software.main(depth_min, read_len_min, self.refgenome_base)
-
-        # check PanGenie version
-        if "PanGenie" in self.args.software:
-            pangenie_version = run_cmd.get_version("PanGenie", self.env_path)
-            if pangenie_version < "3.0.0": # PanGenie version is less than 3.0.0
-                self.args.software.remove("PanGenie")
-                self.logger.warning(f"[Warning] PanGenie version ({pangenie_version}) is below 3.0.0. It will be skipped. Please upgrade PanGenie if you wish to use it.")
-
-        # The temporary list is used to determine whether to build an index
-        select_software_tmp_list = list(set(self.args.software) & {"VG-MAP", "VG-Giraffe"})
-        select_software_tmp_list = ["map" if x == "VG-MAP" else "giraffe" if x == "VG-Giraffe" else x for x in select_software_tmp_list]
-
-        # multi-process process pool
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.jobs) as executor:
-            # Back to the main working path
-            os.chdir(work_path)
-
-            futures = []
-            # bwa index
-            future = executor.submit(
-                bwa.index, 
-                work_path, 
-                self.reference_file,
-                self.env_path, 
-                self.args.restart
-            )
-            # save result
-            futures.append(future)
-            time.sleep(0.05)
-            
-            # Map and giraffe
-            for software in select_software_tmp_list:
-                # switch paths
-                os.chdir(work_path)
-
-                index_dir = os.path.join(work_path, software)
-                self.makedir(index_dir)
-
-                # submit task
-                future = executor.submit(
-                    VG_MAP_Giraffe.vg_autoindex,
-                    self.reference_file,
-                    self.convert_file_map["vcf"],
-                    software, 
-                    self.env_path, 
-                    self.args.threads,
-                    index_dir,
-                    self.args.restart
-                )
-                # save result
-                futures.append(future)
-
-                time.sleep(0.05)
-
-            # Back to the main working path
-            os.chdir(work_path)
-
-            # GraphAligner build index
-            if "GraphAligner" in self.args.software:
-                # switch paths
-                index_dir = os.path.join(work_path, "GraphAligner")
-                self.makedir(index_dir)
-
-                # submit task
-                future = executor.submit(
-                    GraphAligner.vg_index,
-                    self.reference_file,
-                    self.convert_file_map["vcf"],
-                    self.args.threads,
-                    index_dir, 
-                    self.env_path, 
-                    self.args.restart
-                )
-                # save result
-                futures.append(future)
-
-                time.sleep(0.05)
-
-            # return to main path
-            os.chdir(work_path)
-
-            # PanGenie build index
-            if "PanGenie" in self.args.software:
-                # switch paths
-                index_dir = os.path.join(work_path, "PanGenie")
-                self.makedir(index_dir)
-
-                # submit task
-                future = executor.submit(
-                    PanGenie.run_index, 
-                    self.reference_file, 
-                    self.convert_file_map["vcf"],
-                    index_dir, 
-                    self.env_path, 
-                    self.args.threads,
-                    self.args.restart
-                )
-                # save result
-                futures.append(future)
-
-                time.sleep(0.05)
-
-            # return to main path
-            os.chdir(work_path)
-
-            # Obtain the return value of multithreading. If log_out exists, it indicates that the operation failed and the exit code
-            for future in concurrent.futures.as_completed(futures):  # concurrent execution
-                try:
-                    stdout, stderr, log_out = future.result()  # check return value
-                    if log_out:
-                        return stdout, stderr, log_out
-                except Exception as e:
-                    self.logger.error(f"An error occurred: {e}")
-
-        # The path to store the converted file
-        with self.lock:  # Use locks to protect the following operations
-            self.convert_file_map["map_index"] = os.path.join(work_path, "map")
-            self.convert_file_map["giraffe_index"] = os.path.join(work_path, "giraffe")
-            self.convert_file_map["GraphAligner_index"] = os.path.join(work_path, "GraphAligner")
-            self.convert_file_map["PanGenie_index"] = os.path.join(work_path, "PanGenie")
-
-        return stdout, stderr, log_out
+            software = ["Paragraph", "BayesTyper"]
+            software.append("VG-Giraffe" if ref_base > 200 * 1024 * 1024 else "VG-MAP")
+            software.append("GraphTyper2" if read_len_min > 130 and depth_min > 5 else "PanGenie")
+    if "PanGenie" in software:
+        pangenie_version = get_version("PanGenie", convert_dir)
+        if not pangenie_version:
+            software.remove("PanGenie")
+            logger.warning("Could not read the PanGenie version. It will be skipped. Please check that PanGenie 3.0.0 or later is installed.")
+        elif parse_version(pangenie_version) < (3, 0, 0):
+            software.remove("PanGenie")
+            logger.warning(f"PanGenie version ({pangenie_version}) is below 3.0.0. It will be skipped. Please upgrade PanGenie if you wish to use it.")
+    logger.info(f"  - Software: {' '.join(software)}")
+    return software
 
 
-    # Input file format conversion and build index
-    def file_convert_index(self):
-        # Return to the main working path
-        os.chdir(self.base_work_dir)
+def build_indexes(args, software, reference, inputs, convert_dir):
+    """Build the BWA index and the vg, GraphAligner and PanGenie indexes the software needs; return the index dirs."""
+    indexes = {
+        "VG-MAP": os.path.join(convert_dir, "map"),
+        "VG-Giraffe": os.path.join(convert_dir, "giraffe"),
+        "GraphAligner": os.path.join(convert_dir, "GraphAligner"),
+        "PanGenie": os.path.join(convert_dir, "PanGenie"),
+    }
+    tasks = [(bwa.build_bwa_index, reference, convert_dir)]
+    for tool, workflow in (("VG-MAP", "map"), ("VG-Giraffe", "giraffe")):
+        if tool in software:
+            make_dir(indexes[tool], args)
+            tasks.append((vg.build_vg_index, reference, inputs["vcf"], workflow, args.threads, indexes[tool]))
+    if "GraphAligner" in software:
+        make_dir(indexes["GraphAligner"], args)
+        tasks.append((graphaligner.build_graphaligner_index, reference, inputs["vcf"], args.threads, indexes["GraphAligner"]))
+    if "PanGenie" in software:
+        make_dir(indexes["PanGenie"], args)
+        tasks.append((pangenie.build_pangenie_index, reference, inputs["vcf"], args.threads, indexes["PanGenie"]))
+    run_jobs(tasks, args.jobs)
+    return indexes
 
-        # reference and vcf, Convert storage paths and create folders
-        convert_dir = os.path.join(self.base_work_dir, "convert")  # Conversion file storage path
-        self.makedir(convert_dir)
 
-        ## fastAQ count -i refgenome.fa
-        self.logger.error("")
-        self.logger.error(f"{self.flag} fastAQ count {self.flag}")
-        stdout, stderr, log_out, self.refgenome_base = convert.fasta_count(code_dir, self.env_path, self.reference_file)
-        if log_out:
-            raise SystemExit(log_out.strip())
+def map_samples(args, reads, reference, work_dir):
+    """Map every sample with BWA MEM (--jobs jobs); return {name: BAM}."""
+    bwa_dir = make_dir(os.path.join(work_dir, "bwa"), args)
+    tasks = [(bwa.map_reads, sample_name, read["read1"], read["read2"], reference, args.threads, bwa_dir)
+             for sample_name, read in reads.items()]
+    return dict(zip(reads, run_jobs(tasks, args.jobs)))
 
-        # fastAQ sample
-        self.logger.error("")
-        self.logger.error(f"{self.flag} fastAQ sample {self.flag}")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.threads) as executor:
-            futures = []
-            for sample_name, value in self.samples_map.items():
-                future = executor.submit(
-                    self.read_convert,
-                    convert_dir,
-                    sample_name,
-                    value[0],
-                    value[1]
-                )
-                futures.append(future)
 
-                # Multi-thread interval
-                time.sleep(0.05)
+def genotype_samples(args, software, reads, bams, reference, inputs, indexes, work_dir):
+    """Run the selected genotyping software; return {sample: [(software, VCF), ...]} in software order."""
+    genotype_dir = make_dir(os.path.join(work_dir, "genotype"), args)
 
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    stdout, stderr, log_out = future.result()
-                    if log_out:
-                        raise SystemExit(log_out.strip())
-                except Exception as e:
-                    self.logger.error(f"An error occurred: {e}")
+    # ------ Sample lists ------
+    batches = split_batches(reads, args.number)
+    if "GraphTyper2" in software:
+        graphtyper_list = graphtyper2.write_graphtyper_list(bams, genotype_dir)
+    if "BayesTyper" in software:
+        bayestyper_lists = bayestyper.write_bayestyper_lists(batches, bams, genotype_dir)
+    if "Paragraph" in software:
+        paragraph_lists = paragraph.write_paragraph_lists(batches, reads, bams, genotype_dir)
 
-        ## refgenome and VCF convert
-        self.logger.error("")
-        self.logger.error(f"{self.flag} Convert reference genome and VCF file, and build index. {self.flag}")
-        self.execute_and_check(self.refgenome_convert, convert_dir)
-        self.execute_and_check(self.vcf_convert, convert_dir)
+    # ------ Jobs ------
+    tasks = []
+    task_samples = []
+    for tool in software:
+        tool_dir = make_dir(os.path.join(genotype_dir, tool), args)
+        if tool in ("VG-MAP", "VG-Giraffe"):
+            for sample_name, read in reads.items():
+                tasks.append((vg.genotype_vg, tool, sample_name, read["read1"], read["read2"], read["depth"],
+                              args.threads, indexes[tool], tool_dir))
+                task_samples.append((tool, [sample_name]))
+        elif tool == "GraphAligner":
+            for sample_name, read in reads.items():
+                tasks.append((graphaligner.genotype_graphaligner, sample_name, read["read1"], read["depth"],
+                              args.threads, indexes[tool], tool_dir))
+                task_samples.append((tool, [sample_name]))
+        elif tool == "PanGenie":
+            for sample_name, read in reads.items():
+                tasks.append((pangenie.genotype_pangenie, sample_name, read["read1"], read["read2"],
+                              args.threads, indexes[tool], tool_dir))
+                task_samples.append((tool, [sample_name]))
+        elif tool == "GraphTyper2":
+            tasks.append((graphtyper2.genotype_graphtyper2, reference, inputs["vcf"], graphtyper_list, list(bams.values()),
+                          inputs["region"], args.threads, tool_dir))
+            task_samples.append((tool, list(reads)))
+        elif tool == "Paragraph":
+            for number, list_file in enumerate(paragraph_lists):
+                batch_dir = make_dir(os.path.join(tool_dir, str(number)), args)
+                tasks.append((paragraph.genotype_paragraph, reference, inputs["sv"], list_file,
+                              [bams[sample_name] for sample_name in batches[number]], args.threads, batch_dir))
+                task_samples.append((tool, batches[number]))
+        elif tool == "BayesTyper":
+            for number, list_file in enumerate(bayestyper_lists):
+                batch_dir = make_dir(os.path.join(tool_dir, str(number)), args)
+                tasks.append((bayestyper.genotype_bayestyper, reference, inputs["vcf"], list_file, bams,
+                              args.threads, batch_dir))
+                task_samples.append((tool, batches[number]))
 
-        # build index
-        self.execute_and_check(self.build_indexes, convert_dir)
+    # ------ Results ------
+    calls = {sample_name: [] for sample_name in reads}
+    for (tool, sample_names), vcf_file in zip(task_samples, run_jobs(tasks, args.jobs)):
+        for sample_name in sample_names:
+            calls[sample_name].append((tool, vcf_file))
+    return calls
 
-    # bwa
-    def run_bwa(self):
-        # Check whether bwa needs to be run
-        if not any(s in self.args.software for s in ["GraphTyper2", "BayesTyper", "Paragraph"]):
-            return
 
-        self.logger.error("")
-        self.logger.error(f"{self.flag} BWA MEM {self.flag}")
-
-        # directory
-        os.chdir(self.base_work_dir)
-        bwa_dir = os.path.join(self.base_work_dir, "bwa")
-        self.makedir(bwa_dir)
-
-        # Execute bwa mem using ThreadPoolExecutor
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.jobs) as executor:
-            futures = []
-            for sample_name, value in self.read_infos_map.items():
-                # Submit to process pool
-                future = executor.submit(
-                    bwa.mem,
-                    bwa_dir, 
-                    self.reference_file,
-                    self.args.threads,
-                    sample_name, 
-                    self.env_path, 
-                    self.args.restart,
-                    value["read1"],
-                    value["read2"]
-                )
-                futures.append(future)
-                time.sleep(0.05)
-
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                stdout, stderr, log_out, sample_name, bam_file = future.result()
-                if log_out:
-                    raise SystemExit(log_out.strip())
-                # Record the bam file path
-                self.read_infos_map[sample_name]["bam"] = bam_file
-            except Exception as e:
-                self.logger.error(f"An error occurred: {e}")
-
-    # Each line runs independently
-    def run_genotype(self):
-        self.logger.error("")
-        self.logger.error(f"{self.flag} Genotyping {self.flag}")
-
-        # directory
-        genotype_dir = os.path.join(self.base_work_dir, "genotype")
-        self.makedir(genotype_dir)
-        os.chdir(genotype_dir)
-
-        # ################################### config ###################################
-        # Generate configuration files for GraphTyper2, BayesTyper and Paragraph
-        bam2graphtyper_file = ""
-        bam2bayestyper_file_list = []
-        bam2paragraph_file_list = []
-        if "GraphTyper2" in self.args.software:
-            bam2graphtyper_file = bwa.bam2graphtyper(self.read_infos_map)
-        if "BayesTyper" in self.args.software:
-            self.bayestyper_vcf_map, bam2bayestyper_file_list = bwa.bam2bayestyper(self.read_infos_map, self.args.number)
-        if "Paragraph" in self.args.software:
-            self.paragraph_vcf_map, bam2paragraph_file_list = bwa.bam2paragraph(self.read_infos_map, self.args.number)
-
-        # ################################### genotype ###################################
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.jobs) as executor:
-            future_to_software_sample = {}  # Used to track the software and sample name corresponding to each future
-            for software in self.args.software:
-                # working path
-                software_work_path = os.path.join(genotype_dir, software)
-                self.makedir(software_work_path)
-
-                if software in ["VG-MAP", "VG-Giraffe", "GraphAligner", "PanGenie"]:
-                    for sample_name, value in self.read_infos_map.items():
-                        if "VG-MAP" == software:
-                            future = executor.submit(
-                                VG_MAP_Giraffe.main, 
-                                software_work_path, 
-                                sample_name,
-                                value["read1"],
-                                value["read2"], 
-                                value["depth"],
-                                software,
-                                self.convert_file_map["map_index"],
-                                self.args.threads,
-                                self.env_path, 
-                                self.args.restart
-                            )
-                        elif "VG-Giraffe" == software:
-                            future = executor.submit(
-                                VG_MAP_Giraffe.main,
-                                software_work_path, 
-                                sample_name,
-                                value["read1"],
-                                value["read2"], 
-                                value["depth"],
-                                software,
-                                self.convert_file_map["giraffe_index"],
-                                self.args.threads,
-                                self.env_path, 
-                                self.args.restart
-                            )
-                        elif "GraphAligner" == software:
-                            future = executor.submit(
-                                GraphAligner.main, 
-                                software_work_path, 
-                                sample_name,
-                                value["read1"],
-                                value["depth"],
-                                self.convert_file_map["GraphAligner_index"],
-                                self.args.threads,
-                                self.env_path, 
-                                self.args.restart
-                            )
-                        else:
-                            future = executor.submit(
-                                PanGenie.main,
-                                software_work_path, 
-                                sample_name,
-                                value["read1"],
-                                value["read2"],
-                                self.convert_file_map["PanGenie_index"],
-                                self.args.threads,
-                                self.env_path, 
-                                self.args.restart
-                            )
-                        # record
-                        future_to_software_sample[future] = (software, sample_name)
-                        time.sleep(0.05)
-                elif software == "GraphTyper2":
-                    future = executor.submit(
-                        GraphTyper2.main, 
-                        software_work_path, 
-                        self.reference_file, 
-                        self.convert_file_map["vcf"], 
-                        bam2graphtyper_file, 
-                        self.convert_file_map["region"], 
-                        self.args.threads,
-                        self.env_path, 
-                        self.args.restart
-                    )
-                    # record
-                    future_to_software_sample[future] = (software, "")
-                elif software == "Paragraph":
-                    num = 0
-                    for bam2paragraph_file in bam2paragraph_file_list:
-                        # Create folder and switch paths
-                        paragraph_sample_path = os.path.join(software_work_path, str(num))
-                        self.makedir(paragraph_sample_path)
-                        # executor
-                        future = executor.submit(
-                            Paragraph.main,
-                            paragraph_sample_path,  
-                            self.reference_file, 
-                            self.convert_file_map["sv"], 
-                            bam2paragraph_file, 
-                            self.args.threads,
-                            self.env_path, 
-                            self.args.restart
-                        )
-                        # record
-                        future_to_software_sample[future] = (software, str(num))
-                        num += 1
-                elif software == "BayesTyper":
-                    num = 0
-                    for bam2bayestyper_file in bam2bayestyper_file_list:
-                        # Create folder and switch paths
-                        bayestyper_sample_path = os.path.join(software_work_path, str(num))
-                        self.makedir(bayestyper_sample_path)
-                        # executor
-                        future = executor.submit(
-                            BayesTyper.main,
-                            bayestyper_sample_path, 
-                            self.reference_file, 
-                            self.convert_file_map["vcf"], 
-                            bam2bayestyper_file, 
-                            self.read_infos_map, 
-                            self.args.threads,
-                            self.env_path, 
-                            self.args.restart
-                        )
-                        # record
-                        future_to_software_sample[future] = (software, str(num))
-                        num += 1
-                time.sleep(0.05)
-
-            # Get and process the return value
-            for future in concurrent.futures.as_completed(future_to_software_sample):
-                software, sample_name = future_to_software_sample[future]
-                try:
-                    stdout, stderr, log_out, vcf_file = future.result()
-                    if log_out:
-                        raise SystemExit(log_out.strip())
-                    # update genotype_vcf_map
-                    if software in ["VG-MAP", "VG-Giraffe", "GraphAligner", "PanGenie", "BayesTyper", "Paragraph"]:
-                        if software not in self.genotype_vcf_map:
-                            self.genotype_vcf_map[software] = {}
-                        self.genotype_vcf_map[software][sample_name] = vcf_file
-                    elif software == "GraphTyper2":
-                        self.genotype_vcf_map[software] = vcf_file
-                except Exception as exc:
-                    self.logger.error(f'{software} execution for {sample_name} generated an exception: {exc}')
-
-    # graphvcf merge
-    def vcf_merge(self):
-        self.logger.error("")
-        self.logger.error(f"{self.flag} Merge the result {self.flag}")
-
-        # directory
-        merge_dir = os.path.join(self.base_work_dir, "merge")
-        self.makedir(merge_dir)
-        os.chdir(merge_dir)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.args.jobs) as executor:
-            future_to_sample = {}  # Used to track the sample name corresponding to each future
-
-            sample_name_tmp_list = sorted(self.read_infos_map.keys())  # Get all samples_name first
-            for sample_name_tmp in sample_name_tmp_list:
-                vcf_out_tmp_list = []  # Temporary list for submitting tasks
-                software_tmp_list = []  # Temporary list for submitting tasks
-                for software in self.args.software:  # software not in results file
-                    if software not in self.genotype_vcf_map.keys():
-                        self.logger.error(f"Warning: Results for '{software}' are missing for sample '{sample_name_tmp}', so it has been skipped.")
-                        continue
-                    software_tmp_list.append(software)
-                    if isinstance(self.genotype_vcf_map[software], dict):
-                        if software == "BayesTyper":
-                            if sample_name_tmp not in self.bayestyper_vcf_map.keys():
-                                self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
-                                continue
-                            vcf_out_tmp_list.append(self.bayestyper_vcf_map[sample_name_tmp])
-                        elif software == "Paragraph":
-                            if sample_name_tmp not in self.paragraph_vcf_map.keys():
-                                self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
-                                continue
-                            vcf_out_tmp_list.append(self.paragraph_vcf_map[sample_name_tmp])
-                        else:
-                            if sample_name_tmp not in self.genotype_vcf_map[software].keys():  # sample_name is not in the result file
-                                self.logger.error(f"Warning: Results for '{software}' are missing for the sample '{sample_name_tmp}', so it has been skipped.")
-                                continue
-                            vcf_out_tmp_list.append(self.genotype_vcf_map[software][sample_name_tmp])
-                    else:
-                        vcf_out_tmp_list.append(self.genotype_vcf_map[software])
-
-                # Submit the merge task to the thread pool
-                future = executor.submit(
-                    merge.main,
-                    code_dir,
-                    merge_dir,
-                    self.convert_file_map["vcf"],
-                    sample_name_tmp,
-                    vcf_out_tmp_list,
-                    software_tmp_list,
-                    self.env_path,
-                    self.args.restart
-                )
-                future_to_sample[future] = sample_name_tmp
-                time.sleep(0.05)
-
-        # return
-        for future in concurrent.futures.as_completed(future_to_sample):
-            sample_name = future_to_sample[future]
-            try:
-                stdout, stderr, log_out, merge_vcf_file = future.result()
-                if log_out:
-                    raise SystemExit(log_out.strip())
-                self.merge_vcf_map[sample_name] = merge_vcf_file
-            except Exception as exc:
-                self.logger.error(f'Merge execution for {sample_name} generated an exception: {exc}')
-
-    # Print the result of merge
-    def print_result(self):
-        self.logger.error("")
-        self.logger.error(f"{self.flag} Result {self.flag}")
-        for key, value in self.merge_vcf_map.items():
-            self.logger.error( f"{key}: {value}")
+def merge_samples(args, calls, vcf, work_dir):
+    """Merge each sample's calls with graphvcf merge (--jobs jobs); return {sample: merged VCF} in sorted order."""
+    merge_dir = make_dir(os.path.join(work_dir, "merge"), args)
+    sample_names = sorted(calls)
+    tasks = [(merge.merge_sample, vcf, sample_name, calls[sample_name], args.threads, merge_dir)
+             for sample_name in sample_names]
+    merged = dict(zip(sample_names, run_jobs(tasks, args.jobs)))
+    for sample_name, merge_vcf_file in merged.items():
+        logger.info(f"  - {sample_name}: {merge_vcf_file}")
+    return merged
 
 
 def main():
-    # EVG
-    EVGClass = MyEVG()
-    # check
-    EVGClass.check_softwares()
-    # Get sequencing file path and output pathname
-    EVGClass.get_sample_path()
-    # convert
-    EVGClass.file_convert_index()
-    # bwa
-    EVGClass.run_bwa()
-    # genotype
-    EVGClass.run_genotype()
-    # merge
-    EVGClass.vcf_merge()
-    # print result
-    EVGClass.print_result()
+    """Run the EVG workflow: prepare inputs, build indexes, map, genotype and merge."""
+    handler = logging.StreamHandler()
+    handler.setFormatter(LogFormatter())
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    metadata = read_metadata()
+    args = parse_args(metadata)
+    logger.info(f"Version: {metadata['version']}")
+    logger.info(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Command: {' '.join(sys.argv)}")
+    print_config(args)
+    try:
+        check_inputs(args)
+        samples = read_samples(args.samples)
+        work_dir = os.getcwd()
+        lock_file = open(os.path.join(work_dir, ".evg.lock"), "w")
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            if error.errno in (errno.EAGAIN, errno.EACCES):
+                raise RuntimeError(f"Another EVG run is using {work_dir}.")
+            raise
+        convert_dir = make_dir(os.path.join(work_dir, "convert"), args)
+
+        log_stage("Counting reference bases ...")
+        ref_base = prepare.count_fasta(args.reference, args.threads, convert_dir)
+
+        log_stage(f"Counting and downsampling reads to {args.depth:g}x ...")
+        reads = downsample_samples(args, samples, ref_base, convert_dir)
+
+        log_stage("Converting the reference genome and VCF ...")
+        reference = prepare.convert_reference(args.reference, convert_dir)
+        ref_base = prepare.count_fasta(reference, args.threads, convert_dir)
+        inputs = prepare.convert_vcf(reference, args.vcf, args.mode, args.threads, convert_dir)
+
+        log_stage("Selecting genotyping software ...")
+        software = select_software(args, reads, ref_base, convert_dir)
+
+        log_stage("Building indexes ...")
+        indexes = build_indexes(args, software, reference, inputs, convert_dir)
+
+        bams = {}
+        if any(tool in software for tool in ("GraphTyper2", "BayesTyper", "Paragraph")):
+            log_stage("Mapping reads with BWA MEM ...")
+            bams = map_samples(args, reads, reference, work_dir)
+
+        log_stage("Genotyping ...")
+        calls = genotype_samples(args, software, reads, bams, reference, inputs, indexes, work_dir)
+
+        log_stage("Merging the genotypes of each sample ...")
+        merge_samples(args, calls, inputs["vcf"], work_dir)
+    except KeyboardInterrupt:
+        logger.error("Interrupted; continue later with --resume.")
+        sys.exit(130)
+    except Exception as error:
+        message = str(error) if isinstance(error, (RuntimeError, ValueError)) else f"{type(error).__name__}: {error}"
+        for line in message.split("\n"):
+            logger.error(line)
+        sys.exit(1)
+
+    # ------ Resource usage ------
+    peak_rss = max(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
+    log_stage(f"Real time: {time.perf_counter() - START_TIME:.3f} sec; CPU: {get_cpu_time():.3f} sec; "
+              f"Peak RSS: {peak_rss / 1024 / 1024:.3f} GB")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
